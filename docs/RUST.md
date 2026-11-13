@@ -2364,6 +2364,8 @@ Each stage ends with its pieces checked against the Python app as above, pushed 
       `preview` draws a theme, by its name or its folder,
       into a PNG of the demo's readings or (--live) this computer's. Updates (rust/app's
       updates), languages (lp-i18n), the log (rust/app's logs); light mode is always on
+      (rust/app's light, from 0.9.0rc5: the watch, the shared caches' mark and shed in
+      lp-render's shared, the heaps' free memory back; the rc's before had none of it)
 - [x] the background app (service.py's PanelService and BackgroundApp, as far as there is no
       window yet; `libre-panel start`): the panel's loop in a thread that is paused, resumed
       and started anew, with the services and the shortcuts beside it, which go on while the

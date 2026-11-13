@@ -264,6 +264,14 @@ fn share_failed(why: Refused) -> Failed {
 }
 
 impl Community {
+    /// The previews kept let go (light mode: the app is closed); they are fetched again when
+    /// a page asks for them.
+    pub fn forget_previews(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.previews = Vec::new();
+        }
+    }
+
     /// _index: the list: the one kept, or (after an hour, or a minute after no answer)
     /// GitHub's.
     fn index(&self, inner: &mut Inner) -> Option<Vec<Entry>> {

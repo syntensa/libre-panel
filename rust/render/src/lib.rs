@@ -47,6 +47,7 @@ pub mod renderer;
 mod roll;
 pub mod scene;
 pub mod shapes;
+pub mod shared;
 mod slot;
 pub mod snapshot;
 mod sunpath;

@@ -4,6 +4,4 @@
 
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-fn main() -> std::process::ExitCode {
-    lp_app::main("tray")
-}
+lp_app::program!("tray");

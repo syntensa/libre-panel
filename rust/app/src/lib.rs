@@ -34,6 +34,7 @@ mod http;
 mod identify;
 mod install;
 mod instance;
+mod light;
 mod linux_setup;
 mod load;
 #[cfg(target_os = "linux")]
@@ -1491,6 +1492,24 @@ pub fn hand_over() -> bool {
     let mut command = std::process::Command::new(windowed);
     window::detached(&mut command);
     command.spawn().is_ok()
+}
+
+/// A program of the app: `main`, with the allocator that keeps a frame's large blocks for the
+/// next one (heap.rs) as the program's own. Both programs are made by it (main.rs:
+/// libre-panel, windowed.rs: LibrePanel.exe), so neither is without the keeper: until
+/// 0.9.0rc5 LibrePanel.exe, the one the start menu and the start at login run, was.
+#[macro_export]
+macro_rules! program {
+    ($default:literal) => {
+        /// Large blocks kept for the next frame (heap.rs).
+        #[global_allocator]
+        static HEAP: $crate::heap::Global = $crate::heap::Global::new(std::alloc::System);
+
+        fn main() -> std::process::ExitCode {
+            $crate::heap::install(&HEAP);
+            $crate::main($default)
+        }
+    };
 }
 
 /// main: the program: the command its arguments name, else `default` ("start" for

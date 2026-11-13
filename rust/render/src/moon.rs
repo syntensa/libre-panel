@@ -9,7 +9,7 @@
 //! np.convolve's sums as numpy and OpenBLAS make them.
 
 use std::f64::consts::PI;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use lp_pixels::random::Generator;
 use lp_pixels::{alpha_composite, Draw, Filter, FloatImage, Image, Mode};
@@ -416,10 +416,37 @@ fn make_face() -> Face {
     Face { albedo, gx, gy }
 }
 
-/// The face, made the first time it is asked for.
-pub fn face() -> &'static Face {
-    static MADE: OnceLock<Face> = OnceLock::new();
-    MADE.get_or_init(make_face)
+/// The face kept, and whether a panel has asked for it (shared.rs).
+struct FaceKept {
+    made: Option<Arc<Face>>,
+    a_panels: bool,
+}
+
+impl FaceKept {
+    /// The face, made by `make` where it is not kept; `a_panels`: a panel asks for it.
+    fn get(&mut self, a_panels: bool, make: impl FnOnce() -> Face) -> Arc<Face> {
+        self.a_panels |= a_panels;
+        Arc::clone(self.made.get_or_insert_with(|| Arc::new(make())))
+    }
+
+    /// Light mode: the face goes where no panel has asked for it.
+    fn shed(&mut self) {
+        if !self.a_panels {
+            self.made = None;
+        }
+    }
+}
+
+static FACE_KEPT: Mutex<FaceKept> = Mutex::new(FaceKept {
+    made: None,
+    a_panels: false,
+});
+
+/// The face, made the first time it is asked for (a tenth of a second). Light mode lets go
+/// of it again ([`shed`]) where only the app's pictures asked for it.
+pub fn face() -> Arc<Face> {
+    let mut kept = FACE_KEPT.lock().unwrap_or_else(PoisonError::into_inner);
+    kept.get(crate::shared::a_panels(), make_face)
 }
 
 /// lit_share: how much of the disc is lit at `phase` (0 new, 0.5 full), 0 to 1.
@@ -560,12 +587,58 @@ fn byte(v: f32) -> u8 {
     clip(v * 255.0 + 0.5, 0.0, 255.0) as u8
 }
 
+/// The halos' light kept by size, the discs by their phase and the halos by their strength
+/// (_halo_alpha, _disc_kept, _halo_kept): every renderer of the process shares them.
+static ALPHAS: crate::lru::Shared<usize, std::sync::Arc<Vec<f32>>> = crate::lru::Shared::new(32);
+type DiscKey = (usize, u64, [u8; 3], Option<[u8; 3]>, bool);
+static DISCS: crate::lru::Shared<DiscKey, std::sync::Arc<Image>> = crate::lru::Shared::new(8);
+static HALOS: crate::lru::Shared<(usize, [u8; 3], i64), std::sync::Arc<Image>> =
+    crate::lru::Shared::new(96);
+
+/// Light mode (kept.rs): they note from now on what is drawn with.
+pub(crate) fn mark() {
+    ALPHAS.mark();
+    DISCS.mark();
+    HALOS.mark();
+}
+
+pub(crate) fn unmark() {
+    ALPHAS.unmark();
+    DISCS.unmark();
+    HALOS.unmark();
+}
+
+/// What was not drawn with since [`mark`], and never by a panel, goes; how many pictures
+/// went. The face too (3 MB) where no panel has asked for it: the app's pictures of the
+/// themes with a moon made it, and make it again when they are asked for.
+pub(crate) fn shed() -> usize {
+    let gone = ALPHAS.shed() + DISCS.shed() + HALOS.shed();
+    FACE_KEPT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .shed();
+    gone
+}
+
+/// The bytes of what is kept here for every renderer: the halos' light, the discs, the
+/// halos and the face (the load report says them).
+pub(crate) fn bytes() -> usize {
+    let four = |image: &Arc<Image>| image.width() * image.height() * 4;
+    let face = FACE_KEPT.lock().unwrap_or_else(PoisonError::into_inner);
+    let face = (face.made.as_ref()).map_or(0, |face| {
+        (face.albedo.len() + face.gx.len() + face.gy.len()) * size_of::<f32>()
+    });
+    ALPHAS.sizes(|light| light.len() * size_of::<f32>())
+        + DISCS.sizes(four)
+        + HALOS.sizes(four)
+        + face
+}
+
 /// _halo_alpha: the halo's light round a disc DISC of `size` px wide: bright at the disc's
 /// edge, fading outwards in two steps, to nothing at the picture's edge.
 fn halo_alpha(size: usize) -> std::sync::Arc<Vec<f32>> {
     // (kept by size: the share is DISC's)
-    static KEPT: crate::lru::Shared<usize, std::sync::Arc<Vec<f32>>> = crate::lru::Shared::new(32);
-    let Ok(made) = KEPT.get_or(size, || {
+    let Ok(made) = ALPHAS.get_or(size, || {
         Ok::<_, std::convert::Infallible>(std::sync::Arc::new(halo_alpha_of(size)))
     });
     made
@@ -617,10 +690,6 @@ pub fn picture(
 ) -> Image {
     // (the disc made once per phase and kept, the halo in a few strengths: _disc_kept,
     // _halo_kept)
-    type DiscKey = (usize, u64, [u8; 3], Option<[u8; 3]>, bool);
-    static DISCS: crate::lru::Shared<DiscKey, std::sync::Arc<Image>> = crate::lru::Shared::new(8);
-    static HALOS: crate::lru::Shared<(usize, [u8; 3], i64), std::sync::Arc<Image>> =
-        crate::lru::Shared::new(96);
     let level = halo_level(phase, t);
     let Ok(glow) = HALOS.get_or((size, colour, level), || {
         Ok::<_, std::convert::Infallible>(std::sync::Arc::new(halo(
@@ -723,6 +792,37 @@ impl Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_face_goes_where_only_the_app_asked_for_it() {
+        let made = std::cell::Cell::new(0);
+        let make = || {
+            made.set(made.get() + 1);
+            Face {
+                albedo: vec![1.0],
+                gx: Vec::new(),
+                gy: Vec::new(),
+            }
+        };
+        let mut kept = FaceKept {
+            made: None,
+            a_panels: false,
+        };
+        kept.get(false, make);
+        kept.get(false, make);
+        assert_eq!(made.get(), 1); // (made once)
+        kept.shed(); // the app's pictures alone asked: it goes, and is made again
+        assert!(kept.made.is_none());
+        kept.get(false, make);
+        assert_eq!(made.get(), 2);
+        // a panel asks: it stays from then on, whoever asks later
+        assert_eq!(kept.get(true, make).albedo, [1.0]);
+        kept.shed();
+        kept.get(false, make);
+        kept.shed();
+        assert!(kept.made.is_some());
+        assert_eq!(made.get(), 2);
+    }
 
     #[test]
     fn numpy_s_remainder_and_clip() {

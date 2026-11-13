@@ -13,8 +13,16 @@
 //!
 //! It is on where [`install`] finds it wanted, once at the start before any large block is
 //! had (a block is told the keeper's by its size while the keeper is on, so the switch never
-//! changes while blocks are out): on Windows unless `LP_HEAP_KEEP=0`, elsewhere only with
-//! `LP_HEAP_KEEP=1`.
+//! changes while blocks are out): on Windows and on Linux with glibc unless `LP_HEAP_KEEP=0`,
+//! elsewhere only with `LP_HEAP_KEEP=1`.
+//!
+//! On Linux the keeper comes with glibc held to hand a block of [`LARGE`] bytes or more
+//! straight from the system and back to it (mapped), Windows' way. glibc by itself takes
+//! such blocks from its heaps once one of them was let go, and there the pictures of every
+//! theme, which the app's pages ask for, leave their room between the blocks that stay: the
+//! heap of Lumen on a 12.3" grew from 57 to 125 MB with the window open and kept what the
+//! panel's own pictures then wandered through. Held so, what a frame asks for again is the
+//! keeper's and costs no page fault, and whatever else is large goes back two seconds later.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -287,16 +295,45 @@ pub type Global = Keeper<System>;
 static GLOBAL: OnceLock<&'static Global> = OnceLock::new();
 
 /// The global allocator `global` known to the app, and switched on where wanted
-/// (`LP_HEAP_KEEP`: on Windows on unless "0", elsewhere off unless "1"). First thing in main.
+/// (`LP_HEAP_KEEP`: on Windows and on Linux with glibc on unless "0", elsewhere off unless
+/// "1"). First thing in main, before any other thread.
 pub fn install(global: &'static Global) {
     let wanted = match std::env::var_os("LP_HEAP_KEEP") {
         Some(v) if v == "0" => false,
         Some(v) if v == "1" => true,
-        _ => cfg!(windows),
+        _ => cfg!(windows) || mapped_from_large(),
     };
     if GLOBAL.set(global).is_ok() {
         global.set_on(wanted);
     }
+}
+
+/// Linux with glibc: a block of [`LARGE`] bytes or more is the system's own from now on
+/// (mapped; no longer raised by glibc to the largest block let go); whether it is so. Not
+/// where the environment sets glibc's allocator itself (`MALLOC_MMAP_THRESHOLD_`,
+/// `GLIBC_TUNABLES`): then glibc keeps the blocks its own way, and the keeper stays off.
+fn mapped_from_large() -> bool {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        let given = |name: &str| std::env::var_os(name).is_some();
+        if given("MALLOC_MMAP_THRESHOLD_") || given("GLIBC_TUNABLES") {
+            return false;
+        }
+        // SAFETY: mallopt sets one number of glibc's allocator, under the allocator's own
+        // lock; here before any thread but the first runs.
+        unsafe { libc::mallopt(libc::M_MMAP_THRESHOLD, LARGE as libc::c_int) != 0 }
+    }
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+    {
+        false
+    }
+}
+
+/// Whether this program has the keeper and it is on (the load report says so).
+pub fn on() -> bool {
+    GLOBAL
+        .get()
+        .is_some_and(|global| global.on.load(Ordering::Relaxed))
 }
 
 /// What the global keeper did (None: there is none, or it is off).

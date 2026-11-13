@@ -3,6 +3,37 @@
 ## Unreleased
 
 **Fixed**
+- **The app's window no longer leaves its memory behind.** Start and Design draw a picture of
+  every theme, and 0.9 so far kept what that took for as long as Libre Panel ran. Measured on
+  Linux, Lumen on a 12.3": 94 MB as it starts, about 200 MB once the window had been open, and
+  still 200 MB with the window long closed. Now it is about 150 MB while the window is open and
+  104 to 111 MB a minute and a half after it closed (four runs; of those, what all drawing shares
+  holds 3 MB, the panel's own). A minute after the window closed (or after a start at login, with
+  no window at all) Libre Panel lets go of its pictures of the themes; what all drawing shares
+  (the fans' rotors, the weather's symbols, the moon) notes for fifteen seconds what the panel
+  draws with and lets go of the rest, though never of what a panel has drawn with before (a fan
+  that stands still or the night's weather by day asks for nothing in those seconds), so the panel
+  makes nothing again; the moon's face, 3 MB, goes too where no panel shows a moon; then the
+  memory goes back to the system, and every fifteen seconds after that what the frames freed
+  meanwhile, a paused panel's last pictures among it (they were kept for a next frame that did not
+  come). Three minutes later the log says what the process holds then (*Status → Diagnose → Log*).
+  This is 0.8's light mode, which 0.9 was said to have and had not. On Windows the same steps run
+  through Windows' own calls (the heaps' free memory, the working set that Task Manager shows);
+  what they give back there is not measured yet. The panel's frames cost the same: through the
+  engine to a simulated 12.3", 7.1 % of a core as it is and 7.4 % with the memory given back every
+  two seconds instead of every fifteen, and no picture late.
+- **LibrePanel.exe keeps a frame's large pictures for the next one.** `libre-panel.exe` has an
+  allocator of its own that keeps a frame's large blocks, where Windows' heap hands each back to
+  the system and asks for a new one, page fault by page fault. LibrePanel.exe, the program the
+  start menu, the setup and the start at login run, was built without it: whoever started Libre
+  Panel the usual way never had it. Both programs are made from one piece now, a test starts both
+  and asks, and Status → Diagnose's report says whether the program has it, how much it keeps at
+  the moment and how much all drawing shares. On Linux the keeper is on as well, with large blocks
+  straight from the system: that is what lets the window's memory go back.
+- **A paused panel is still named.** While the pictures are paused, 0.9 so far forgot what
+  they go to and the theme on show, so the app no longer knew the panel it has: Start's card
+  said "Paused" for "Turing 12.3″ is paused", and the panel's menu named neither the panel nor
+  the theme. Both stay through a pause, as in 0.8.
 - **A text set smaller for its room keeps to it.** A text with a room of its own (*max
   width*) is set in a smaller font where it is too long. With a letter spacing, the gaps
   between the letters were counted as if they got smaller with the font, so such a text

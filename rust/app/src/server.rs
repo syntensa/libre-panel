@@ -90,9 +90,22 @@ impl State {
     }
 
     /// When a page of the app last asked something.
-    #[allow(dead_code)] // (for light mode: what only the app needs goes while it is closed)
     pub fn last_request(&self) -> Option<f64> {
         self.last_request.lock().ok().and_then(|at| *at)
+    }
+
+    /// Now, and when a page of the app last asked something: both in seconds since the server
+    /// began (light mode's clock, light.rs).
+    pub fn asked_at(&self) -> (f64, Option<f64>) {
+        (self.began.elapsed().as_secs_f64(), self.last_request())
+    }
+
+    /// forget_pictures: the app's pictures of the themes, of the start screen and of the
+    /// community's themes go. They are drawn (and fetched) again when a page asks for them.
+    pub fn forget_pictures(&self) {
+        self.previews.forget();
+        self.start_screen.forget();
+        self.community.forget_previews();
     }
 }
 

@@ -207,22 +207,25 @@ administrator rights, a backup is not restored from the app.
 
 ## Light mode
 
-Always on, with nothing to set (0.8 had a switch, `light_mode`; an old config.toml's is let be,
-and it goes from the file with the next setting written). The app's pictures (every theme's,
-Design's and Look's, the building blocks', the start screen's) are drawn in a process of their
-own, which ends once the app's window has been closed (or hidden) for a minute, and all it took
-goes with it. Libre Panel then also lets go of what else only the app needs: its pictures of
-the themes (and of the community's), and the letters, symbols and pieces of every theme they
-were drawn with. For fifteen seconds after that the renderer's caches note what the panel draws
-with; that stays, the rest goes, so the panel draws on as before. Then the memory goes back to
-the system; Windows also takes back the pages the panel does not touch, which is what Task
-Manager shows (they come back as the panel touches them). The app takes a moment longer to
-open again.
+Always on, with nothing to set (0.8 had a switch, `light_mode`; an old config.toml's is let be, and
+it goes from the file with the next setting written). Once the app's window has been closed (or
+hidden) for a minute, or was never opened since Libre Panel started (a start at login), Libre Panel
+lets go of what only the app needs: its pictures of the themes, of the community's and of the start
+screen. For fifteen seconds after that, what all drawing shares (the fans' rotors, the weather's
+symbols, the moon, the AI signs) notes what the panel draws with; that stays, and so does whatever a
+panel has drawn with before (a fan that stands still, the night's weather by day), and the rest
+goes: the panel draws on as before and makes nothing again. Then the memory goes back to the system;
+Windows also takes back the pages the panel does not touch, which is what Task Manager shows (they
+come back as the panel touches them). The app takes a moment longer to open again.
 
-On Linux Libre Panel keeps its memory in two heaps for all its threads, not up to eight per
-core (glibc's `MALLOC_ARENA_MAX`; set in the environment, yours holds). While the window stays
-closed, it also gives the heaps' free pages back every fifteen seconds (on Windows its heaps'
-free memory): the heap keeps what a frame's work freed for the program otherwise.
+While the window stays closed, Libre Panel also gives the heaps' free memory back every fifteen
+seconds: the heap keeps what a frame's work freed for the program otherwise. A frame's large
+pictures (a quarter of a megabyte and more) are kept for the next frame, and go back to the
+system two seconds after they were last asked for (a paused panel's at the next of these
+looks). On Linux they are blocks of the system's own: glibc's mmap threshold is held at
+256 KB, unless `MALLOC_MMAP_THRESHOLD_` or `GLIBC_TUNABLES` is set in the environment, which
+then decide and leave the keeping to glibc. On Windows the heap gives such blocks back by
+itself. `LP_HEAP_KEEP=0` in the environment leaves all of it to the system's allocator.
 
 ## New versions
 

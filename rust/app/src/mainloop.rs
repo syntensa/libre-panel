@@ -1567,6 +1567,8 @@ impl MainLoop {
     pub fn step(&mut self) -> Duration {
         let began = std::time::Instant::now();
         crate::heap::tick();
+        // (what this thread draws with is a panel's: it stays where light mode lets go)
+        lp_render::shared::for_a_panel();
         let wait = self.step_inner();
         lp_render::prof::add("step", began.elapsed());
         wait
@@ -2070,7 +2072,23 @@ impl MainLoop {
             self.company.close();
         }
         if let Ok(mut status) = self.status.lock() {
-            *status = RunStatus::default();
+            // What the loop showed stays said while it rests (paused, or stopped), as
+            // service.py's status keeps it: the theme, where the frames went, their size
+            // and number. Start named no theme for a paused panel, and no panel. What only
+            // a running loop has goes: its state, its run, the sources, the numbers, the
+            // picture and the panels beside it.
+            *status = RunStatus {
+                theme: std::mem::take(&mut status.theme),
+                frames: status.frames,
+                size: status.size,
+                target: std::mem::take(&mut status.target),
+                model: std::mem::take(&mut status.model),
+                mode: status.mode.take(),
+                default_theme: std::mem::take(&mut status.default_theme),
+                missing_theme: std::mem::take(&mut status.missing_theme),
+                missing_why: std::mem::take(&mut status.missing_why),
+                ..RunStatus::default()
+            };
         }
         if let Some(toasts) = &mut self.toasts {
             toasts.close();

@@ -29,6 +29,25 @@ type Shows = (i64, String, Option<i64>, Rgba, Rgba, Rgba);
 /// The pictures kept by what they show (_CACHE).
 static KEPT: crate::lru::Shared<Shows, Image> = crate::lru::Shared::new(KEEP);
 
+/// Light mode (kept.rs): the pictures note from now on which are shown.
+pub(crate) fn mark() {
+    KEPT.mark();
+}
+
+pub(crate) fn unmark() {
+    KEPT.unmark();
+}
+
+/// The pictures not shown since [`mark`] go; how many went.
+pub(crate) fn shed() -> usize {
+    KEPT.shed()
+}
+
+/// The bytes of the signs kept (the load report says them).
+pub(crate) fn bytes() -> usize {
+    KEPT.sizes(|sign| sign.width() * sign.height() * 4)
+}
+
 /// step: the picture of the motion at `now` (seconds), None for a sign that stands still.
 pub fn step(state: &str, now: f64) -> Option<i64> {
     let length = match state {

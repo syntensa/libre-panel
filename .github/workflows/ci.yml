@@ -576,6 +576,13 @@ jobs:
           pip install pyusb
           python tests/frame_load.py --app libre-panel-rust/libre-panel.exe \
             --engine libre-panel-rust/tools/libre-panel-engine.exe --env LP_HEAP_KEEP=0
+          # LibrePanel.exe, the program the start menu and the start at login run, as the
+          # background app: the same frames at the same cost (it keeps its large blocks too),
+          # then with light mode at once (the app's own gone after four seconds, the heaps'
+          # free memory back every two): what giving memory back costs the frames
+          python tests/frame_load.py --app libre-panel-rust/LibrePanel.exe --background \
+            --engine libre-panel-rust/tools/libre-panel-engine.exe --seconds 30 \
+            --env LP_LIGHT_S=4,2
       - name: Its setup
         shell: pwsh
         run: |

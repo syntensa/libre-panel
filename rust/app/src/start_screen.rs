@@ -85,6 +85,13 @@ fn kept_or(
 }
 
 impl Kept {
+    /// Every picture and file kept let go (light mode: the app is closed).
+    pub fn forget(&self) {
+        for kept in [&self.pictures, &self.files] {
+            *kept.lock().unwrap_or_else(|e| e.into_inner()) = VecDeque::new();
+        }
+    }
+
     /// cached_preview: the app's picture of the boot logo (PNG) or of the standby clip (an
     /// animated WebP), `width` px wide.
     pub fn preview(

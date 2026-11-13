@@ -8,6 +8,7 @@ import importlib.util
 import json
 import logging
 import os
+import platform
 import re
 import shlex
 import shutil
@@ -109,6 +110,10 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     monkeypatch.setenv("LIBRE_PANEL_HOME", str(homes[0]))
     i18n.set_language("de")
     theirs = editor.make_server(0, homes[0] / "config.toml", token=TOKEN)
+    # (a connection that is gone again before it is accepted leaves accept() waiting for
+    # the next one, for good: serve_forever never looked at its end then, and shutdown()
+    # below waited for it. With a time to wait, accept() gives up and the loop goes on)
+    theirs.socket.settimeout(1.0)
     serving = threading.Thread(target=theirs.serve_forever, daemon=True)
     serving.start()
     # Open-Meteo's place search as the tests make it up: its answer, the same for both
@@ -127,6 +132,7 @@ def servers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
             pass
 
     search = ThreadingHTTPServer(("127.0.0.1", 0), Search)
+    search.socket.settimeout(1.0)
     threading.Thread(target=search.serve_forever, daemon=True).start()
     search_url = f"http://127.0.0.1:{search.server_address[1]}/search"
     monkeypatch.setattr(open_meteo, "GEOCODING_URL", search_url)
@@ -322,7 +328,18 @@ def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> 
             assert status == "200" and state["available"] is True and state["can_quit"] is True
             assert state["panel"]["state"] == "showing" and state["panel"]["theme"] == "slate"
             assert (state["brightness"], state["upside_down"]) == (50, False)
+            shown = {key: state["panel"][key] for key in ("theme", "target", "default_theme")}
             assert asked("pause")[1]["panel"]["state"] == "paused"
+            # what the panel showed stays said while it rests, as 0.8 says it: once its loop
+            # had ended, Start named no theme for a paused panel, and no panel
+            frames = -1
+            end = time.monotonic() + 20
+            while (now := asked()[1]["panel"]["frames"]) != frames and time.monotonic() < end:
+                frames = now
+                time.sleep(0.6)
+            rests = asked()[1]["panel"]
+            assert rests["state"] == "paused" and rests["stats"] == {} and rests["more"] == []
+            assert {key: rests[key] for key in shown} == shown and shown["target"], rests
             assert asked("brightness", 30)[1]["brightness"] == 30
             assert asked("upside_down", True)[1]["upside_down"] is True
             assert "rotate = 180" in config.read_text(encoding="utf-8")
@@ -344,6 +361,116 @@ def test_the_background_app_is_controlled_through_its_server(tmp_path: Path) -> 
     assert "panicked" not in said and f"theme editor at http://127.0.0.1:{port}/" in said, said
     assert token not in said, said
     assert not (tmp_path / "instance.json").exists() and not kept.exists()
+
+
+@pytest.mark.parametrize("name", ["libre-panel", "LibrePanel"])
+def test_both_programs_keep_a_frames_large_blocks_for_the_next(tmp_path: Path, name: str) -> None:
+    """LibrePanel.exe, the program the start menu and the start at login run, is the app as
+    libre-panel is: with the allocator that keeps a frame's large blocks for the next one
+    (heap.rs), on Windows and on Linux with glibc. Until 0.9.0rc5 it was made without it, and
+    took a page fault for every page of every picture of every frame on Windows. What the
+    process holds says whether it has the keeper (Status → Diagnose's report); LP_HEAP_KEEP=0
+    switches it off."""
+    program = _program().with_name(name + (".exe" if os.name == "nt" else ""))
+    if not program.is_file():
+        pytest.skip(f"{name} is not built")
+    glibc = sys.platform.startswith("linux") and "glibc" in " ".join(platform.libc_ver())
+    for switch, kept in ((None, os.name == "nt" or glibc), ("0", False), ("1", True)):
+        home = tmp_path / f"{name}-{switch}"
+        home.mkdir()
+        (home / "config.toml").write_text(
+            'theme = "slate"\nfps = 2\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+            "[sensors]\nproviders = []\n",
+            encoding="utf-8",
+        )
+        env = {**os.environ, "LIBRE_PANEL_HOME": str(home), "LIBRE_PANEL_DATA": str(DATA),
+               **_libraries()}  # fmt: skip
+        for given in ("LP_HEAP_KEEP", "GLIBC_TUNABLES", "MALLOC_MMAP_THRESHOLD_"):
+            env.pop(given, None)
+        if switch is not None:
+            env["LP_HEAP_KEEP"] = switch
+        with subprocess.Popen([str(program), "start", "--port", "0", "--no-browser"], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              encoding="utf-8") as started:  # fmt: skip
+            try:
+                assert started.stdout is not None
+                address = started.stdout.readline().split(" running at ")[1].split()[0]
+                port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+                request = _get("/api/load", WITH).replace("{host}", f"localhost:{port}")
+
+                def held(told: Any) -> Any:
+                    if isinstance(told, dict):
+                        if "keeper" in told:
+                            return told["keeper"]
+                        told = list(told.values())
+                    found = [held(item) for item in told] if isinstance(told, list) else []
+                    return next((item for item in found if item is not None), None)
+
+                end = time.monotonic() + 30  # (the report is ready after its first window)
+                while True:
+                    status, _, answer = _asked(port, request.replace("{token}", token).encode())
+                    assert status.split()[1] == "200", answer
+                    if held(json.loads(answer)) is not None or time.monotonic() > end:
+                        break
+                    time.sleep(0.5)
+                assert held(json.loads(answer)) is kept, (name, switch, answer)
+            finally:
+                started.kill()
+                started.communicate(timeout=30)
+
+
+def test_a_paused_panel_keeps_no_blocks_for_a_frame_that_does_not_come(tmp_path: Path) -> None:
+    """The large blocks a frame lets go are kept two seconds for the next one, on a clock that
+    moves with the panel's frames (heap.rs). A panel paused draws none: what its renderer let
+    go as its loop ended stayed kept for as long as it rested (19 MB of Lumen's on a 9.2").
+    Light mode's look moves the clock too (light.rs): once the app is closed, they go back.
+    What the process holds says how many bytes are kept (`LP_LIGHT_S`: the watch's times in
+    seconds, else a minute and a quarter of one)."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "lumen"\nfps = 10\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        "[sensors]\nproviders = []\n",
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), "LP_HEAP_KEEP": "1", "LP_LIGHT_S": "1,0.5"}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def asked(request: str) -> Any:
+                request = request.replace("{host}", f"localhost:{port}")
+                status, _, answer = _asked(port, request.replace("{token}", token).encode())
+                assert status.split()[1] == "200", answer
+                return json.loads(answer)
+
+            def kept() -> int | None:
+                inside = asked(_get("/api/load", WITH)).get("inside") or {}
+                return inside.get("kept")
+
+            def frames() -> int:
+                return asked(_get("/api/app", WITH))["panel"].get("frames") or 0
+
+            assert _waited(lambda: frames() >= 3 or None, 40), "the panel shows no frame"
+            body = json.dumps({"action": "pause"})
+            pause = _get("/api/app", WITH, f"Content-Length: {len(body)}", method="POST", body=body)
+            assert asked(pause)["panel"]["state"] == "paused"
+            # its loop ends and lets go of what it drew with: kept, as a frame's blocks are.
+            # (Asking on is the app open, where no look moves the clock: they stay to be seen)
+            assert _waited(lambda: kept() or None, 30), "the paused panel's loop let no block go"
+            # nothing asked: the app is closed after a second, and the looks follow (asking
+            # is the app open again, so each try waits for them anew)
+            for _ in range(3):
+                time.sleep(5)
+                if (held := kept()) == 0:
+                    break
+            assert held == 0, f"{held} bytes still kept for a panel that rests"
+        finally:
+            program.kill()
+            program.communicate(timeout=30)
 
 
 def test_a_transition_is_shown_on_the_panel_as_transition_show_py_shows_it(
@@ -3972,7 +4099,13 @@ def test_the_load_on_the_pc_is_measured_as_load_report_py_measures_it(tmp_path: 
                 assert report["service"] is None and report["sensors"] is None
                 inside = report["inside"]
                 assert inside["threads"] >= 3 and inside["heap"]["in_use"] > 0, inside
+                # (the keeper's bytes as of this answer, where the program keeps blocks; what
+                # every renderer draws with and shares: none of it on a panel of Slate's)
+                assert ("kept" in inside) == inside["keeper"], inside
+                assert inside["shared"] >= 0, inside
                 text = report["text"]
+                assert ("kept for the next frame " in text) == inside["keeper"], text
+                assert "pictures all drawing shares " in text, text
                 assert text.startswith(f"Libre Panel load over {report['window_s']:.1f} s, ")
                 assert "\nmain process" in text and "threads of the main process" in text
                 assert "the main process holds: C heap " in text

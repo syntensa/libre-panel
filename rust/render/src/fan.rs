@@ -28,6 +28,7 @@ use lp_devices::scene::{FanRing, MadePicture, Recipe, RotorPlanes};
 use lp_pixels::{alpha_composite, chops, Draw, Filter, FloatImage, Image, Mode};
 
 use crate::fan_looks::{self, Look};
+use crate::kept::InOrder;
 use crate::piece::{Failed, Result};
 
 /// fan_looks.DEFAULT: the look of a fan that names none.
@@ -80,26 +81,88 @@ const MOST_SIDE: usize = 1024;
 const LAYER_BYTES: usize = 24 << 20;
 
 /// Kept.get: the value kept by `key`, now the most recently used.
-fn kept<K: PartialEq, V: Clone>(made: &Mutex<Vec<(K, V, usize)>>, key: &K) -> Option<V> {
-    let mut made = made.lock().ok()?;
-    let at = made.iter().position(|(k, _, _)| k == key)?;
-    let entry = made.remove(at);
-    let value = entry.1.clone();
-    made.push(entry);
-    Some(value)
+fn kept<K: PartialEq, V: Clone>(made: &Mutex<InOrder<K, V>>, key: &K) -> Option<V> {
+    made.lock().ok()?.get(key)
 }
 
 /// Kept.put with LAYER_BYTES: `value` (of `bytes`) kept as the newest; the least recently used
 /// go while more than that is kept.
-fn keep<K, V>(made: &Mutex<Vec<(K, V, usize)>>, key: K, value: V, bytes: usize) {
-    let Ok(mut made) = made.lock() else {
-        return;
-    };
-    made.push((key, value, bytes));
-    let mut total: usize = made.iter().map(|(_, _, n)| n).sum();
-    while total > LAYER_BYTES && made.len() > 1 {
-        total -= made.remove(0).2;
+fn keep<K: PartialEq, V: Clone>(made: &Mutex<InOrder<K, V>>, key: K, value: V, bytes: usize) {
+    if let Ok(mut made) = made.lock() {
+        made.put(key, value, bytes, LAYER_BYTES);
     }
+}
+
+/// Light mode (kept.rs): what every renderer of the process shares here (the rotors' and the
+/// frames' layers, the rotors' discs, the fans' pictures) notes from now on what is drawn
+/// with.
+pub(crate) fn mark() {
+    if let Ok(mut made) = LAYERS.lock() {
+        made.mark();
+    }
+    if let Ok(mut made) = FRAMES.lock() {
+        made.mark();
+    }
+    if let Ok(mut made) = DISCS.lock() {
+        made.mark();
+    }
+    if let Some(Ok(mut images)) = IMAGES.get().map(Mutex::lock) {
+        images.mark();
+    }
+}
+
+pub(crate) fn unmark() {
+    if let Ok(mut made) = LAYERS.lock() {
+        made.unmark();
+    }
+    if let Ok(mut made) = FRAMES.lock() {
+        made.unmark();
+    }
+    if let Ok(mut made) = DISCS.lock() {
+        made.unmark();
+    }
+    if let Some(Ok(mut images)) = IMAGES.get().map(Mutex::lock) {
+        images.unmark();
+    }
+}
+
+/// What was not drawn with since [`mark`], and never by a panel, goes; the bytes that went.
+pub(crate) fn shed() -> usize {
+    let mut gone = 0;
+    if let Ok(mut made) = LAYERS.lock() {
+        gone += made.shed();
+    }
+    if let Ok(mut made) = FRAMES.lock() {
+        gone += made.shed();
+    }
+    if let Ok(mut made) = DISCS.lock() {
+        // (counted one each: a disc is its side squared, four bytes a pixel)
+        let before: usize = made.sizes(|disc| disc.len());
+        made.shed();
+        gone += before - made.sizes(|disc| disc.len());
+    }
+    if let Some(Ok(mut images)) = IMAGES.get().map(Mutex::lock) {
+        gone += images.shed();
+    }
+    gone
+}
+
+/// The bytes of what is kept here for every renderer (the load report says them).
+pub(crate) fn bytes() -> usize {
+    let mut held = 0;
+    if let Ok(made) = LAYERS.lock() {
+        held += made.bytes();
+    }
+    if let Ok(made) = FRAMES.lock() {
+        held += made.bytes();
+    }
+    if let Ok(made) = DISCS.lock() {
+        held += made.sizes(|disc| disc.len());
+    }
+    if let Some(Ok(images)) = IMAGES.get().map(Mutex::lock) {
+        held += images.bytes();
+    }
+    held
 }
 
 /// Python's max(a, b) of floats: `a` unless `b` is greater.
@@ -423,17 +486,19 @@ struct Pictures {
 
 /// The layers made of each look at each size asked for lately, the most recently used last,
 /// with their bytes.
-type MadeLayers = Mutex<Vec<((PathBuf, &'static str, usize), Arc<Layers>, usize)>>;
-/// The discs made lately (a look's rotor of a size, in a pair of colours), the newest last.
-type MadeDiscs = Mutex<
-    Vec<(
-        (PathBuf, &'static str, usize, [u8; 3], [u8; 3]),
-        Arc<Vec<u8>>,
-    )>,
->;
+type MadeLayers = Mutex<InOrder<(PathBuf, &'static str, usize), Arc<Layers>>>;
+static LAYERS: MadeLayers = Mutex::new(InOrder::new());
+/// The discs made lately (a look's rotor of a size, in a pair of colours), the most recently
+/// used last: DISCS_KEPT of them.
+type MadeDiscs = Mutex<InOrder<(PathBuf, &'static str, usize, [u8; 3], [u8; 3]), Arc<Vec<u8>>>>;
+static DISCS: MadeDiscs = Mutex::new(InOrder::new());
+const DISCS_KEPT: usize = 16;
 /// The square frames' layers made lately (the Blender frame's, "", or a drawn look's, at a
 /// size), the most recently used last, with their bytes.
-type MadeFrames = Mutex<Vec<((PathBuf, &'static str, usize), Arc<Vec<f32>>, usize)>>;
+type MadeFrames = Mutex<InOrder<(PathBuf, &'static str, usize), Arc<Vec<f32>>>>;
+static FRAMES: MadeFrames = Mutex::new(InOrder::new());
+/// The fans' pictures kept (fan._kept), within IMAGE_BYTES.
+static IMAGES: OnceLock<Mutex<crate::kept::Kept<Pictured, Arc<Image>>>> = OnceLock::new();
 
 /// fan.py's IMAGE_BYTES: what its pictures kept may hold together.
 const IMAGE_BYTES: usize = 6 << 20;
@@ -460,7 +525,6 @@ enum Pictured {
 /// fan._kept: the picture of `key`, made by `make` where it is not kept (the most recently used
 /// kept within IMAGE_BYTES: what goes is only made again, the pixels the same).
 fn kept_picture(key: Pictured, make: impl FnOnce() -> Result<Image>) -> Result<Arc<Image>> {
-    static IMAGES: OnceLock<Mutex<crate::kept::Kept<Pictured, Arc<Image>>>> = OnceLock::new();
     let images = IMAGES.get_or_init(|| Mutex::new(crate::kept::Kept::new(IMAGE_BYTES)));
     if let Some(found) = images.lock().ok().and_then(|mut kept| kept.get(&key)) {
         return Ok(found);
@@ -569,8 +633,7 @@ fn reduced(side: usize, layers: &[Vec<f32>; 4], k: usize, planes: &mut Vec<f32>)
 /// drawn side by side on the processor's cores: each is drawn alone, the same numbers in any
 /// order); kept as fan.py keeps them (LAYER_BYTES).
 pub fn layers(dir: &Path, look: &'static Look, k: usize) -> Result<Arc<Layers>> {
-    static MADE: OnceLock<MadeLayers> = OnceLock::new();
-    let made = MADE.get_or_init(|| Mutex::new(Vec::new()));
+    let made = &LAYERS;
     let key = (dir.to_path_buf(), look.name, k);
     if let Some(found) = kept(made, &key) {
         return Ok(found);
@@ -720,22 +783,13 @@ fn disc(
     colour: [u8; 3],
     second: [u8; 3],
 ) -> Arc<Vec<u8>> {
-    static MADE: OnceLock<MadeDiscs> = OnceLock::new();
-    let made = MADE.get_or_init(|| Mutex::new(Vec::new()));
     let key = (dir.to_path_buf(), look.name, layers.side(), colour, second);
-    if let Some(found) = made
-        .lock()
-        .ok()
-        .and_then(|m| m.iter().find(|(at, _)| *at == key).map(|(_, d)| d.clone()))
-    {
+    if let Some(found) = kept(&DISCS, &key) {
         return found;
     }
     let disc = Arc::new(layers.disc(colour, second));
-    if let Ok(mut made) = made.lock() {
-        if made.len() >= 16 {
-            made.remove(0);
-        }
-        made.push((key, disc.clone()));
+    if let Ok(mut made) = DISCS.lock() {
+        made.put(key, disc.clone(), 1, DISCS_KEPT); // (each counts one: so many of them)
     }
     disc
 }
@@ -906,8 +960,7 @@ fn ring_made(colour: [u8; 3], size: i64, steps: i64, canvas: usize) -> Result<Im
 /// drawn look's, or any look's in its own colours: `own`); kept as fan.py keeps them
 /// (LAYER_BYTES).
 fn frame_layers(dir: &Path, look: &'static Look, own: bool, size: usize) -> Result<Arc<Vec<f32>>> {
-    static MADE: OnceLock<MadeFrames> = OnceLock::new();
-    let made = MADE.get_or_init(|| Mutex::new(Vec::new()));
+    let made = &FRAMES;
     let drawn = look.drawn || own;
     let key = (dir.to_path_buf(), if drawn { look.name } else { "" }, size);
     if let Some(found) = kept(made, &key) {

@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use lp_pixels::{alpha_composite, chops, Draw, Filter, Image, Mode, Transform};
 use lp_py::{Dict, Value};
 
+use crate::kept::InOrder;
 use crate::light;
 use crate::piece::{Failed, Piece, Result};
 use crate::renderer::Renderer;
@@ -264,8 +265,32 @@ impl Layers {
 /// What a kept set is known by: the kind, night, its size, lit, its colours and the look.
 type SetKey = (String, bool, usize, bool, [[i64; 4]; 5], bool);
 
-/// The kept sets, the one asked for last at the end (the render threads of every panel ask).
-static SETS: Mutex<Vec<(SetKey, Arc<Layers>)>> = Mutex::new(Vec::new());
+/// The kept sets, the one asked for last at the end (the render threads of every panel
+/// ask); light mode has them note what is drawn with (kept.rs).
+static SETS: Mutex<InOrder<SetKey, Arc<Layers>>> = Mutex::new(InOrder::new());
+
+/// Light mode: the sets note from now on which are drawn with.
+pub(crate) fn mark() {
+    SETS.lock().unwrap_or_else(PoisonError::into_inner).mark();
+}
+
+pub(crate) fn unmark() {
+    SETS.lock().unwrap_or_else(PoisonError::into_inner).unmark();
+}
+
+/// The sets not drawn with since [`mark`], and never by a panel, go; the bytes that went.
+pub(crate) fn shed() -> usize {
+    let mut kept = SETS.lock().unwrap_or_else(PoisonError::into_inner);
+    let before = kept.sizes(|layers| layers.size());
+    kept.shed();
+    before - kept.sizes(|layers| layers.size())
+}
+
+/// The bytes of the sets kept (the load report says them).
+pub(crate) fn bytes() -> usize {
+    let kept = SETS.lock().unwrap_or_else(PoisonError::into_inner);
+    kept.sizes(|layers| layers.size())
+}
 
 /// layers_for: the layers of a kind of weather at size `k`, in a look, lit or flat, with a big
 /// clear night's shooting star. Kept: one set serves every symbol that looks like it, and the
@@ -281,11 +306,8 @@ fn layers_for(
     let colours = [c.cloud, c.dark, c.sun, c.rain, c.snow];
     let key: SetKey = (kind.to_string(), night, k, lit, colours, rich);
     {
-        let mut sets = SETS.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(at) = sets.iter().position(|(kept, _)| *kept == key) {
-            let hit = sets.remove(at);
-            let layers = Arc::clone(&hit.1);
-            sets.push(hit);
+        let mut kept = SETS.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(layers) = kept.get(&key) {
             return Ok(layers);
         }
     }
@@ -294,20 +316,16 @@ fn layers_for(
         made.streak = streak_part(k, c.cloud)?;
     }
     let made = Arc::new(made);
-    let mut sets = SETS.lock().unwrap_or_else(PoisonError::into_inner);
-    sets.retain(|(kept, _)| *kept != key);
-    sets.push((key, Arc::clone(&made)));
-    let mut total: usize = sets.iter().map(|(_, layers)| layers.size()).sum();
-    while total > BUDGET && sets.len() > 1 {
-        let (_, gone) = sets.remove(0);
-        total -= gone.size();
-    }
+    let mut kept = SETS.lock().unwrap_or_else(PoisonError::into_inner);
+    // (another thread made the same meanwhile: this one takes its place; a set's own
+    // pictures grow while it is kept, so each is counted as it is now)
+    kept.put_measured(key, Arc::clone(&made), BUDGET, |layers| layers.size());
     Ok(made)
 }
 
 /// Every kept set dropped (tests).
 pub fn forget() {
-    SETS.lock().unwrap_or_else(PoisonError::into_inner).clear();
+    *SETS.lock().unwrap_or_else(PoisonError::into_inner) = InOrder::new();
 }
 
 /// _rays_turned: the rays turned by `angle` degrees, in steps of a quarter degree and kept

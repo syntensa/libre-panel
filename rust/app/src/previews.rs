@@ -51,6 +51,11 @@ impl Previews {
             .map(|(_, png)| png.clone())
     }
 
+    /// Every picture kept let go (light mode: the app is closed).
+    pub fn forget(&self) {
+        *self.kept.lock().unwrap_or_else(|e| e.into_inner()) = VecDeque::new();
+    }
+
     /// The picture of `key`: the one kept, else drawn by `draw` when a turn comes (None where
     /// `gone` says nobody waits for it any more) and kept.
     pub fn picture(

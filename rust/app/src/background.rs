@@ -614,6 +614,8 @@ pub struct BackgroundApp {
     pub hotkeys: Arc<Hotkeys>,
     /// the app's server, while it serves
     editor: Mutex<Option<EditorServer>>,
+    /// what only the app needs goes while it is closed, and its memory back (light.rs)
+    light: Mutex<Option<crate::light::Watch>>,
     own: Weak<BackgroundApp>,
     /// set when the app is asked to quit
     pub quit_requested: AtomicBool,
@@ -647,6 +649,7 @@ impl BackgroundApp {
                 company,
                 hotkeys,
                 editor: Mutex::new(None),
+                light: Mutex::new(None),
                 own: app.clone(),
                 quit_requested: AtomicBool::new(false),
             }
@@ -728,12 +731,22 @@ impl BackgroundApp {
                 say(&format!("the app's address could not be written: {why}"));
                 return None;
             }
+            let (asks, pictures) = (Arc::clone(&server.state), Arc::clone(&server.state));
+            let watch = crate::light::Watch::start(
+                move || asks.asked_at(),
+                move || pictures.forget_pictures(),
+            );
+            if let Ok(mut light) = self.light.lock() {
+                *light = Some(watch);
+            }
             *editor = Some(server);
         }
         editor.as_ref().map(EditorServer::address)
     }
 
     fn stop_editor(&self) {
+        let watch = self.light.lock().ok().and_then(|mut light| light.take());
+        drop(watch); // (it stops and is waited for)
         let server = self.editor.lock().ok().and_then(|mut editor| editor.take());
         if let Some(mut server) = server {
             // (the window would show nothing)

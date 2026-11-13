@@ -16,8 +16,12 @@
 //! - **The sensor service** is the process the Service Control Manager names for
 //!   `LibrePanelSensors`, else the one of its program; the report says which.
 //! - **What the main process holds**, as far as it can tell from within: the C heap's bytes in
-//!   use and free, its threads, on Windows what it has committed. (Python's report counted its
-//!   objects and modules there; a Rust program has none.)
+//!   use and free, the large blocks it keeps for the next frame (heap.rs: whether, and how
+//!   many bytes as of now), the pictures every renderer shares (lp_render's `shared`: the
+//!   fans' rotors, the weather's symbols, the moon, the agents' signs), its threads, on
+//!   Windows what it has committed. (Python's report counted its objects and modules there;
+//!   a Rust program has none.) Light mode says the same in the log a while after the app
+//!   was closed ([`held_line`]).
 //! - **Only while asked.** The thread samples only while somebody asked within [`IDLE_S`],
 //!   then ends. A request never waits for a sample: it gets the last one.
 
@@ -964,24 +968,7 @@ impl Sampler {
             }
             inner.inside_at = Some(now);
         }
-        let started = Instant::now();
-        let mut held = Dict::default();
-        held.insert(
-            "heap".into(),
-            os::heap().map_or(Value::None, |(in_use, free)| {
-                let mut heap = Dict::default();
-                heap.insert("in_use".into(), Value::int(in_use as i64));
-                heap.insert("free".into(), Value::int(free as i64));
-                Value::Dict(heap)
-            }),
-        );
-        held.insert("threads".into(), Value::int(os::threads().len() as i64));
-        if let Some(commit) = os::commit() {
-            held.insert("commit".into(), Value::int(commit as i64));
-        }
-        let ms = (started.elapsed().as_secs_f64() * 10000.0).round() / 10.0;
-        held.insert("ms".into(), Value::Float(ms));
-        self.lock().inside = Some(Value::Dict(held));
+        self.lock().inside = Some(Value::Dict(inside()));
     }
 
     /// the processes under this one, and the window's with its own where another start opened
@@ -1234,10 +1221,8 @@ impl Sampler {
             }),
         );
         report.insert("sensors".into(), sensors);
-        report.insert(
-            "inside".into(),
-            self.lock().inside.clone().unwrap_or(Value::None),
-        );
+        let inside = self.lock().inside.clone().unwrap_or(Value::None);
+        report.insert("inside".into(), with_kept(inside));
         let text = report_text(&report);
         report.insert("text".into(), Value::Str(text));
         report
@@ -1416,6 +1401,54 @@ fn sensors_text(sensors: &Value) -> Vec<String> {
     }
 }
 
+/// inside: what this process holds, as far as it can tell from within, counted now.
+fn inside() -> Dict {
+    let started = Instant::now();
+    let mut held = Dict::default();
+    held.insert(
+        "heap".into(),
+        os::heap().map_or(Value::None, |(in_use, free)| {
+            let mut heap = Dict::default();
+            heap.insert("in_use".into(), Value::int(in_use as i64));
+            heap.insert("free".into(), Value::int(free as i64));
+            Value::Dict(heap)
+        }),
+    );
+    // (whether this program keeps a frame's large blocks for the next: heap.rs)
+    held.insert("keeper".into(), Value::Bool(crate::heap::on()));
+    // (the pictures every renderer draws with and keeps between frames: lp_render's shared)
+    let shared = lp_render::shared::bytes();
+    held.insert("shared".into(), Value::int(shared as i64));
+    held.insert("threads".into(), Value::int(os::threads().len() as i64));
+    if let Some(commit) = os::commit() {
+        held.insert("commit".into(), Value::int(commit as i64));
+    }
+    let ms = (started.elapsed().as_secs_f64() * 10000.0).round() / 10.0;
+    held.insert("ms".into(), Value::Float(ms));
+    held
+}
+
+/// What the keeper holds for a next frame said with the rest, as of now: it goes within
+/// seconds, where the rest is counted every INSIDE_S.
+fn with_kept(mut held: Value) -> Value {
+    if let (Value::Dict(held), Some(counts)) = (&mut held, crate::heap::counts()) {
+        held.insert("kept".into(), Value::int(counts.holding as i64));
+    }
+    held
+}
+
+/// say_held's words (light.py): this process's memory and what it holds, in a line for the
+/// log, to read there once the window is open again.
+pub fn held_line() -> String {
+    let private = os::private(std::process::id()).map(|bytes| bytes as i64);
+    let mut said = mb(private);
+    if let Some(commit) = os::commit() {
+        said += &format!(" (committed {})", mb(Some(commit as i64))); // (Windows)
+    }
+    let held = inside_text(&with_kept(Value::Dict(inside())));
+    format!("{said}; {}", held.join(" "))
+}
+
 /// What the main process holds, in a line (none: it was not counted).
 fn inside_text(held: &Value) -> Vec<String> {
     let Value::Dict(held) = held else {
@@ -1428,6 +1461,12 @@ fn inside_text(held: &Value) -> Vec<String> {
             mb(bytes_in(heap, "in_use")),
             mb(bytes_in(heap, "free"))
         ));
+    }
+    if let Some(kept) = bytes_in(held, "kept") {
+        said.push(format!("kept for the next frame {}", mb(Some(kept))));
+    }
+    if let Some(shared) = bytes_in(held, "shared") {
+        said.push(format!("pictures all drawing shares {}", mb(Some(shared))));
     }
     if let Some(commit) = bytes_in(held, "commit") {
         said.push(format!("committed {}", mb(Some(commit))));
