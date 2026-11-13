@@ -15,6 +15,12 @@
 </p>
 
 <p align="center">
+  <b>New in 0.9: rewritten in Rust.</b> A third less memory, up to 38 % less processor and a
+  quicker start, with the same pictures on the panel, pixel for pixel
+  (<a href="CHANGELOG.md">the numbers</a>).
+</p>
+
+<p align="center">
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-windows.png" width="300" alt="Download for Windows: the setup, for Windows 10 and 11, 64-bit"></a>
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-linux.png" width="260" alt="Download for Linux: the AppImage, x86-64"></a>
   <br>
@@ -148,9 +154,10 @@ that, and round again.
 
 <p><img src="docs/media/ai-card.gif" width="100%" alt="AI activity on Lumen: the weather card gives way by itself to Claude Code at work, with its moving sign, the tool at work, its session, what today cost and how much of five hours, seven days and the context is used; then it waits for you, in amber"></p>
 
-Claude Code and Codex on this PC: working, waiting for you or idle, with the tool at work, what today cost and how much of the plan's limits is used. On Lumen
-the AI card comes up by itself while one of them works; **Agents** gives them a screen of their
-own. Nothing leaves this PC ([AI activity](docs/CONFIGURATION.md#ai-activity)).
+Claude Code and Codex on this PC: working, waiting for you or idle, with the tool at work, what
+today cost and how much of the plan's limits is used. On Lumen the AI card comes up by itself
+while one of them works; **Agents** gives them a screen of their own. Nothing leaves this PC
+([AI activity](docs/CONFIGURATION.md#ai-activity)).
 
 ### Several panels at once
 

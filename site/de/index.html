@@ -69,7 +69,7 @@
 <main id="main">
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap hero-copy">
-      <p class="news"><span class="dot"></span><span>Neu in 0.7: bis zu vier Panels zugleich, Companion-Screens, KI-Aktivität und 35 Module</span>
+      <p class="news"><span class="dot"></span><span>Neu in 0.9: komplett in Rust, ein Drittel weniger Speicher, bis zu 38 % weniger CPU-Last</span>
         <a href="https://github.com/syntensa/libre-panel/releases/latest">Was ist neu</a></p>
       <h1 id="hero-title">Die Werte deines PCs als <em>bewegtes Licht</em>.</h1>
       <p class="lead">Libre Panel steuert die kleinen USB-Systemmonitor-Panels, die als TURZX, Turing
@@ -148,7 +148,7 @@
         <li><b>Companions, nichts doppelt</b>Ein Panel neben Lumen bekommt Lumen Companion: jeden Kern, die Temperaturen mit drehenden Lüftern, die Laufwerke und die Prozesse, und Lumen lässt weg, was sein Companion zeigt. Encore, Almanac und Arena haben auch einen, und ein Companion folgt dem ersten Panel ins Spiel.</li>
         <li><b>Ein Bild über alle Panels</b>Jedes Panel zeigt den Teil davon, wo es steht, unter seinem Theme.</li>
         <li><b>Szenen</b>Ein Theme auf jedem Panel mit einem Klick, auf Start, im Tray oder mit einem Tastenkürzel.</li>
-        <li><b>Panel 1 | 2 | 3</b>Der Kopf der App wählt das Panel, das Live zeigt und Gestalten bearbeitet; ein Modul zieht von einem Panel aufs andere.</li>
+        <li><b>Panel 1 | 2 | 3</b>Der Kopf der App wählt das Panel, das Start und Zustand zeigen und Gestalten bearbeitet; ein Modul zieht von einem Panel aufs andere.</li>
         <li><b>Jedes für sich</b>Die Helligkeit (oder die des ersten Panels, mit einem Versatz), wie es montiert ist, sein Startbildschirm und ein eigener Prozess, sodass zwei Panels im Videomodus auf nichts warten.</li>
         <li><b>In echter Größe</b>Einstellungen → Panels stellt sie neben deinen Monitor, und Panel hinzufügen fragt Schritt für Schritt, welches Panel es ist, wie es montiert ist und was es zeigt.</li>
       </ul>
@@ -159,7 +159,7 @@
           <p>Erreicht ein Sensor seine kritische Grenze, pulsiert der Rand jedes Panels rot, und ein Panel neben dem ersten zeigt sein Alarm-Theme, bis er abgekühlt ist.</p>
           <details class="more">
             <summary>Mehr<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-            <p>Live, das Tray und die Übersicht zeigen jedes Panel, und Bild aller Panels speichert sie, wie sie stehen, zum Teilen. Alles dazu (englisch): <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#more-panels-at-once">More panels at once</a> · <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#scenes">Scenes</a></p>
+            <p>Start, das Tray und die Übersicht zeigen jedes Panel, und Bild aller Panels speichert sie, wie sie stehen, zum Teilen. Alles dazu (englisch): <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#more-panels-at-once">More panels at once</a> · <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#scenes">Scenes</a></p>
           </details>
         </div>
         <figure class="media">
@@ -483,7 +483,7 @@
           <li><b>Start</b> das Panel und seine Themes</li>
           <li><b>Gestalten</b> ein Theme bauen</li>
           <li><b>Look</b> Farben, Licht, Hinweise</li>
-          <li><b>Live</b> wie es läuft, und sein Verlauf</li>
+          <li><b>Zustand</b> wie es läuft, und sein Verlauf</li>
           <li><b>Einstellungen</b> die ganze config.toml</li>
         </ul>
       </div>
@@ -839,7 +839,7 @@
         <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
         <p><strong>Du hast eins, das als unverifiziert gilt?</strong> Sein Treiber folgt einem Protokoll, das
           auf echten Panels erprobt ist, aber noch niemand hat das Modell mit Libre Panel bestätigt.
-          Der Panel-Test in der App (<em>Live → Diagnose</em>, oder <code>libre-panel doctor</code>)
+          Der Panel-Test in der App (<em>Zustand → Diagnose</em>, oder <code>libre-panel doctor</code>)
           prüft es von Anfang bis Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet
           einen
           <a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">Panel-Bericht</a>
@@ -935,7 +935,7 @@
       </ol>
       <div class="python">
         <p>Mit Python:</p>
-<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.8.0"
+<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.0"
 libre-panel tray               <span class="c"># die Hintergrund-App mit Tray-Symbol</span>
 libre-panel doctor             <span class="c"># das Panel prüfen, Bericht schreiben</span></code></pre>
       </div>
