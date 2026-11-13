@@ -728,10 +728,16 @@ def test_the_moon_s_phase_is_named_in_full_in_every_language(language):
     assert widest <= ours["name"]["max_width"] * 1.03  # (a hair over: a pixel smaller, drawn)
     assert ours["name"]["font_size"] < english["name"]["font_size"]
     assert ours["name"]["font_size"] >= ours["lit"]["font_size"]  # still the first line
+    most, least = english["moon"]["size"], english["moon"]["size"] * 0.8 - 1
     if language == "de":  # (the smaller name is all German needs: the moon stays as it is)
-        assert ours["moon"]["size"] == english["moon"]["size"]
+        assert ours["moon"]["size"] == most
+    elif language == "fr":  # ("Gibbeuse décroissante": the moon gives it room)
+        assert least <= ours["moon"]["size"] < most
     else:
-        assert english["moon"]["size"] * 0.8 - 1 <= ours["moon"]["size"] < english["moon"]["size"]
+        # (the themes' fonts have no Cyrillic: its letters are the computer's own font's, as
+        # wide as that makes them, so whether the moon has to give room is the computer's to
+        # say; with Windows' it has not, with DejaVu it has)
+        assert least <= ours["moon"]["size"] <= most
     for parts, wide in others:
         assert wide <= parts["name"]["max_width"] * 1.03
 

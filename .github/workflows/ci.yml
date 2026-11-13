@@ -421,7 +421,7 @@ jobs:
           python tests/frame_load.py --app "$app" --seconds 30
           python tests/frame_load.py --app "$app" --seconds 30 --demo
           if [ -f "$engine" ]; then
-            pip install -q pyusb
+            pip install -q pyusb pycryptodome
             python tests/frame_load.py --app "$app" --engine "$engine" --seconds 30 --demo
           else
             echo "no engine here: the frames through it are not measured"
@@ -579,7 +579,8 @@ jobs:
       - name: What a frame costs on Windows (Lumen on a simulated 12.3", 25 fps; large blocks kept, then not)
         shell: bash
         run: |
-          pip install pyusb
+          # (the simulated panel reads the TURZX packets as the drivers write them: pycryptodome)
+          pip install pyusb pycryptodome
           python tests/frame_load.py --app libre-panel-rust/libre-panel.exe \
             --engine libre-panel-rust/tools/libre-panel-engine.exe --env LP_HEAP_KEEP=0
           # LibrePanel.exe, the program the start menu and the start at login run, as the

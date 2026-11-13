@@ -47,9 +47,10 @@ def measure(
     extra: dict[str, str],
     demo: bool = False,
     background: bool = False,
-) -> None:
+) -> bool | None:
     """One run: with ``engine`` the video through it to the simulated panel; without, the
-    frames drawn for a virtual 12.3" and shown nowhere (what drawing costs alone)."""
+    frames drawn for a virtual 12.3" and shown nowhere (what drawing costs alone). False where
+    no video reached the simulated panel (nothing was measured), None where the app ended."""
     home = tempfile.mkdtemp(prefix="lp-load-")
     if engine is None:
         with open(os.path.join(home, "config.toml"), "w", encoding="utf-8") as f:
@@ -57,8 +58,7 @@ def measure(
                 f'theme = "{theme}"\nfps = 25\n[device]\ndriver = "virtual"\n'
                 'model = "turing-12.3-usb"\noutput = ""\n[sensors]\nproviders = ["psutil"]\n'
             )
-        run(app, home, {}, seconds, theme, extra, demo, background)
-        return
+        return run(app, home, {}, seconds, theme, extra, demo, background)
     fake = FakePanel(pid=0x0123, native=(720, 1920))
     sock = PanelSocket(fake)
     present = os.path.join(home, "panel-present")
@@ -80,10 +80,11 @@ def measure(
             '[sensors]\nproviders = ["psutil"]\n'
         )
     linked = {"LP_ENGINE_LINK": sock.link, "LIBRE_PANEL_ENGINE": engine}
-    run(app, home, {**linked, "LP_ENGINE_PRESENT": present}, seconds, theme, extra, demo,
-        background)  # fmt: skip
+    got = run(app, home, {**linked, "LP_ENGINE_PRESENT": present}, seconds, theme, extra, demo,
+              background)  # fmt: skip
     alive = False
     sock.close()
+    return got
 
 
 def run(
@@ -95,7 +96,7 @@ def run(
     extra: dict[str, str],
     demo: bool = False,
     background: bool = False,
-) -> None:
+) -> bool | None:
     """The app run with its settings in ``home`` and ``more`` in its environment (with its demo
     readings where ``demo``; ``background``: the background app with its server, not the
     panel's loop alone), measured for ``seconds`` once it is warm, and what its profile said."""
@@ -137,7 +138,7 @@ def run(
         said = [line.rstrip() for line in lines][:40]
         print(f"== {theme} ({os.path.basename(app)}): the app ended before it was measured",
               *said, sep="\n    ")  # fmt: skip
-        return
+        return None
     t0 = time.monotonic()
     time.sleep(seconds)
     span = time.monotonic() - t0
@@ -174,9 +175,12 @@ def run(
         if line.startswith(("profile ", "heap:")) or "video:" in line:
             print("  " + line.rstrip())
     if more and not any("video:" in line for line in lines):
-        # (no video went to the simulated panel: what the app said instead)
+        # (no video went to the simulated panel: what the app said instead; the numbers above
+        # are of an app that drew nothing, and the run fails)
         said = [line.rstrip() for line in lines if not line.startswith(("profile ", "heap:"))]
         print("  no video to the panel; the app said:", *said[:40], sep="\n    ")
+        return False
+    return True
 
 
 def main() -> None:
@@ -194,12 +198,18 @@ def main() -> None:
     )
     ap.add_argument("--only", action="store_true", help="the run with --env alone")
     args = ap.parse_args()
+    measured = []
     if not (args.only and args.env):
-        measure(args.app, args.engine, args.seconds, args.theme, {}, args.demo, args.background)
+        measured.append(measure(args.app, args.engine, args.seconds, args.theme, {}, args.demo,
+                                args.background))  # fmt: skip
     if args.env:
         extra = dict(item.split("=", 1) for item in args.env)
-        measure(args.app, args.engine, args.seconds, args.theme, extra, args.demo,
-                args.background)  # fmt: skip
+        measured.append(measure(args.app, args.engine, args.seconds, args.theme, extra,
+                                args.demo, args.background))  # fmt: skip
+    if False in measured:
+        sys.exit(
+            "no video reached the simulated panel: those runs measured an app that drew nothing"
+        )
 
 
 if __name__ == "__main__":
