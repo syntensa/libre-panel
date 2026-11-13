@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 from rust_check import (
     find,
     pillow_libfreetype,
@@ -108,7 +108,15 @@ def test_it_draws_a_theme_into_a_png_file(tmp_path: Path) -> None:
     with Image.open(out) as frame:
         assert frame.size == (1920, 480) and frame.mode == "RGB"
         assert len(frame.getcolors(1 << 24)) > 500  # (a picture, not one colour)
+        card = frame.crop((30, 30, 330, 330))
     assert not out.with_name("frame.png.tmp").exists()
+    # the demo's pictures come with its readings (DemoProvider.images): the album's cover is
+    # on the card as the preview shows it, where the loop drew the note that stands for none
+    assert _run(tmp_path, "preview", "lumen", "-o", str(tmp_path / "preview.png")).returncode == 0
+    with Image.open(tmp_path / "preview.png") as preview:
+        shown = preview.convert("RGB").crop((30, 30, 330, 330))
+    assert len(card.getcolors(1 << 24)) > 2000
+    assert max(ImageStat.Stat(ImageChops.difference(card, shown)).mean) < 1.0
 
 
 @draws
@@ -205,7 +213,9 @@ def test_it_follows_config_toml(tmp_path: Path) -> None:
     done = _run(tmp_path, "run", "--frames", "3")
     assert done.returncode == 0, done.stderr
     assert "theme terra" in done.stderr
-    assert "not in this build yet: nope" in done.stderr
+    # (a source nobody brings does not stop the panel: said in create_provider's words)
+    unknown = "sensor source 'nope' not started: unknown sensor provider 'nope' (available: "
+    assert unknown in done.stderr, done.stderr
     with Image.open(tmp_path / "panel.png") as frame:  # (relative: in the settings folder)
         assert frame.mode == "RGB" and frame.width > frame.height
 
@@ -1631,7 +1641,7 @@ def test_the_loop_shows_what_a_service_asks_for(tmp_path: Path) -> None:
               "mode: normal", "theme red"]  # fmt: skip
     lines = [line.removeprefix("libre-panel: ") for line in said.splitlines()]
     assert [line for line in lines if line in wanted] == wanted, said
-    assert "services not in this build yet: nope" in said and "failed" not in said
+    assert "service 'nope': not installed" in said and "failed" not in said
     red, blue = (220, 30, 30), (30, 30, 220)
     assert red in seen and blue in seen
     # between them, the fades: both colours mixed

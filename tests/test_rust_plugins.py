@@ -210,7 +210,7 @@ def test_a_plugins_sensor_source_and_service_run_in_the_rust_app(plugin_folder, 
     lines = [line.removeprefix("libre-panel: ") for line in said.splitlines()]
     assert "service 'demo' started" in lines, said
     assert "service demo: shows theme 'blue'" in lines, said
-    assert "not in this build yet" not in said
+    assert "service 'demo': not installed" not in said
 
 
 def test_settings_list_the_plugins_as_settings_py_lists_them(plugin_folder, isolated_home):

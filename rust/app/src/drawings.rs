@@ -80,7 +80,7 @@ fn demo(t: Option<f64>, fonts: &Path) -> Answer<Snapshot> {
     Ok(snapshot)
 }
 
-fn demo_pictures(fonts: &Path) -> Answer<IndexMap<String, lp_pixels::Image>> {
+pub(crate) fn demo_pictures(fonts: &Path) -> Answer<IndexMap<String, lp_pixels::Image>> {
     static MADE: std::sync::OnceLock<Result<IndexMap<String, lp_pixels::Image>, String>> =
         std::sync::OnceLock::new();
     MADE.get_or_init(|| lp_services::demo::pictures(fonts))

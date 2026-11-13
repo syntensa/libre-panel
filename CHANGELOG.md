@@ -26,7 +26,9 @@
   written upright.
 - **Start's list of themes names the right panel.** On the 12.3" it said "Turing 9.2″ ·
   1920 × 720" of every theme whose first version is the 9.2"'s: the panel of that one beside
-  the size of the one shown. It names the panel of the version this panel shows.
+  the size of the one shown. It names the panel of the version this panel shows. And the
+  card's title names the theme as the list does ("Turing 12.3″ shows “Lumen”"; it took the
+  name of the version, "Lumen 12.3″", whose inch mark ran into the quotation mark).
 - **A proxy set in Windows is used again** (*Use a proxy server*, with its exceptions) for the
   weather, the word of a new version and the community themes, as 0.8 used it: 0.9 so far
   knew only the one the environment names, so a computer that reaches the web through its
@@ -44,6 +46,9 @@
   written in: "unknown display driver 'x' (available: …)", "sensor source 'x' not started:
   unknown sensor provider 'x' (available: …)", "service 'x': not installed". And `"demo"` is
   a sensor source by its name again.
+- **The demo shows its album cover on the panel** (`libre-panel start --demo`, `run --demo`):
+  the made-up readings came without their pictures, so the music card showed the note that
+  stands for no cover, and a game no logo.
 - **Linux: helper programs that ended are not left behind.** Where there is no system D-Bus (a
   container, a minimal system), the two that follow sleep and locking ended at once and stayed
   as defunct processes, in Diagnose's table of the load with 0 MB each. They are collected,
@@ -59,6 +64,13 @@ and smallest size)
 - **The header's search field says whole words**: its phrase, its first word, or nothing (its
   glass alone). Beside a running panel's chip it said "Suchen o…" in German at the window's
   default size; there it says "Suchen oder Befehl …" now, without the hint of its keys.
+- **A text does not end in a word alone.** "Ein Theme für jedes Panel auf einmal, mit einem /
+  Klick": of the 1729 texts that stand in more than one line across the app's views and both
+  window sizes, in the eight languages that part their words with spaces, 288 ended in a line
+  of one short word. Their lines break so that the word has company, where the window's
+  browser knows how (WebView2 does): 29 are left, 25 of them a last word with a hyphen
+  ("Open-Meteo."), which the browser takes for two, and no text got a line more by it, in
+  Chinese and Japanese neither. What is typed into a field stays where it was typed.
 - **Design keeps its words whole in a small window**: the zoom bar's "1 : 1" stays on one line
   at the window's smallest size, the way to the fine-tuning shows its whole list (on a second
   line where it must, where an ellipsis cut it in every language), the chevron of the way to

@@ -632,6 +632,83 @@ def test_the_list_names_the_panel_of_the_version_this_panel_shows(app_url, isola
             expect(column).to_have_text("Turing 3.5″ · 320 × 480")
 
 
+def test_the_card_names_the_theme_as_the_list_beside_it_does(app_url, isolated_home):  # noqa: F811
+    """The 12.3″ shows Lumen in its version for that panel, "Lumen 12.3″", and the card's title
+    took that name: „Turing 12.3″ zeigt „Lumen 12.3″“", an inch mark against the quotation
+    mark. It names the theme, as the list beside it does; the panel is in the title already."""
+    from test_app_browser import app_answer
+
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-12.3-usb")
+    answer = app_answer(target='Turing 12.3", video 25 fps')
+    answer["panel"] = {**answer["panel"], "state": "showing", "theme": "lumen-1920x720",
+                       "model": "turing-12.3-usb", "size": [1920, 720]}  # fmt: skip
+
+    def app(route, request):
+        if request.method != "GET":
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    with browser_page(app_url, "home", routes={"**/api/app": app}, allow=PICTURE) as page:
+        expect(page.locator(".panel-card-title h2")).to_have_text("Turing 12.3″ shows “Lumen”")
+        listed = page.locator(".quick-theme[data-theme='lumen'] .quick-theme-name")
+        expect(listed).to_have_text("Lumen")
+
+
+# The words of the last line of each shown text that stands in more than one line.
+LAST_LINES = """(selector) => [...document.querySelectorAll(selector)].filter(
+  (e) => e.offsetParent
+).map((e) => {
+  const tops = [];
+  const walker = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    for (const found of node.textContent.matchAll(/\\S+/g)) {
+      const range = document.createRange();
+      range.setStart(node, found.index);
+      range.setEnd(node, found.index + found[0].length);
+      const boxes = range.getClientRects();
+      if (boxes.length) tops.push([found[0], Math.round(boxes[boxes.length - 1].top)]);
+    }
+  }
+  const lines = [...new Set(tops.map(([, top]) => top))].sort((a, b) => a - b);
+  const last = tops.filter(([, top]) => top === lines[lines.length - 1]).map(([word]) => word);
+  const wrap = getComputedStyle(e).textWrap;
+  return { text: e.innerText.trim(), lines: lines.length, last, wrap };
+}).filter((text) => text.lines > 1)"""
+
+
+def test_a_text_does_not_end_in_a_word_alone(app_url, isolated_home):  # noqa: F811
+    """Beside Start's themes the cards said "Ein Theme für jedes Panel auf einmal, mit einem /
+    Klick" and "Wenn du sie änderst, auf jedem / Screen": a last line of one word, in one text
+    of six across the app's views and languages. The lines break so that it has company, where
+    the browser knows how; what is typed into a field stays where it was typed."""
+    from libre_panel import i18n
+
+    choose_theme(isolated_home, "lumen")
+    i18n.set_language("de")
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        if not page.evaluate("CSS.supports('text-wrap', 'pretty')"):
+            pytest.skip("this browser does not know text-wrap: pretty")
+        page.wait_for_selector(".more-row-text .muted")
+        texts = page.evaluate(LAST_LINES, ".more-row-text .muted")
+        assert texts, "no text in lines to look at"
+        assert all("pretty" in text["wrap"] for text in texts), texts
+        alone = [text["text"] for text in texts if len(text["last"]) < 2]
+        assert alone == []
+        # a field keeps its lines as they were typed, and a line that must not break does not
+        typed = page.evaluate("""(() => {
+            const field = document.body.appendChild(document.createElement('textarea'));
+            const wrap = getComputedStyle(field).textWrapStyle;
+            field.remove();
+            return wrap;
+        })()""")
+        assert typed in ("auto", None)
+        tab = "getComputedStyle(document.querySelector('.topbar .tab')).whiteSpace"
+        assert page.evaluate(tab) == "nowrap"
+
+
 def test_the_community_themes_are_asked_for_once_opened_and_one_installs(
     app_url,  # noqa: F811
     isolated_home,

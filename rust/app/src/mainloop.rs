@@ -317,13 +317,14 @@ fn say(message: &str) {
 }
 
 /// For the test of what happens when the loop has a bug: where LP_BUG_AT_FRAME names a frame,
-/// the loop fails at it, once in this process.
+/// the loop fails at it, once in this process. (The environment is asked once, not each frame.)
 fn bug_for_the_test(frames: u64) {
+    static AT: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
     static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    let Some(at) = std::env::var_os("LP_BUG_AT_FRAME") else {
-        return;
-    };
-    let at = at.to_str().and_then(|at| at.parse::<u64>().ok());
+    let at = *AT.get_or_init(|| {
+        let at = std::env::var_os("LP_BUG_AT_FRAME")?;
+        at.to_str()?.parse::<u64>().ok()
+    });
     if at == Some(frames) && !DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
         panic!("a bug at frame {frames}, as LP_BUG_AT_FRAME asks for");
     }

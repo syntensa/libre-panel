@@ -95,6 +95,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A text's last line is not one short word alone: its lines break so that the word has
+   company, where the browser knows how (no text gets a line more by it). What is typed
+   stays where it was typed. */
+body {
+  text-wrap: pretty;
+}
+
+textarea,
+[contenteditable] {
+  text-wrap-style: auto;
+}
+
 button,
 input,
 select,

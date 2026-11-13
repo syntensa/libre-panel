@@ -1306,7 +1306,8 @@ impl View {
 }
 
 /// Readings made up of the time alone, for a look at a theme without a computer's own
-/// (`--demo`): the demo's (sensors/demo.py's DemoProvider, lp-services' demo).
+/// (`--demo`): the demo's (sensors/demo.py's DemoProvider, lp-services' demo), with its
+/// pictures: an album's cover, the player's icon and a game's logo.
 pub struct Demo;
 
 impl Demo {
@@ -1326,5 +1327,17 @@ impl Source for Demo {
         let utc = lp_py::zones::Zone::utc();
         let zone = lp_py::zones::local().unwrap_or(&utc);
         out.extend(lp_services::demo::read(t, zone));
+    }
+
+    /// DemoProvider.images: the panel showed the demo's title without its cover.
+    fn images(&self) -> IndexMap<String, lp_pixels::Image> {
+        let Ok(home) = crate::home::Home::find() else {
+            return IndexMap::new();
+        };
+        crate::drawings::demo_pictures(&home.fonts()).unwrap_or_default()
+    }
+
+    fn images_state(&self) -> u64 {
+        1 // (always the same ones)
     }
 }

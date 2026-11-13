@@ -77,10 +77,10 @@ pub fn of_settings(settings: &Settings, scheme: &str) -> Option<String> {
     }
     // (a proxy switched on with no address is none: urllib would ask "http://" and fail)
     named(&proxies, scheme).filter(|address| {
-        address
+        let host = address
             .split_once("://")
-            .map_or(address.as_str(), |(_, host)| host)
-            != ""
+            .map_or(address.as_str(), |(_, host)| host);
+        !host.is_empty()
     })
 }
 
