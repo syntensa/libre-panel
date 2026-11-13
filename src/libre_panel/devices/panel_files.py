@@ -52,6 +52,9 @@ log = logging.getLogger(__name__)
 
 FOLDER = "usr/data"
 BOOT_LOGO = "usr/data/boot.jpg"
+# the panels the boot picture and the standby clip were measured on (SPUR II on the 9.2");
+# the other USB panels share its firmware but have not been tried
+MEASURED = ("turing-9.2-usb",)
 STANDBY_CLIP = VENDOR_CLIP  # the vendor app's name, which the video mode names too
 MAX_FILE = 1024 * 1024
 LIST_PIECES = 20

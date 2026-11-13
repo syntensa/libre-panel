@@ -46,6 +46,28 @@
       "sha256": "4d6137250db864a8fc5b01bd478ed3a52676b8f9128f474864bfd9004c61add9"
     },
     {
+      "name": "Basic Computer Info",
+      "author": "Will Daher",
+      "description": "Time, Date, CPU activity, I/O activity, network activity, basic Weather",
+      "sizes": [
+        "320x480"
+      ],
+      "preview": "basic-computer-info/preview.png",
+      "zip": "basic-computer-info/basic-computer-info.zip",
+      "sha256": "9250c1c905810b3131cb0eb2c92953319d540e5cc0febb63c6864d2dec3aa4f3"
+    },
+    {
+      "name": "Cyberpunk 2077",
+      "author": "ardenad, after Sebastian",
+      "description": "A 1920×480 dashboard for horizontal screens, built around the official Cyberpunk 2077 key art. The hero artwork fills the left panel inside a rounded frame, while the right side shows a large 24-hour clock with seconds and the current date. A top strip displays the running game and its live FPS, and three gauge cards break down CPU, GPU and RAM load with temperature, power draw, frequency and fan",
+      "sizes": [
+        "1920x480"
+      ],
+      "preview": "cyberpunk-2077/preview.png",
+      "zip": "cyberpunk-2077/cyberpunk-2077.zip",
+      "sha256": "e81490348ac51bf08590b00d32cc79d0494d689c59561a09a71339d441a53500"
+    },
+    {
       "name": "Pragmata",
       "author": "ardenad, after Sebastian",
       "description": "A 1920×480 dashboard for horizontal screens, featuring the Pragmata character artwork. A light, clean layout places the art in a rounded frame on the left, with a large clock, seconds and full date on the right. The header shows the active game and its FPS; three gauge cards report CPU, GPU and RAM usage alongside temperature, power, frequency and fan speed. The footer displays network download/up",
