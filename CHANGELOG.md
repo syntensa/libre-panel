@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.9.0rc5 — 2026-11-13
+
+The next release candidate of 0.9.0 to try: the app's window gives its memory back once
+it is closed, and the themes' texts keep to their place on long days and in long words.
+The panel's load is rc4's.
 
 **Fixed**
 - **The app's window no longer leaves its memory behind.** Start and Design draw a picture of
