@@ -193,7 +193,7 @@ def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there
         rows = card.locator(".first-step")
         # (no panel at hand whose start screen could be written: the news of it are left out)
         assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == ["lighter", "tray"]
-        # half the load: what Libre Panel costs the PC, in Diagnose
+        # lighter: what Libre Panel costs the PC, in Diagnose
         lighter = card.locator("[data-step='lighter']")
         expect(lighter).not_to_have_class(re.compile(r"\bdone\b"))
         lighter.get_by_role("button", name="Show me").click()

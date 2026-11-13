@@ -97,8 +97,8 @@ export function WhatsNew() {
   const items = [
     {
       id: "lighter",
-      title: t("Half the load on your PC"),
-      text: t("Libre Panel is written anew as one small program: about half of 0.8's load on the processor and half its memory, with the same picture on the panel."),
+      title: t("Lighter on your PC"),
+      text: t("Libre Panel is written anew as one small program: a third less memory than 0.8, less load on the processor and a quicker start, with the same picture on the panel."),
       done: Boolean(looked.lighter),
       action: html`<button type="button" class="btn" onClick=${() => (look("lighter"), navigate("live", "diagnose"))}>${t("Show me")}</button>`,
     },

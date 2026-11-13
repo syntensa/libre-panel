@@ -2,555 +2,66 @@
 
 ## 0.9.0rc5 — 2026-11-13
 
-The next release candidate of 0.9.0 to try: the app's window gives its memory back once
-it is closed, and the themes' texts keep to their place on long days and in long words.
-The panel's load is rc4's.
+The candidate for 0.9.0: Libre Panel written anew as one native program, the same pictures on
+the panel with less load, a third less memory and a quicker start. Unless its test finds
+something, this is 0.9.0. What changed since 0.8.0:
+
+**Highlights**
+- **One program in Rust instead of Python.** The app, its drawing, the panels' drivers and
+  loop, the sensors, the services, the app's server, its window and tray icon. Your settings,
+  your themes and the history carry over as they are. Python is left in the plugin host alone,
+  which starts only where plugins are installed (they work as before). Each of the 99 built-in
+  themes is drawn by the new program and by the Python app it replaces, still and moving, and
+  compared pixel for pixel (a glow within one level of light) in every test run, on Windows and
+  Linux.
+- **Lighter.** The 12.3" at 25 frames a second through Libre Panel's engine, app and engine
+  together (processor in % of one core, private memory; the demo's readings, a minute each, in
+  turn on the same Linux machine):
+
+  | 12.3", 25 fps | 0.8.0 | 0.9.0 |
+  |---|---|---|
+  | Lumen | 32–36 %, 145–156 MB | **21–23 %, 104 MB** |
+  | Arena | 37–38 %, 147–150 MB | **30–33 %, 99 MB** |
+  | Encore | 12 %, 134 MB | **7 %, 92–94 MB** |
+
+  The simulated panel is counted in neither. How much less depends on the theme: what 0.8 drew
+  in Pillow's C code (Arena's large frame-rate graph) costs about as much as before, what Python
+  worked out around it is gone.
+- **A quicker start.** The first picture is on the panel 0.4 to 1.0 s after Libre Panel
+  starts, instead of 0.7 to 2.0 s.
+- **A cleaner picture for less work.** The engine gives x264 a quantizer for each picture and
+  keeps the bit rate's cap itself: x264 takes 2.7 to 2.9 ms for a frame of Lumen instead of 4.3
+  to 4.7, and its frames come out cleaner (53.96 dB instead of 53.07 against what was drawn, the
+  largest error 15 levels instead of 30).
+- **Memory back when the window closes.** Light mode is always on, with nothing to set (0.8.0 had
+  a switch): a minute after the window closed, what only the window needed goes and the memory
+  goes back to the system. Lumen on the 12.3": about 150 MB while the window is open, 104 to
+  111 MB a minute and a half after it closed.
+- **Panels.** The Turing 12.3" fully verified, its video mode too (#45). The JONSBO DS339
+  without the purple flicker (#46). The MAJESTY 9.16" (Hongtai `33C3:7792`, #40).
+
+**Also new**
+- Windows: the graphics card encodes where it is AMD's or NVIDIA's (*The engine's encoder*:
+  *auto*), x264 elsewhere.
+- Windows: the sensor service is a small .NET program without Python: 10 MB instead of 33,
+  0.4 % of a core instead of 0.7 (Windows CI).
+- Start shows the panel's live picture (a click shows it large); *Live* is *Status* now.
+- `{value:bytes}` counts from the reading's own unit: a shared theme's memory reads "16.4 GB",
+  not "16 B".
 
 **Fixed**
-- **The app's window no longer leaves its memory behind.** Start and Design draw a picture of
-  every theme, and 0.9 so far kept what that took for as long as Libre Panel ran. Measured on
-  Linux, Lumen on a 12.3": 94 MB as it starts, about 200 MB once the window had been open, and
-  still 200 MB with the window long closed. Now it is about 150 MB while the window is open and
-  104 to 111 MB a minute and a half after it closed (four runs; of those, what all drawing shares
-  holds 3 MB, the panel's own). A minute after the window closed (or after a start at login, with
-  no window at all) Libre Panel lets go of its pictures of the themes; what all drawing shares
-  (the fans' rotors, the weather's symbols, the moon) notes for fifteen seconds what the panel
-  draws with and lets go of the rest, though never of what a panel has drawn with before (a fan
-  that stands still or the night's weather by day asks for nothing in those seconds), so the panel
-  makes nothing again; the moon's face, 3 MB, goes too where no panel shows a moon; then the
-  memory goes back to the system, and every fifteen seconds after that what the frames freed
-  meanwhile, a paused panel's last pictures among it (they were kept for a next frame that did not
-  come). Three minutes later the log says what the process holds then (*Status → Diagnose → Log*).
-  This is 0.8's light mode, which 0.9 was said to have and had not. On Windows the same steps run
-  through Windows' own calls (the heaps' free memory, the working set that Task Manager shows);
-  what they give back there is not measured yet. The panel's frames cost the same: through the
-  engine to a simulated 12.3", 7.1 % of a core as it is and 7.4 % with the memory given back every
-  two seconds instead of every fifteen, and no picture late.
-- **LibrePanel.exe keeps a frame's large pictures for the next one.** `libre-panel.exe` has an
-  allocator of its own that keeps a frame's large blocks, where Windows' heap hands each back to
-  the system and asks for a new one, page fault by page fault. LibrePanel.exe, the program the
-  start menu, the setup and the start at login run, was built without it: whoever started Libre
-  Panel the usual way never had it. Both programs are made from one piece now, a test starts both
-  and asks, and Status → Diagnose's report says whether the program has it, how much it keeps at
-  the moment and how much all drawing shares. On Linux the keeper is on as well, with large blocks
-  straight from the system: that is what lets the window's memory go back.
-- **A paused panel is still named.** While the pictures are paused, 0.9 so far forgot what
-  they go to and the theme on show, so the app no longer knew the panel it has: Start's card
-  said "Paused" for "Turing 12.3″ is paused", and the panel's menu named neither the panel nor
-  the theme. Both stay through a pause, as in 0.8.
-- **A text set smaller for its room keeps to it.** A text with a room of its own (*max
-  width*) is set in a smaller font where it is too long. With a letter spacing, the gaps
-  between the letters were counted as if they got smaller with the font, so such a text
-  stayed a few pixels too wide: "SEGUNDA-FEIRA", set smaller for 164 px, took 168. And a text
-  without a letter spacing is drawn as a whole, but its width was added up letter by letter:
-  where its letters come from a second font (Cyrillic in most themes), the spaces between
-  the words are that font's and wider, so "Ничего не играет" was drawn 12 px past its room.
-  A text is measured the way it is drawn and set as small as its room needs, in your own
-  themes too; one that is cut with "…" is cut by the same measure.
-
-**Polished**
-- **Long days keep to their place.** Where a weekday or a month is long ("ПОНЕДЕЛЬНИК",
-  "SEGUNDA-FEIRA · 23 DE FEVEREIRO", "PONIEDZIAŁEK · 26 PAŹDZIERNIKA") the date ran into the
-  clock's seconds (Nimbus, on every landscape panel; Terra's stood 2 px beside them), over the
-  clock above it (Nimbus and Terra on end: weekday and date are one line under the clock
-  there now) or out of its card (Lumen and its pair on the 12.3", Studio on end). On such a
-  day the line is set a little smaller; no date is set smaller in English, German, French,
-  Italian, Japanese or Chinese.
-- **"Nothing playing" stays in its card** in Japanese (Encore on the 12.3": it ran on into
-  the clock's card) and in Russian (Encore on end).
-- **The moon's phase is named in full in every language.** Beside the moon the name was cut
-  where it is longer than English's: "Abnehmender…" in German for half the month,
-  "Gibbeuse…" in French, and in Russian six of the eight phases (nine screens of Almanac,
-  Encore, Nimbus and Terra did so in one language or another). The names are set as small as
-  the longest of the language needs, never smaller than the line under them; past that the
-  moon gives them room, a fifth of itself at most. The lines under the name are set smaller
-  too where they are too long, not cut ("Полнолуние через 27…").
-- **A ring's column keeps its shape where the PC cannot tell everything.** Without the
-  processor's temperature and power (Windows before the sensor service is set up, the power
-  on Linux without its rights, a graphics chip in the processor) Lumen's and Arena's rings
-  left those rows out, and the clock stood alone at the foot of an empty column. The rows
-  stay with their names and a dash, as the memory's always did.
-- **A graph of a rate is not full all the time.** In Design a graph kept the usual range of 0
-  to 100 whatever it showed: of bytes a second, a fan's speed or watts that is a full graph
-  as soon as anything happens (a theme shared with everyone had its two I/O graphs so). A
-  graph now takes its own range when such a sensor is picked, where it still had the usual
-  one; a share or a temperature gets 0 to 100 back, and a range of your own stays yours. Its
-  details say under *max* what an empty field means.
-- **Small things in the themes.** Round Report on the 5.2" (1280 × 720): the "%" of the
-  shares stood on their card's edge, the rows end inside it now. Nimbus on the same panel:
-  the clock began on the weather card's edge and stands 20 px clear of it. Slate: from 100 GB
-  of memory in use on, the number ran into "/ 128 GB" and is set smaller for its place. The
-  ring cards (Lumen, Arena): the graphics card's memory stood right against its name
-  ("VRAM13.3"), measured as three digits where it has a tenth.
-
-## 0.9.0rc4 — 2026-11-13
-
-The next release candidate of 0.9.0 to try: the whole app gone over after rc3, for what did
-not work as 0.8's did and for how it looks. The load is rc3's.
-
-**Fixed**
-- **Windows' accent colour is taken again** (*Settings → Panel → Accent colour → Windows'*):
-  0.9 so far left the themes their own colours where it was chosen. It is read from Windows as
-  0.8 read it, and lightened as far as a dark panel needs it.
-- **What plugins bring is offered in the editor again**: their widget types and building blocks
-  in Design, their screens and their toast styles in Look, named in the app's language. 0.9 so
-  far knew them only where a theme's file named them.
-- **A bug in the panel's loop no longer leaves the panel standing still.** The first panel's
-  loop ended with it for good, and nothing was said of it (the loops of the panels beside it
-  started again). It starts again after five seconds, Status names the error meanwhile, and
-  what a bug says goes into the log with its place: a report can name it.
-- **What is said of the panel is in the app's language again**: that none was found, that it
-  restarts or is in use by another panel, what the pictures go to ("…, video 25 fps", "PNG
-  file …"), and the errors of the engine and of a serial port. The TURZX driver, the one of the
-  Turing panels, said all of this in English whatever the language.
-- **Design says rightly which version of a theme it edits.** On the 12.3" (and every panel
-  whose themes have a version of its size) it said "the version for a panel mounted
-  vertically"; it names the size the version is for, or that it is the one for beside a
-  companion.
-- **Start's "What's new" tells of 0.9** (it still told of 0.8): half the load, the icon in the
-  notification area as a switch, and, where the panel is mounted upside down, its start screen
-  written upright.
-- **Start's list of themes names the right panel.** On the 12.3" it said "Turing 9.2″ ·
-  1920 × 720" of every theme whose first version is the 9.2"'s: the panel of that one beside
-  the size of the one shown. It names the panel of the version this panel shows. And the
-  card's title names the theme as the list does ("Turing 12.3″ shows “Lumen”"; it took the
-  name of the version, "Lumen 12.3″", whose inch mark ran into the quotation mark).
-- **A proxy set in Windows is used again** (*Use a proxy server*, with its exceptions) for the
-  weather, the word of a new version and the community themes, as 0.8 used it: 0.9 so far
-  knew only the one the environment names, so a computer that reaches the web through its
-  proxy alone had none of the three. And a SOCKS proxy is gone through: the web client
-  connected past one, straight to the address.
-- **The command line says what 0.8's said.** `libre-panel doctor` prints each step as it takes
-  it (they were in the report alone, two empty lines in the terminal). `themes` lists each
-  theme with where it comes from and where it is, `models` with the sizes, how far the driver
-  is and the protocol (both listed names alone). `config path` and `config init [--force]`
-  are there again, as are `run --once` and `run --driver NAME`; a single frame that cannot be
-  shown ends with the panel's error instead of trying on. `--help` after a command prints the
-  help, and a command that is none ends with 2.
-- **What config.toml names and nobody has is said in plain words.** A driver, a sensor source
-  or a service that is none was "not in this build yet", words of the time the program was
-  written in: "unknown display driver 'x' (available: …)", "sensor source 'x' not started:
-  unknown sensor provider 'x' (available: …)", "service 'x': not installed". And `"demo"` is
-  a sensor source by its name again.
-- **The demo shows its album cover on the panel** (`libre-panel start --demo`, `run --demo`):
-  the made-up readings came without their pictures, so the music card showed the note that
-  stands for no cover, and a game no logo.
-- **Linux: helper programs that ended are not left behind.** Where there is no system D-Bus (a
-  container, a minimal system), the two that follow sleep and locking ended at once and stayed
-  as defunct processes, in Diagnose's table of the load with 0 MB each. They are collected,
-  such a process is not listed, and the computer is not asked to wait before it sleeps where
-  the panel would not hear of it.
-- **A theme with an error in it is not said to be gone, and what is wrong with it is said.**
-  A theme of one's own whose theme.json has an error was "no longer installed" to Start and
-  to the tray, and neither they nor the log said what the error was (so in 0.8 too). The
-  panel shows its own theme as before; the notice says "The theme “mine” cannot be loaded
-  (widgets[0].id: expected a string) …", and so does the log.
-- **A theme that loads and cannot be drawn no longer leaves the panel dark.** The panel
-  showed nothing more, and nothing said so in the app, until config.toml changed; where such
-  a theme was switched to, the transition to it waited for its frames for good. The panel's
-  own theme shows in its place, with the reason in the notice and in the log.
-- **What cannot be drawn is said in its own words.** "not drawn by this build yet:
-  Failed("…")", words of the time the program was written in around the error in its
-  wrapping, is "not drawn: …" with the error itself: of a theme's frame, of a message on the
-  panel, and of a drawing Design or Look asks for. A zip archive packed with bzip2 or LZMA is
-  refused in the words for any way of packing that is not read.
-
-**Polished** (the app gone over in every view, in all ten languages, at the window's default
-and smallest size)
-- **Design shows the panel without a mesh over it.** A fine module grid (Lumen's: 96 × 72
-  cells on the 12.3") was drawn cell by cell, none smaller than six pixels: thousands of dashed
-  boxes over the clock and the graphs. Cells too small to tell apart on the screen are not
-  drawn; while a module moves, dots stand at the steps it moves by. Larger cells as before.
-- **The header's search field says whole words**: its phrase, its first word, or nothing (its
-  glass alone). Beside a running panel's chip it said "Suchen o…" in German at the window's
-  default size; there it says "Suchen oder Befehl …" now, without the hint of its keys.
-- **A text does not end in a word alone.** "Ein Theme für jedes Panel auf einmal, mit einem /
-  Klick": of the 1729 texts that stand in more than one line across the app's views and both
-  window sizes, in the eight languages that part their words with spaces, 288 ended in a line
-  of one short word. Their lines break so that the word has company, where the window's
-  browser knows how (WebView2 does): 29 are left, 25 of them a last word with a hyphen
-  ("Open-Meteo."), which the browser takes for two, and no text got a line more by it, in
-  Chinese and Japanese neither. What is typed into a field stays where it was typed.
-- **Design keeps its words whole in a small window**: the zoom bar's "1 : 1" stays on one line
-  at the window's smallest size, the way to the fine-tuning shows its whole list (on a second
-  line where it must, where an ellipsis cut it in every language), the chevron of the way to
-  Look stays beside its last word, and the rail is as wide as its longest label needs (the
-  Russian "Изображения" stood out of its button).
-
-## 0.9.0rc3 — 2026-11-13
-
-The next release candidate of 0.9.0 to try (there was no rc2: what was tried between were
-builds of the work in progress): what the test of those found, and about half of 0.8.0's
-load.
-
-**Lighter** (Lumen on the 12.3" at 25 fps, the video mode through the engine, with the
-computer's own readings, on the same computer as 0.8.0; every change the same frames drawn,
-the lit rings and bars the engine makes as 0.8's engine made them, within two levels in a
-pixel or two, and x264 makes a cleaner picture of them)
-- **About half of 0.8.0's load on the processor, half its memory.** Run in turn with 0.8.0 on
-  that computer, a minute each, each with its own engine, ten times in two sittings: this 8.9
-  to 14.5 % of a core (the app 2.7 to 4.9, the engine 6.2 to 9.6), 0.8.0 20.4 to 26.1 (Python
-  9.5 to 12.1, its engine 10.9 to 14.0): 39 to 60 % of 0.8.0 in a round, 51 % over all ten
-  (48.8 % over the first five, 52.5 % over the last, with all that is below). The readings
-  are the computer's own: a busier minute moves the graphs more, and x264 has more to do (1.5
-  to 2.4 ms of the engine's 2.0 to 3.1 a frame). The simulated panel is counted in neither (it
-  runs in 0.8.0's Python process; its 0.8 to 1.4 %, measured beside this one, are taken out of
-  it). Memory 97 to 101 MB instead of 192 to 203. Where the graphics card encodes (AMD's or
-  NVIDIA's) x264's share goes; that was not measured: there was no card to measure it on.
-- **x264 without a rate control of its own: a third less of its work, a cleaner picture.**
-  The engine gives x264 a constant quantizer for each picture, two below `crf` (18 at the
-  default 20), and keeps the bit rate's cap itself as x264's VBV kept it: a bucket of a
-  second's bits at the cap; the pictures' quantizer rises while the last second's bits are
-  above 85 % of the cap, a keyframe takes at most 40 % of the bucket, and a picture that would
-  still overfill it is made coarser. x264 so makes no half-size copy of each frame to foresee
-  its cost (nor weighted prediction, which needs it): on Lumen 2.7 ms a frame instead of 3.8
-  and 4.0, the whole 20.4 and 19.7 % of a core instead of 22.7 and 21.7 (run in turn, a minute
-  each, the demo's readings), the engine 5 MB smaller. 1272 of Lumen's frames, encoded both
-  ways, decoded and held against what was drawn: 1472 kbit/s instead of 1501, PSNR 53.96 dB
-  instead of 53.07, the largest error 15 instead of 30, 21416 pixels off by more than 8
-  instead of 213274 (x264's adaptive quantizer took the bits from the edges of letters). At a
-  cap of 2 Mbit/s 52.85 dB instead of 51.31; at 1 Mbit/s, which Lumen does not fit in, 45.99
-  instead of 45.46, the worst frame 44.07 dB instead of 40.42, the bucket never more than 84 %
-  full.
-- **Lit rings and bars made by the engine, as in 0.8.** Where the engine makes them, a lit
-  gauge's ring of one colour and a lit bar go to it as what they are made of (the groove, its
-  sweep lit, the bar's pill: once) and, for each value, the share lit or the spans lit; the
-  app no longer draws them for each value, nor sends their pixels or a bar's glow. Lumen's
-  three rings and its bar, run in turn three times a minute each: the app 5.1 to 5.3 % of a
-  core instead of 8.2 to 8.5 (a ring 0.01 ms instead of 0.25, the bar 0.03 instead of 0.3),
-  the engine 13.7 to 14.0 instead of 12.5 to 12.8, the whole 18.9 to 19.3 instead of 20.6 to
-  21.3; Lumen sends the engine 4.1 MB a second instead of 12.3. The engine keeps what they
-  are made of (5 MB more). Its frames held against those composed here, for a minute: of
-  1679, 76 apart in one or two pixels by one or two levels, the others the same.
-- **Fans laid by the engine, as in 0.8.** A fan's ring and its rotor go to the engine once,
-  and for each frame only where each rotor stands; blades at a position the engine already
-  made are laid again from what it keeps. Lumen with its fans turning (the demo's readings,
-  run in turn three times a minute each) sends the engine 2.5 MB a second instead of 4.2;
-  the work moved to the engine (the whole the same within the computer's own spread), the app
-  2 to 3 MB smaller, the engine 2 to 3 MB larger. The fans are the same pixels as those drawn
-  here.
-- **Lit rings and graphs drawn with less work.** A lit gauge's sector is drawn straight
-  through its lit picture (no mask over the whole ring, no paste through it), its light's
-  colour worked out once for each coverage, its blur's passes on AVX2 where the processor has
-  it; a polygon's rows look only at the edges they cross (a graph's filled area has one for
-  each point), and a lit graph's line is drawn once. Widgets' settings are looked up with a
-  faster hash.
-- **The engine's YUV eight pixels at a time.** Where the processor has AVX2, the engine
-  works out each changed block's light and colour for eight pixels at once: Pillow's YCbCr
-  tables are integer formulas (each checked against its table for all 256 values, and the
-  whole conversion against the tables for all 16.7 million colours), so the bytes are the
-  same. A whole 12.3" frame takes 1.9 ms instead of 3.4; Lumen's changed blocks about 0.1 ms
-  less a frame. Where a strip it keeps shows, row by row, it finds in half the time (four
-  clear pixels passed over at once).
-- **The graphs' windows cut by the engine, as in 0.8.** Where the engine keeps the graphs'
-  strips, the app sends a window as what it is cut from and no longer cuts it itself (some
-  0.75 MB a graph and frame on the 12.3"); a strip that grows goes as its new columns. A
-  whole strip is drawn in 0.83 ms instead of 1.52: its fill and its glow laid in one colour
-  over what is clear without a division per pixel, its light blurred along the rows as down
-  the columns, for all of them at once. A window whose end is drawn again (a reading that
-  came otherwise than the strip drew ahead) and one with a glow beside it are cut by the
-  engine too, the end and the glow laid over the cut as 0.8 lays them: before, such a window
-  went as its pixels in every such frame, and the engine let go of the strip, which then
-  went whole again. Lumen sends the engine about 6 MB a second instead of 9.
-- **What stays the same is kept, as 0.8 keeps it**: the fans' rings, rotors and blades, the
-  box the digits of a rolling clock fill (a frame of the roll 0.23 ms instead of 0.50), and
-  which version of the theme is shown (looked up on the disk once a second, not every frame).
-  The readings' histories are shared by the frames between two readings instead of copied
-  for each: with ten minutes of them (Lumen's 296 at 600 numbers each) the copy took 0.44 ms
-  a frame, about 1 % of a core, which a minute's measuring did not see.
-- **The engine on Windows keeps a frame's large blocks for the next one**, as the app does:
-  Windows gave their memory back each time and had it zeroed and mapped again (the Windows
-  runner's engine: 2,663 page faults a second).
-
-**Fixed**
-- **Graphs in the video mode as Python draws them, in every case.** They are now compared with
-  Python frame for frame (the windows cut as the engine cuts them, and drawn in the app;
-  readings between two samples too, as the processor's load comes ten times a second, so the
-  end of a window is drawn again in many frames), and what that found is fixed: a graph whose
-  readings run out of what a float holds fails as Python's does (it was drawn, and a stretch
-  of such a range could ask for a picture of hundreds of gigabytes, enough to stop the app);
-  its end dot lies where the range's exact ends put it; a lit line's joints are as flat as
-  Python draws them where the points are dense; a strip that cannot be drawn is asked for
-  again only after a quarter of a second, the window cut from the one before meanwhile.
-- **Plugins on Windows: a page that starts the plugin host no longer waits two minutes.** The
-  host inherited the browser's connection and held it open after the answer; it now inherits
-  its own three pipes alone, as Python's subprocess starts a program.
-- **"Libre Panel does not answer" no more where a finish or the grid was chosen.** The facet
-  finish's rings (a raised ring with straight, bevelled ends in its milled groove, a gradient
-  along the sweep, its ticks) and graphs (the line as a bevelled ridge with its band beneath
-  and the halo in the rows the curve reaches; a slimmer one on a graph wider than 1200 px) and
-  the panel's grid background (*Look → Grid background*) were not drawn by this build: the
-  frame was refused, the panel kept the one before and the app's preview got no answer. They
-  are drawn now as 0.8 draws them, compared with Python frame for frame (to the bit; a graph's
-  glow round them within a level, as every glow's). A ring's band is kept by what it is made
-  of, so a gliding value works out only the samples at its ends. A request that fails is now
-  answered with what failed (a 500 and the reason, which the app shows) instead of a connection
-  closed without a word; so is a failure no one foresaw in a request, and a request a route
-  came back from without an answer; each is logged, and the app goes on.
-- **Settings → Transitions → Show on the panel** works: the screen goes over to a card with the
-  transition's name, stays a moment and comes back, with the transition both ways at the speed
-  set, on every panel at once, at the panel's frame rate; a calm panel shows the card alone
-  ("not in this build yet" before).
-- **The start screen of a panel mounted upside down is upright** (#47): the boot logo and the
-  standby clip are written turned round where *Upside down* is on, as the frames are; the
-  start screen's card says so. They are stored in the panel: write them again after turning
-  the panel round.
-- **The tray icon stays, and follows its switch.** Its program asks the app once a second
-  how things stand; it ended after three seconds without an answer and was never started
-  again, so that a closed window left Libre Panel without its icon. It now ends only when the
-  app's port is closed, and a slow answer keeps the icon as it is. Where it ended after it had
-  its place (the desktop's tray restarted under it) the app starts it again at once; where it
-  ended as soon as it started (at the computer's start: an app too busy to answer it, for
-  which it now waits up to a minute, or a tray that is not there yet) the app tries again
-  after 20 seconds, four times in all, where it gave up until the next start before. Each is
-  in the log. Turned on in *Settings → Start and system* the icon appears at once, turned off
-  it goes, without a new start of Libre Panel. On Windows a click on the icon or in its menu
-  brings the app's window to the front: the icon's program, which was clicked, passes that
-  right on to the app, whose window only flashed in the taskbar otherwise (in 0.8 the icon
-  was the app's own). (The icon is off unless it is turned on in the settings; Windows 11
-  puts a new icon among the hidden ones first, behind the taskbar's `^`.)
-- **A window just closed opens again at once.** A closed window's process went on for as long
-  as its web view took over its end (seconds, with WebView2), still holding the window's lock
-  and telling the next start that the window had come to the front: a click on the tray icon
-  or a second start right after closing the window showed nothing. A closed window is now
-  gone for the other starts at once (its file, its lock, its answers), before its web view is
-  taken down, and its process ends within five seconds whatever the web view does.
-
-## 0.9.0rc1 — 2026-11-11
-
-The first release candidate of 0.9.0: Libre Panel ported whole to Rust, pixel for pixel as
-before; being finished and tested now.
-
-**Panels**
-- **The Turing 12.3" fully verified.** Stills and the video mode from the first start, and an
-  owner's doctor report on Windows 11 with every check passed (#45): the video mode's `"auto"`
-  now takes it as on the 9.2", and the doctor no longer calls it unproven there.
-- **The JONSBO DS339 without the purple flicker** (#46): its start, video and frames the way
-  its owner found them to work (other MS9132 panels keep theirs).
-- **The MAJESTY 9.16"** (Hongtai `33C3:7792`, #40): its setup, brightness and dimming.
-
-**From the first hardware test**
-- **No console windows of the engine** on Windows: Libre Panel's engine and ffmpeg start
-  without a window of their own.
-- **Diagnose names the panels beside the first as they are doing**, not "Not running" while
-  they show their themes.
-- **The app speaks the language of Windows** where *Language* is *System* (it spoke English
-  unless the language was chosen by hand).
-- **The icon in the notification area is off by default**: *Settings → Start and system →
-  Icon in the notification area* turns it on (`tray_icon = true`), at once.
-- **The graphs move with every frame again** in the video mode (Lumen's CPU and network
-  graphs went on once a second): a window into a strip drawn ahead, as before.
-- **The start screen's preview shows** (*Start → More for your panel → Start screen*): its
-  picture and download were refused for want of the token the app's pictures go without.
-- **No browser from a click in the app.** A link to a page of the app opened the browser,
-  which then said *Access token missing or wrong*; it now opens in the app's window, and only
-  links to other sites go to the browser.
-
-**Lighter** (Lumen on the 12.3" at 25 fps, the video mode with x264, on the same computer as
-0.8.0: see below)
-- **What a frame costs cut down** without a pixel changed: the readings no longer copied for
-  each widget, a frame laid only where it changed and handed on without a copy, the panel's
-  driver comparing only there, the graphs' strips cut per window instead of made in sixteen
-  blends, their fill and glow in one pass, the texts' widths kept, the rings' light worked out
-  with less, pictures laid four pixels at a time.
-- **Windows: a frame's large pictures kept for the next one.** Windows' heap gave every block
-  above about a megabyte back to the system and asked for a fresh one the next frame, whose
-  pages the system zeroed and mapped one by one; the app now keeps them for a moment, as
-  glibc does on Linux (`LP_HEAP_KEEP=0` turns it off).
-- **Frames go to the engine as their layers, as in 0.8.** Where Libre Panel's engine sends
-  the pictures, the app no longer composes each frame and sends its pixels: it hands the
-  engine the frame's pieces, each piece once while it stays, and then for each frame only
-  their order; the engine lays them as the app would, pixel for pixel. Lumen on Linux with
-  the bit rate fixed: the app 9.5 % of a core instead of 12.4, the engine as before
-  (`[video] engine_layers = false` sends frames of pixels as before). Frames that show a
-  blend, a toast, the alarm, a plugin or a colour check still go as pixels.
-- **What moves is kept, as 0.8 keeps it.** The weather symbols' layers and turned rays, the
-  agents' signs, the moon's halo and disc and the finishes' coloured letters were made anew
-  every frame; they are kept now by what they show. Lumen with the demo readings on Linux:
-  with the forecast card 24.0 % of a core instead of 41.0, with the AI card 22.7 instead of
-  41.8; the moving sun at 136 px 1.9 ms a frame instead of 3.3. The light's exponentials use
-  the processor's fused multiply-add where it has one, as the C library does, instead of
-  working it out in software.
-
-## 0.8.1rc2 — 2026-11-06
-
-**Lighter**
-- **The graphs' strips kept by the engine alone.** Where Libre Panel's engine cuts the graphs'
-  windows from their strips and grows each strip from the one before, Libre Panel kept every
-  strip's pictures too (Lumen on the 12.3" and the 9.2": 9 MB). Now they go to the engine as
-  their new columns and their pixels go here once it has them; the end of a window drawn again
-  (a reading the strip did not know) goes as a piece the engine lays over the window. The
-  panel's frames are the same, pixel for pixel; the app's picture of the panel draws a strip
-  whole again where it asks for one. On Linux, with both panels on Lumen and all services: the
-  main process 90 MB instead of 101.
-- **The graphics card's encoder by default (Windows, AMD and NVIDIA).** *The engine's encoder*
-  has a new default, *auto*: the graphics card's own H.264 encoder where it is AMD's or
-  NVIDIA's (on the 12.3" and the 9.2" AMD's pictures were as x264's to the eye, and both
-  engines held 68 MB instead of 90), else x264 on the processor as before. Intel's stays with
-  x264 (*Graphics card (experiment)* still takes any). Where the card's does not start, x264
-  encodes, and the log says why.
-- **The sensor service tidies after each round (Windows).** .NET let what a round of
-  LibreHardwareMonitor made pile up to a budget the processor's cache sets (32 MB on a PC with
-  a large cache); it is collected after each round now: in CI 8.3 MB instead of 9.7, .NET's
-  heap 8.1 MB instead of 12.
-- **The heaps tidied while the app is closed (Windows).** With the window closed, Libre Panel
-  now gives the heaps' free memory back every fifteen seconds, as on Linux.
-- **Light mode always on.** Its switch (*Settings → Start and system*) is gone: it had no cost
-  worth one (the app takes a moment longer to open after a minute closed; the panel draws on
-  as it did). An old config.toml's `light_mode` is let be, and goes from the file with the
-  next setting written.
-- **The window holds less while it is minimized (Windows).** WebView2 is asked to hold less
-  while the app's window is minimized (its memory target low), and as before once it is shown
-  again; the page stays as it is. In Windows CI, the window and WebView2's processes after a
-  while on the panel's picture (five a second): minimized 70 MB instead of 600, shown again
-  150 MB instead of 760.
-- **The live picture no longer piles up.** The panel's picture in the app (once a second on
-  Start, five a second shown large and in the Player) is drawn on a canvas and each one let go
-  once the next has come: in an image element the browser kept every picture it had decoded,
-  and WebView2's page grew some 6 MB a second at five pictures a second (in Chromium 100 to
-  398 MB in a minute, now 77 to 80 MB the whole minute). The picture looks as before.
-- **The app's picture of the panel from the engine.** Where Libre Panel's engine composes the
-  panel's frames (the default with the downloads), the app's picture of the panel (Start, shown
-  large, the Player) is the engine's own frame, whole, as the panel got it: the main process no
-  longer composes it again from its layers. In Windows CI with both panels on Lumen, after ten
-  minutes of the picture five a second: the main process 61 to 70 MB instead of 95 to 106 (on
-  Linux 117 MB instead of 133). The picture is the same, pixel for pixel.
-- **The app's pictures in a process of their own.** Every theme's picture (Start, Design's
-  sizes), Design's and Look's picture of the theme, the building blocks' and the start
-  screen's are drawn in a process of their own while the app is open; it ends a minute after
-  the app's window closed (*Status → Diagnose → Load* calls it *The app's pictures* while it
-  runs). Python gave back only part of what they took: on Linux, with both panels on Lumen
-  and all services, the main process held 75 MB before the app had been open and 122 MB
-  after, to the end; now 93 MB. In Windows CI, three minutes after the window closed, the main
-  process had 128 MB committed instead of 180. The pictures are the same, byte for byte, and
-  while the app is open, drawing them no longer takes the panels' turn.
-
-**Changes**
-- **One live picture: on Start.** Start and Live both showed the panel's picture, each with
-  pause and brightness. Start keeps it (once a second, with pause, brightness and upside down):
-  a click on it shows it large, five a second, until *Escape* or its cross closes it. *Live* is
-  *Status* now: how the panel runs, in a sentence and in numbers, the log, the sensors, the
-  services, *History* and *Diagnose*, without a picture or controls of its own; the header's
-  *Panel 1 | Panel 2* chooses the panel for both, and the line under the panel's name on Start
-  leads to Status. The tray and the notices lead there as they led to Live.
-- **The header fits.** With two panels, Design's and Look's header hid the theme's name at the
-  window's default size (1440 px), in German all but its first letters, and cut the search
-  field to its glass and a letter. What gives way now does in steps, as far as it must: the hint
-  of the search field's keys, the tabs closer together, the search field to its glass, the
-  unsaved mark to its dot, the panel chip to its name, the brand to its icon, *Panel 1 | Panel 2*
-  to its numbers, *Settings* to its gear. One panel or two, English or German, from 1280 px up:
-  the theme's name whole, nothing beyond the window, and at 1920 px all of it as before.
+- Long words keep to their place: Russian, Portuguese and Polish weekdays and months no longer
+  run into the clock's seconds or out of their cards, and the moon's phase is named in full in
+  every language.
+- A text set smaller for its room keeps to it (with a letter spacing, or with letters from a
+  second font, it stood a few pixels over).
+- A graph of a rate (bytes a second, a fan's speed, watts) made in Design takes its own range,
+  where 0 to 100 kept it full.
+- A theme with an error in it is no longer said to be gone: what is wrong with it is said.
 
 **Removed**
-- **Claude Code in the cloud.** The relay for Claude Code's cloud sessions (an ntfy topic,
-  since 0.7.4) is gone: it did not work reliably, and a topic that whoever knows its address
-  can read is a risk not worth it. AI activity shows Claude Code and Codex on this PC, as
-  before. An old config.toml's `cloud` and `cloud_token` are let be (never read, nothing of
-  them in the log) and go from the file with the next setting written; take the setup script
-  out of the cloud environment on claude.ai/code too.
-
-**Diagnose**
-- Three minutes after the app's window closed, the log says what each of Libre Panel's
-  processes holds then (the main process, the engines, the sensor service, PresentMon) and what
-  the main process holds in detail (its memory as the Task Manager shows it, the C heap in use
-  and free, the pictures): one line to read afterwards in *Status → Diagnose → Log*.
-- *Status → Diagnose → Load* names Libre Panel's engine among the processes (it said
-  `libre-panel-engine.exe`).
-
-**Fixed**
-- **An empty app page now and then (Windows).** The app's page asks for its hundred scripts
-  and styles at once; the app's server let only five connections wait, and Windows turned the
-  rest away while the server was busy: a script that did not come left the page empty. It lets
-  128 wait now.
-- *Light mode* (Windows): emptying the working set did nothing where other code had declared
-  Windows' kernel32 otherwise (the Python sensor service of a pip install did): it raised an
-  error that nothing caught.
-
-## 0.8.1rc1 — 2026-11-05
-
-**Lighter**
-- **No second Python process for a second panel.** Where Libre Panel's engine sends the
-  pictures (the default with the downloads), the panels beside the first share the app's
-  process: a frame drawn a little late still goes on its time. The 12.3" and the 9.2" with
-  Lumen on Linux: 213 MB in all instead of 270, the pictures as punctual. Without the engine
-  each such panel keeps a process of its own, as before.
-- **No console hosts (Windows).** The engine and PresentMon start without a console: each had a
-  hidden `conhost.exe` beside it, some 7 MB apiece.
-- **Fans drawn by the engine.** It makes a fan's rotor at each position, its blur and its ring
-  itself, bit for bit as before; Libre Panel keeps no picture of them (Lumen's fans: 9 MB less).
-- **The background kept once.** Once the engine has a panel's background, Libre Panel lets go
-  of its own copy (the 12.3": 5.5 MB, the 9.2": 3.7 MB) and makes it again when it needs it.
-- **Texts as their outlines.** Where the engine fills them in their colour, Libre Panel keeps a
-  text, a value, a clock's digits as their outline, a quarter of the picture, also those made
-  before the first frame (Lumen: its 115 texts and values). Their pixels are the same to the bit.
-- **A lighter history of the readings.** The last ten minutes of every reading (what the
-  graphs draw from) are kept as plain numbers, a quarter of what they took, and a frame no
-  longer copies them all: Lumen's 300 readings on two panels, 3.2 MB instead of 9.7 after ten
-  minutes (more on a PC whose hardware gives hundreds); taking the readings, 2.5 ms instead
-  of 7.2.
-- **Nothing kept after the app's window was open.** Its picture of the panel made Libre Panel
-  draw what the engine makes (the fans at every position they turned through, the texts, the
-  lit rings and bars, the graphs' windows, the globe); those pictures now go half a minute
-  after nothing asked for them, as the cards' do.
-- **Light mode from the start.** Started at login with its window never opened, Libre Panel
-  now also lets go a minute after the start of what only its start needed, and gives that memory
-  back (on Windows the pages of its working set it no longer touches).
-- **The heap tidied while the app is closed (Linux).** In light mode, with the window closed,
-  Libre Panel now gives the C heap's free pages back every fifteen seconds, not only once:
-  glibc keeps what a frame's work freed for the program otherwise. The 12.3" and the 9.2" with
-  Lumen: the main process 90 MB instead of 100, some milliseconds each time, and the pictures
-  as punctual.
-- **A lighter sensor service (Windows).** Once LibreHardwareMonitor has looked at all the
-  hardware, the service gives back what that took (.NET's and Python's unused memory, the pages
-  it no longer touches), and does so every ten minutes.
-- **The sensor service without Python (Windows).** It is a small .NET program of its own now
-  that hosts LibreHardwareMonitor and answers on the same pipe, with the same rights, the same
-  answers and the same sensors; Python and pythonnet are no longer in it, and its folder is
-  some megabytes instead of tens. On Windows CI's runners, asked for all their hardware once a
-  second: 10.3 MB of private memory instead of 32.9 (the Python service run from its source),
-  0.42 % of a core instead of 0.73.
-- **The sensor service without a web client (Windows).** It took the readings' classes from
-  the module that also asks LibreHardwareMonitor's web server, and with it Python's web
-  client: http, email and ssl (OpenSSL). It goes without them now, its Python 3.9 MB lighter
-  (62 modules instead of 97; measured with the same modules on Linux).
-- **The engine keeps no second copy of the frame.** To tell which blocks of a frame changed
-  it kept the whole frame's pixels beside its YUV; it now keeps a hash of each block instead
-  (the 12.3": 43 KB instead of 4.1 MB). Both panels' engines: 79 MB instead of 85, the frame's
-  YUV in 0.7 ms instead of 0.9 on the 12.3"; the pictures are the same to the bit.
-- **The engine in small pages (Linux).** x264 asks the kernel for huge pages for its big
-  buffers, and a page of 2 MB counts whole once anything in it is touched: the engine now
-  keeps to small pages. Both panels' engines: 69 MB instead of 79, a frame as fast.
-- **A panel's loop that ended goes at once.** When a panel's loop ends (it restarts, a panel
-  beside the first stops), its theme's renderer and all it drew are freed then and there; a
-  cycle kept them until Python's collector came round, which could be long after. A replaced
-  theme stops asking for its readings at once too (the processes are no longer counted for it).
-- **No .NET in the app while the sensor service starts (Windows).** The service starts a
-  while after Windows; before it first answers, Libre Panel now waits for it three minutes
-  instead of twenty seconds before it reads LibreHardwareMonitor itself. That other way loaded
-  .NET into the app's process, where it stayed for as long as the app ran (with
-  LibreHardwareMonitor: tens of megabytes), although the service answered a moment later.
-  *Diagnose → Load* says whether .NET runs in the main process.
-- **Leaner Python in the downloads.** The programs are built without Python's docstrings and
-  asserts (as by `python -OO`): every process of Libre Panel's holds less code (its own modules
-  alone: 2.6 MB less).
-
-**Faster**
-- **The theme's version looked up once a second.** Each frame, a panel's loop asked the theme
-  folders which version of its theme to show (for its size, beside a companion); it now
-  looks again once a second (a version installed meanwhile is shown a second later). The
-  12.3" beside its companion: 1.7 µs a frame instead of 180, the 9.2" 1.2 instead of 62
-  (more on Windows, where each look into a folder costs more).
-
-**Diagnose**
-- **Where the memory is.** *Live → Diagnose → Load on this PC* (and its text) also says what
-  the main process holds: its pictures and those the caches keep, the readings' history, the C
-  heap in use and free, its objects, modules and threads (on Windows also what it committed).
-  The sensor service says what it holds itself, .NET's heap with it: Windows lets no other
-  process read its private memory without administrator rights.
-
-**Fixed**
-- *Settings → Panels*: *Swap with panel 1* did nothing where the app's start could not load the
-  panel's pages (or not yet). It now asks for them itself, and says why where it cannot.
+- Claude Code in the cloud (the relay through ntfy): AI activity shows Claude Code and Codex on
+  this PC.
 
 ## 0.8.0 — 2026-11-05
 
