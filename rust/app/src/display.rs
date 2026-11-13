@@ -528,10 +528,24 @@ impl Display {
         }
     }
 
+    /// How the pictures get to the panel, for the log (after `describe`): "" where the
+    /// description says it all.
+    pub fn way(&self) -> String {
+        match &self.panel {
+            Panel::Turzx(panel) => panel.way(),
+            _ => String::new(),
+        }
+    }
+
     pub fn describe(&self) -> String {
         match &self.panel {
-            Panel::File { path: Some(path) } => format!("PNG file {}", path.display()),
-            Panel::File { path: None } => "virtual display".to_string(),
+            Panel::File { path: Some(path) } => {
+                // (virtual.py's describe, in the app's language)
+                let path = lp_py::Value::Str(path.display().to_string());
+                lp_i18n::t_format("PNG file {path}", &[("path", path)])
+                    .unwrap_or_else(|why| why.msg)
+            }
+            Panel::File { path: None } => lp_i18n::t("virtual display"),
             Panel::Hongtai { port, model, .. } => match model {
                 Some(model) => format!("{} on {port}", model.label()),
                 None => format!("panel on {port}"),

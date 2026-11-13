@@ -670,6 +670,139 @@ def test_a_theme_that_is_gone_leaves_the_panel_lit_and_is_said_as_app_py_says_it
     assert later["theme"] == own and later["frames"] > first["frames"], later
 
 
+def test_a_theme_sent_to_the_panel_is_shown_on_it(tmp_path: Path) -> None:
+    """Design → To the panel and Start's gallery (POST /api/pages with the page "normal" and a
+    theme): config.toml names the theme and the running panel goes over to it, the first panel
+    and the one beside it each on its own; what the app says of the panels follows."""
+    import io
+
+    from PIL import Image
+
+    colours = {"red": (220, 30, 30), "blue": (30, 30, 220), "green": (30, 160, 60)}
+    for name, colour in colours.items():
+        folder = tmp_path / "themes" / name
+        folder.mkdir(parents=True)
+        theme = {"format": "libre-panel-theme/1", "name": name.title(),
+                 "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                             "height": 480},
+                 "palette": {"bg": "#{:02X}{:02X}{:02X}".format(*colour)},
+                 "font": "builtin:Barlow-Medium",
+                 "background": {"color": "@bg", "image": None}, "refresh_ms": 1000,
+                 "widgets": [{"type": "text", "x": 40, "y": 40, "text": name.upper(),
+                              "size": 90, "color": "#FFFFFF"}]}  # fmt: skip
+        (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        'theme = "red"\nfps = 10\nlanguage = "en"\ntransition = "cut"\n[device]\n'
+        'driver = "virtual"\noutput = "panel.png"\n[sensors]\nproviders = []\n'
+        '[[panels]]\ntheme = "red"\ndriver = "virtual"\noutput = "beside.png"\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+
+            def sent(request: str) -> tuple[str, dict[str, str], bytes]:
+                request = request.replace("{host}", f"localhost:{port}")
+                return _asked(port, request.replace("{token}", token).encode())
+
+            def to_the_panel(payload: dict[str, Any]) -> tuple[str, Any]:
+                body = json.dumps(payload)
+                status, _, answer = sent(_get("/api/pages", WITH, f"Content-Length: {len(body)}",
+                                              method="POST", body=body))  # fmt: skip
+                return status.split()[1], json.loads(answer)
+
+            def ground(panel: int) -> tuple[int, ...] | None:
+                path = f"/api/plugins/control/live?panel={panel}&format=PNG&w=800"
+                status, _, body = sent(_get(path, WITH))
+                if " 200 " not in status:
+                    return None
+                with Image.open(io.BytesIO(body)) as picture:
+                    return picture.convert("RGB").getpixel((700, 400))
+
+            def shows(panel: int, name: str) -> bool | None:
+                return True if ground(panel) == colours[name] else None
+
+            def themes() -> list[str]:
+                told = json.loads(sent(_get("/api/app", WITH))[2])
+                return [told["panel"]["theme"], *(p["theme"] for p in told["panel"]["more"])]
+
+            assert _waited(lambda: shows(1, "red"), 30) and _waited(lambda: shows(2, "red"), 30)
+            # the first panel: as Design's "To the panel" sends it
+            status, told = to_the_panel({"page": "normal", "theme": "blue"})
+            assert status == "200", told
+            assert _waited(lambda: shows(1, "blue"), 20), ground(1)
+            assert ground(2) == colours["red"]  # (the one beside it keeps its own)
+            assert 'theme = "blue"' in config.read_text(encoding="utf-8")
+            assert _waited(lambda: True if themes() == ["blue", "red"] else None, 10), themes()
+            # the panel beside it, chosen in the header: its theme alone
+            status, told = to_the_panel({"page": "normal", "theme": "green", "panel": 2})
+            assert status == "200", told
+            assert _waited(lambda: shows(2, "green"), 20), ground(2)
+            assert ground(1) == colours["blue"]
+            assert _waited(lambda: True if themes() == ["blue", "green"] else None, 10), themes()
+            # and back again, as often as it is sent
+            for name in ("red", "green", "blue"):
+                assert to_the_panel({"page": "normal", "theme": name})[0] == "200"
+                assert _waited(lambda name=name: shows(1, name), 20), (name, ground(1))
+            # a theme there is not: refused, and the panel keeps what it shows
+            status, told = to_the_panel({"page": "normal", "theme": "nowhere"})
+            assert status == "400", told
+            assert ground(1) == colours["blue"]
+        finally:
+            program.send_signal(signal.SIGINT)
+            program.wait(timeout=30)
+
+
+def test_the_app_goes_on_after_a_bug_in_the_panels_loop(tmp_path: Path) -> None:
+    """A bug in the first panel's loop (made here at a frame named, once) left the panel
+    standing still for good, with nothing said: the app says it with its place, names it as the
+    panel's state, and starts the loop again."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "lumen"\nfps = 20\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        'output = "panel.png"\n[sensors]\nproviders = []\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           "LP_BUG_AT_FRAME": "5", **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "start", "--port", "0", "--no-browser", "--demo"],
+                          env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        said: list[str] = []
+        try:
+            assert program.stdout is not None and program.stderr is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+            heard = threading.Thread(target=lambda: said.extend(program.stderr), daemon=True)
+            heard.start()
+
+            def panel() -> dict[str, Any]:
+                request = _get("/api/app", WITH).replace("{host}", f"localhost:{port}")
+                answer = _asked(port, request.replace("{token}", token).encode())[2]
+                return json.loads(answer)["panel"]
+
+            crashed = "the panel's loop crashed; starting again"
+            assert _waited(lambda: True if any(crashed in line for line in said) else None, 30)
+            bug = next(line for line in said if "unexpected error: panicked at" in line)
+            assert "mainloop.rs" in bug and "a bug at frame 5" in bug
+            state = panel()  # (while it rests before the new start)
+            assert state["state"] == "error" and "a bug at frame 5" in state["detail"], state
+            # the loop anew: the panel shows again, frame after frame
+            assert _waited(lambda: True if panel()["state"] == "showing" else None, 30), panel()
+            frames = panel()["frames"]
+            assert _waited(lambda: True if panel()["frames"] > frames + 5 else None, 20)
+            assert panel()["detail"] == "" and program.poll() is None
+        finally:
+            program.send_signal(signal.SIGINT)
+            program.wait(timeout=30)
+
+
 def test_one_libre_panel_drives_the_panel_and_a_second_start_names_the_first(
     tmp_path: Path,
 ) -> None:

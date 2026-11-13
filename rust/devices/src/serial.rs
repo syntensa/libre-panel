@@ -71,17 +71,22 @@ pub fn product_of(device: &str) -> Option<String> {
     imp::product(device)
 }
 
+/// serial_link.py's "serial write failed: {error}" and the like, in the app's language.
+fn failed(said: &str, error: &dyn std::fmt::Display) -> DeviceError {
+    DeviceError(crate::base::tf(said, &[("error", &error.to_string())]))
+}
+
 impl Link for SerialPort {
     fn write(&mut self, data: &[u8]) -> Result<()> {
         self.port
             .write(data)
-            .map_err(|e| DeviceError(format!("serial write failed: {e}")))
+            .map_err(|e| failed("serial write failed: {error}", &e))
     }
 
     fn read(&mut self, size: usize) -> Result<Vec<u8>> {
         self.port
             .read(size)
-            .map_err(|e| DeviceError(format!("serial read failed: {e}")))
+            .map_err(|e| failed("serial read failed: {error}", &e))
     }
 
     fn drain_input(&mut self) {

@@ -352,8 +352,11 @@ impl EngineLink {
         let (program, arguments) = command
             .split_first()
             .ok_or_else(|| DeviceError("no engine to start".into()))?;
-        let cannot =
-            |e: std::io::Error| DeviceError(format!("cannot start Libre Panel's engine: {e}"));
+        let cannot = |e: std::io::Error| {
+            let error = e.to_string();
+            let said = "cannot start Libre Panel's engine: {error}";
+            DeviceError(crate::base::tf(said, &[("error", &error)]))
+        };
         let mut command = Command::new(program);
         hidden(&mut command).args(arguments).stderr(Stdio::piped());
         #[cfg(windows)]

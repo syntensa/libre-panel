@@ -288,8 +288,56 @@ fn v(m1: f64, m2: f64, hue: f64) -> f64 {
     m1
 }
 
+/// colorsys.rgb_to_hls.
+pub fn rgb_to_hls(r: f64, g: f64, b: f64) -> [f64; 3] {
+    let maxc = r.max(g).max(b);
+    let minc = r.min(g).min(b);
+    let sumc = maxc + minc;
+    let rangec = maxc - minc;
+    let l = sumc / 2.0;
+    if minc == maxc {
+        return [0.0, l, 0.0];
+    }
+    let s = if l <= 0.5 {
+        rangec / sumc
+    } else {
+        rangec / (2.0 - maxc - minc)
+    };
+    let rc = (maxc - r) / rangec;
+    let gc = (maxc - g) / rangec;
+    let bc = (maxc - b) / rangec;
+    let h = if r == maxc {
+        bc - gc
+    } else if g == maxc {
+        2.0 + rc - bc
+    } else {
+        4.0 + gc - rc
+    };
+    [py_mod(h / 6.0, 1.0), l, s]
+}
+
+/// the lightness (HLS) a colour on a dark ground needs at least (accent.py)
+const LIGHTEST_NEEDED: f64 = 0.5;
+
+/// accent.py's readable: `colour` ("#rrggbb") light enough for a dark panel: its hue kept, its
+/// lightness raised to LIGHTEST_NEEDED where it is below. None for what is no such colour.
+pub fn readable(colour: &str) -> Option<String> {
+    let bytes = colour.as_bytes();
+    if bytes.len() != 7 || bytes[0] != b'#' || !bytes[1..].iter().all(u8::is_ascii_hexdigit) {
+        return None;
+    }
+    let part = |at: usize| (hex(bytes[at]) * 16 + hex(bytes[at + 1])) as f64 / 255.0;
+    let [hue, light, saturation] = rgb_to_hls(part(1), part(3), part(5));
+    if light >= LIGHTEST_NEEDED {
+        return Some(colour.to_ascii_uppercase());
+    }
+    let [r, g, b] =
+        hls_to_rgb(hue, LIGHTEST_NEEDED, saturation).map(|v| lp_py::round(v * 255.0) as i64);
+    Some(format!("#{r:02X}{g:02X}{b:02X}"))
+}
+
 /// colorsys.hls_to_rgb.
-fn hls_to_rgb(h: f64, l: f64, s: f64) -> [f64; 3] {
+pub fn hls_to_rgb(h: f64, l: f64, s: f64) -> [f64; 3] {
     if s == 0.0 {
         return [l, l, l];
     }

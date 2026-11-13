@@ -1601,6 +1601,16 @@ fn run(case: &Value) -> Result<Value, String> {
                 }
             }
         }
+        "accent_readable" => {
+            // accent.py's readable for each colour (None for what is no "#rrggbb")
+            let answers: Vec<Value> = case["colors"]
+                .as_array()
+                .ok_or("colors")?
+                .iter()
+                .map(|c| json!(lp_pixels::colour::readable(c.as_str().unwrap_or_default())))
+                .collect();
+            json!({"answers": answers})
+        }
         "getrgb" | "getcolor" => {
             let answers: Vec<Value> = case["colors"]
                 .as_array()

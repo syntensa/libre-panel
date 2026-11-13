@@ -312,13 +312,17 @@ fn say(message: &str) {
     crate::logs::say("libre_panel.app", message);
 }
 
-/// accent_of: the colour config.toml's `accent` stands for: None for the themes' own (and for
-/// the system's, which this build does not read yet).
-pub fn accent_of(choice: &str) -> Option<String> {
-    let hex = choice.len() == 7
-        && choice.starts_with('#')
-        && choice[1..].chars().all(|c| c.is_ascii_hexdigit());
-    hex.then(|| choice.to_ascii_uppercase())
+/// For the test of what happens when the loop has a bug: where LP_BUG_AT_FRAME names a frame,
+/// the loop fails at it, once in this process.
+fn bug_for_the_test(frames: u64) {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Some(at) = std::env::var_os("LP_BUG_AT_FRAME") else {
+        return;
+    };
+    let at = at.to_str().and_then(|at| at.parse::<u64>().ok());
+    if at == Some(frames) && !DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        panic!("a bug at frame {frames}, as LP_BUG_AT_FRAME asks for");
+    }
 }
 
 /// _alarm: whether a sensor is at its critical limit (the notices service says).
@@ -848,7 +852,7 @@ impl MainLoop {
                 if self.failures > 0 {
                     say("panel connected");
                 }
-                say(&format!("showing on {}", panel.describe()));
+                say(&format!("showing on {}{}", panel.describe(), panel.way()));
                 if let Ok(mut status) = self.status.lock() {
                     status.target = panel.describe();
                     status.detail.clear();
@@ -1056,7 +1060,7 @@ impl MainLoop {
     /// cards as see-through as asked, with the person's cards in its card slots.
     fn dressed(&self, theme: &Theme) -> Result<Theme, String> {
         let config = &self.config;
-        let accent = accent_of(&config.accent);
+        let accent = crate::accent::accent_of(&config.accent);
         let dressed = versions::with_accent(theme, accent.as_deref());
         let dressed =
             versions::with_light_colours(&dressed, config.light_colours).map_err(|e| e.msg)?;
@@ -1881,6 +1885,7 @@ impl MainLoop {
                     match shown {
                         Ok(found) => {
                             self.frames += 1;
+                            bug_for_the_test(self.frames);
                             self.shown_drawn = drawn_as.filter(|_| !found);
                             if let Ok(mut status) = self.status.lock() {
                                 status.state = "showing";

@@ -294,6 +294,58 @@ def test_a_plugins_screen_and_widget_type_are_drawn_as_the_python_app_draws_them
     assert done.returncode != 0
 
 
+def test_the_editor_is_told_the_plugins_parts_as_drawings_py_tells_them(
+    plugin_folder, isolated_home
+):
+    """/api/specs with plugins installed: their widget types with their fields and names, the
+    building blocks they bring, their screens and toast styles, as drawings.py's plugin_specs
+    tells them in the app's language, after Libre Panel's own."""
+    from test_plugins import DRAWING, DRAWING_PARTS
+    from test_rust_server import _asked
+
+    from libre_panel import i18n
+    from libre_panel.editor.drawings import plugin_specs
+
+    plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    plugin_folder(SWITCHING, {"libre_panel.toasts": {"demo.green": "Green"}})
+    config = isolated_home / "config.toml"
+    config.write_text('language = "de"\n[sensors]\nproviders = []\n', encoding="utf-8")
+    was = i18n.language()
+    i18n.set_language("de")
+    try:
+        want = plugin_specs()
+    finally:
+        i18n.set_language(was)
+    assert want["screens"]["tint"]["label"] == "Tönung" and "demo.bar" in want["widgets"]
+    assert want["presets"] and list(want["toasts"])[0] == "band" and len(want["toasts"]) > 1
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(isolated_home), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries(), **HOST}  # fmt: skip
+    pipe = subprocess.PIPE
+    ours = subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env, stdout=pipe,
+                            stderr=pipe, encoding="utf-8")  # fmt: skip
+    err = _drain(ours.stderr)
+    try:
+        assert ours.stdout is not None
+        address = ours.stdout.readline().split(" running at ")[1].split()[0]
+        _drain(ours.stdout)
+        port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+        request = (f"GET /api/specs HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                   f"X-Libre-Panel: {token}\r\n\r\n")  # fmt: skip
+        status, _, answer = _asked(port, request.encode(), wait=HOST_S)
+        assert status == "HTTP/1.0 200 OK", (status, answer[:300])
+        told = json.loads(answer)
+        for key in ("widget_labels", "screens", "toasts"):
+            assert told[key] == want[key], key
+            assert list(told[key]) == list(want[key]), key
+        for name, fields in want["widgets"].items():
+            assert told["widgets"][name] == fields, name
+        assert list(told["widgets"])[-len(want["widgets"]) :] == list(want["widgets"])
+        assert told["presets"][-len(want["presets"]) :] == want["presets"]
+        assert set(told["finishes"]) and "demo.bar" not in told["finishes"]
+    finally:
+        print(_ended(ours, err))  # (the app's words, shown where the test fails)
+
+
 SWITCHING = """
 from PIL import Image, ImageDraw
 

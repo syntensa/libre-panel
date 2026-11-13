@@ -177,7 +177,8 @@ pub fn show(source: Source, panels: &[i64], size: Option<(i64, i64)>) -> Result<
     let own_monitor = source.kind == "virtual" && place != "wayland";
     if own_monitor {
         let size = size.ok_or_else(|| {
-            MirrorError("the panel's size is not known: choose its model in Settings".into())
+            let said = "the panel's size is not known: choose its model in Settings";
+            MirrorError(lp_i18n::t(said))
         })?;
         extend::attach(size, place).map_err(|extend::ExtendError(why)| MirrorError(why))?;
     } else if before_virtual {

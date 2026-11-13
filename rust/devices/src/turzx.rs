@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 
 use lp_pixels::{Image, Mode, Transpose};
 
-use crate::base::{leave_place, take_place, Counters, DeviceError, Result};
+use crate::base::{leave_place, take_place, tf, Counters, DeviceError, Result};
 use crate::engine::{capabilities, frame_record, EngineLink, Failure};
 use crate::models::{orientation_of, PanelModel, MODELS};
 use crate::png;
@@ -346,8 +346,11 @@ pub fn video_mode(video: &Video, model: Option<&PanelModel>) -> (bool, Vec<Strin
     };
     let gaps = video_gaps(&video.local_clip, Some(model), true);
     let texts = gaps.iter().map(|gap| match *gap {
-        "model" => format!("the video mode is not proven on the {} yet", model.label()),
-        _ => "video.local_clip is not set (see docs/CONFIGURATION.md, Video)".to_string(),
+        "model" => tf(
+            "the video mode is not proven on the {panel} yet",
+            &[("panel", &model.label())],
+        ),
+        _ => lp_i18n::t("video.local_clip is not set (see docs/CONFIGURATION.md, Video)"),
     });
     (gaps.is_empty(), texts.collect())
 }
@@ -520,7 +523,7 @@ impl Restart {
             return Ok(());
         };
         let (now, here) = (self.clock(), present(pid));
-        let restarting = || Err(DeviceError(RESTARTING.into()));
+        let restarting = || Err(DeviceError(lp_i18n::t(RESTARTING)));
         let gone = match self.gone {
             Some(gone) => gone,
             None => {
@@ -540,9 +543,9 @@ impl Restart {
                         return restarting();
                     }
                     self.pid = None;
-                    return Err(DeviceError(
-                        "the panel did not come back after its restart; replug it, please".into(),
-                    ));
+                    return Err(DeviceError(lp_i18n::t(
+                        "the panel did not come back after its restart; replug it, please",
+                    )));
                 }
                 self.back = Some(now);
                 now
@@ -613,17 +616,16 @@ impl Connection {
             None => {
                 let devices = usb::list();
                 let Some(device) = usb::pick(wanted, &setup.beside, &devices, true, skip) else {
-                    return Err(DeviceError(
+                    return Err(DeviceError(lp_i18n::t(
                         "no Turing/TURZX USB panel found. Is it plugged in, and is the TURZX \
-                         app closed? (it holds the device exclusively)"
-                            .into(),
-                    ));
+                         app closed? (it holds the device exclusively)",
+                    )));
                 };
                 let place = device.place();
                 if !take_place(&place) {
-                    return Err(DeviceError(
-                        "the panel is in use by another panel of Libre Panel".into(),
-                    ));
+                    return Err(DeviceError(lp_i18n::t(
+                        "the panel is in use by another panel of Libre Panel",
+                    )));
                 }
                 command.extend(["--pid".to_string(), format!("{:04x}", device.pid)]);
                 if !device.ports.is_empty() {
@@ -798,9 +800,9 @@ impl TurzxVideo {
     pub fn open(setup: Setup) -> Result<TurzxVideo> {
         if setup.video.local_clip.is_empty() {
             // (an empty name would erase the panel's standby clip setting)
-            return Err(DeviceError(
-                "video.local_clip is not set (see docs/CONFIGURATION.md, Video)".into(),
-            ));
+            return Err(DeviceError(lp_i18n::t(
+                "video.local_clip is not set (see docs/CONFIGURATION.md, Video)",
+            )));
         }
         let was_restarting = restart_under_way();
         let present = |pid: u16| match (&setup.test_link, &setup.test_present) {
@@ -866,13 +868,20 @@ impl TurzxVideo {
         self.conn.model
     }
 
+    /// describe: the panel and its video, as the app names it (turzx_video.py's describe).
     pub fn describe(&self) -> String {
-        format!(
-            "{}, video {} fps through the engine ({})",
-            self.conn.describe(),
-            self.setup.video.fps,
-            self.conn.link.place()
+        tf(
+            "{panel}, video {fps} fps",
+            &[
+                ("panel", &self.conn.describe()),
+                ("fps", &self.setup.video.fps.to_string()),
+            ],
         )
+    }
+
+    /// How the pictures get there, for the log.
+    pub fn way(&self) -> String {
+        format!(" through the engine ({})", self.conn.link.place())
     }
 
     /// VideoSession.start: the video layer made ready.
@@ -944,9 +953,10 @@ impl TurzxVideo {
     /// the loop opens it again once it is back. The error says that it restarts, or, where
     /// restarts did not help, that it hangs (then: replug).
     fn restart_panel(&mut self, depth: &str) -> DeviceError {
-        let hung = DeviceError(format!(
+        let hung = DeviceError(tf(
             "the panel's video decoder hangs (queue stuck at {depth}). Unplug the panel and \
-             plug it in again."
+             plug it in again.",
+            &[("depth", depth)],
         ));
         let mut restart = restart();
         if !restart.allowed() {
@@ -967,7 +977,7 @@ impl TurzxVideo {
         let _ = self.conn.link.query(CMD_RESTART, 200);
         self.last = None; // (nothing more is sent to a hung decoder: no stop, no last frame)
         self.conn.close();
-        DeviceError(RESTARTING.into())
+        DeviceError(lp_i18n::t(RESTARTING))
     }
 
     /// _follow_the_panel: `maxrate` "auto": a step down while the panel takes less than it
@@ -1415,12 +1425,15 @@ impl TurzxStills {
         self.conn.model
     }
 
+    /// describe: the panel, as the app names it (turzx_usb.py's describe).
     pub fn describe(&self) -> String {
-        format!(
-            "{}, single pictures through the engine ({})",
-            self.conn.describe(),
-            self.conn.link.place()
-        )
+        self.conn.describe()
+    }
+
+    /// How the pictures get there, for the log.
+    pub fn way(&self) -> String {
+        let place = self.conn.link.place();
+        format!(", single pictures through the engine ({place})")
     }
 
     pub fn set_brightness(&mut self, percent: i64) -> Result<()> {
@@ -1537,6 +1550,14 @@ impl Turzx {
         match self {
             Turzx::Video(panel) => panel.describe(),
             Turzx::Stills(panel) => panel.describe(),
+        }
+    }
+
+    /// How the pictures get there, for the log (after `describe`).
+    pub fn way(&self) -> String {
+        match self {
+            Turzx::Video(panel) => panel.way(),
+            Turzx::Stills(panel) => panel.way(),
         }
     }
 

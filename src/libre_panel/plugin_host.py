@@ -91,6 +91,7 @@ class Host:
                     "services.apply": self.services_apply, "services.summary": self.summary,
                     "services.restart": self.services_restart, "emit": self.emit,
                     "services.stop": self.services_stop, "schemas": self.schemas,
+                    "specs": self.specs,
                     "draw.open": self.draw_open, "draw.widget": self.draw_widget,
                     "draw.screen": self.draw_screen, "draw.close": self.draw_close,
                     "transition.open": self.transition_open,
@@ -376,6 +377,18 @@ class Host:
                     told = [[key, of, default] for key, (of, default) in fields.items()]
                     parts.append([kind, name, told])
         return {"parts": parts}
+
+    def specs(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
+        """What the editor shows of the plugins' parts (drawings.py's plugin_specs, without
+        Libre Panel's own toast styles, which the Rust app tells itself): their widget types
+        with their fields and names, the building blocks they bring, their screens and toast
+        styles, named in the app's language."""
+        from libre_panel import i18n
+        from libre_panel.plugins.render import editor_specs
+
+        if message.get("language"):
+            i18n.set_language(message["language"])
+        return editor_specs(self.registry)
 
     def draw_open(self, message: dict[str, Any], blob: bytes) -> dict[str, Any]:
         """A renderer for a theme of the Rust app's (its size, palette, font, model, folder and

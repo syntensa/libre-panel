@@ -296,7 +296,8 @@ const ROUTES: &[Route] = &[
         let env = lp_theme::Env {
             fonts_dir: s.home.fonts(),
         };
-        x.json(&crate::specs::specs(&env, &s.home.places()), 200)
+        let specs = crate::specs::specs(&env, &s.home.places(), &s.home.settings);
+        x.json(&specs, 200)
     }),
     private("GET", "/api/readings", |s, x, _, u| readings(s, x, u)),
     private("GET", "/api/settings", |s, x, _, _| {
@@ -1497,7 +1498,7 @@ fn theme_preview(state: &State, exchange: &mut Exchange, theme_id: &str, url: &U
         folder: &folder,
         size,
         width,
-        accent: crate::mainloop::accent_of(&config.accent),
+        accent: crate::accent::accent_of(&config.accent),
         symbols: config.symbols.clone(),
         chosen: crate::previews::chosen_switches(&config, theme_id),
         cards: config.cards.clone(),

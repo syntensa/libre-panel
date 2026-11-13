@@ -403,6 +403,33 @@ def test_on_a_bar_on_end_design_edits_the_upright_version_and_says_so(app_url, i
         waits_for(page, lambda: settings_config().theme == "lumen-mine-vertical")
 
 
+def test_on_a_panel_of_its_own_size_design_says_which_version_it_edits(app_url, isolated_home):  # noqa: F811
+    """On the 12.3" Design opens Lumen's version for that size, and said of it that it was "for
+    a panel mounted vertically": it names the size the version is for."""
+    import json
+
+    from test_app_browser import app_answer
+
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-12.3-usb")
+    answer = app_answer()
+    answer["panel"] = {**answer["panel"], "theme": "lumen", "model": "turing-12.3-usb",
+                       "size": [1920, 720]}  # fmt: skip
+
+    def app(route, request):
+        if request.method != "GET":
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    with browser_page(app_url, routes={"**/api/app": app}) as page:
+        page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-1920x720'")
+        version = page.locator(".inspector .inspector-version")
+        expect(version).to_contain_text("The version of Lumen for a panel of 1920 × 720")
+        expect(version).not_to_contain_text("vertically")
+
+
 def test_the_volume_is_switched_on_for_every_screen_and_its_look_tried_on_in_look(
     app_url,  # noqa: F811
     isolated_home,

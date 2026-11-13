@@ -2,6 +2,7 @@
 //! paused and resumed, the services and the keyboard shortcuts beside it, and the controls
 //! of them (`libre-panel start`, in a terminal).
 
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -70,6 +71,8 @@ pub struct PanelService {
 
 /// how long a broken config.toml is waited for, where it does not change
 const RETRY_S: u32 = 30;
+/// after a bug in the panel's loop, before it starts again
+const BUG_S: u32 = 5;
 /// how long a stop waits for the loop to let the panel go
 const HALT_S: f64 = 10.0;
 /// how long a new loop waits for an old one that did not stop in time
@@ -540,9 +543,25 @@ impl Work {
             match MainLoop::with(home, asked, company, false, Arc::clone(&self.status)) {
                 Ok(mut made) => {
                     self.error("");
-                    made.run(&self.stop, &|| {
-                        Ending::of(self.ending.load(Ordering::Relaxed))
-                    });
+                    let ending = || Ending::of(self.ending.load(Ordering::Relaxed));
+                    // (a bug in a frame must not leave the panel standing still for good: the
+                    // loop starts again, as the loops of the panels beside it do)
+                    let ran = catch_unwind(AssertUnwindSafe(|| made.run(&self.stop, &ending)));
+                    if let Err(bug) = ran {
+                        let why = (bug.downcast_ref::<String>().cloned())
+                            .or_else(|| bug.downcast_ref::<&str>().map(|why| why.to_string()))
+                            .unwrap_or_default();
+                        self.error(&format!("unexpected error: {why}"));
+                        say("the panel's loop crashed; starting again");
+                        drop(made);
+                        for _ in 0..BUG_S * 10 {
+                            if self.stop.load(Ordering::Relaxed) {
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                        continue;
+                    }
                     if self.asked.frames.is_some() {
                         return; // (the frames asked for are shown)
                     }

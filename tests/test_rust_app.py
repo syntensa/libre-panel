@@ -112,6 +112,67 @@ def test_it_draws_a_theme_into_a_png_file(tmp_path: Path) -> None:
 
 
 @draws
+def test_what_is_said_of_the_panel_is_in_the_apps_language(tmp_path: Path) -> None:
+    """What the panel's drivers say (none found; what the pictures go to) is said in the app's
+    language, as Python's drivers say it: the TURZX driver said it in English."""
+    from libre_panel import i18n
+
+    def said(text: str, **values: str) -> str:
+        was = i18n.language()
+        i18n.set_language("de")
+        try:
+            return i18n.t(text, **values)
+        finally:
+            i18n.set_language(was)
+
+    config = tmp_path / "config.toml"
+    start = 'theme = "lumen"\nlanguage = "de"\n[sensors]\nproviders = []\n[device]\n'
+    config.write_text(start + 'driver = "virtual"\noutput = "frame.png"\n', encoding="utf-8")
+    done = _run(tmp_path, "run", "--demo", "--frames", "2")
+    assert done.returncode == 0, done.stderr
+    target = said("PNG file {path}", path=str(tmp_path / "frame.png"))
+    assert target.startswith("PNG-Datei ") and f"showing on {target}" in done.stderr, done.stderr
+    # no panel there: the driver's word of it, in German
+    config.write_text(start + 'driver = "turzx"\nmodel = "turing-12.3-usb"\n', encoding="utf-8")
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    with subprocess.Popen([str(_program()), "run", "--demo"], env=env, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.PIPE, encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stderr is not None
+            lines = []
+            for line in program.stderr:
+                lines.append(line)
+                if "panel not available" in line or len(lines) > 20:
+                    break
+        finally:
+            program.kill()
+    missing = said("no Turing/TURZX USB panel found. Is it plugged in, and is the TURZX app "
+                   "closed? (it holds the device exclusively)")  # fmt: skip
+    assert missing.startswith("kein Turing/TURZX-USB-Panel") and missing in lines[-1], lines
+
+
+@draws
+def test_a_bug_in_the_panels_loop_is_said_and_the_panel_goes_on(tmp_path: Path) -> None:
+    """A bug in the panel's loop (made here at a frame named, once): its message and its place
+    are said (on the standard error and in the log), and the loop starts again instead of
+    leaving the panel standing still, as the loops of the panels beside it do."""
+    (tmp_path / "config.toml").write_text(
+        'theme = "lumen"\nfps = 20\n[device]\ndriver = "virtual"\noutput = "frame.png"\n'
+        "[sensors]\nproviders = []\n",
+        encoding="utf-8",
+    )
+    done = _run(tmp_path, "run", "--demo", "--frames", "8", LP_BUG_AT_FRAME="3")
+    assert done.returncode == 0, done.stderr
+    said = done.stderr
+    assert "unexpected error: panicked at" in said and "mainloop.rs" in said, said
+    assert "a bug at frame 3, as LP_BUG_AT_FRAME asks for" in said
+    assert "the panel's loop crashed; starting again" in said
+    assert said.count("libre-panel: theme lumen") == 2, said  # (shown anew after it)
+    assert (tmp_path / "frame.png").is_file()
+
+
+@draws
 def test_preview_draws_a_theme_as_cli_py_does(tmp_path: Path) -> None:
     done = _run(tmp_path, "preview", "terra", "-o", str(tmp_path / "terra.png"))
     assert done.returncode == 0, done.stderr

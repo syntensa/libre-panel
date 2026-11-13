@@ -505,6 +505,26 @@ fn learn_schemas(host: &PluginHost) {
     lp_theme::plugins::set(learnt);
 }
 
+/// What the editor shows of the plugins' parts (the host's `specs`: drawings.py's plugin_specs
+/// without Libre Panel's own toast styles), named in the app's language; None without
+/// plugins, or where the host does not say.
+pub fn editor_specs(settings: &Path) -> Option<Dict> {
+    let Some(Ok(host)) = shared(settings) else {
+        return None;
+    };
+    let mut fields = Dict::default();
+    let language = lp_i18n::language();
+    fields.insert("language".into(), Value::from(language.code()));
+    match host.request("specs", fields, &[]) {
+        Ok((told, _)) => Some(told),
+        Err(why) => {
+            let said = format!("plugins: their parts not told to the editor: {why}");
+            crate::logs::say("libre_panel.plugins", &said);
+            None
+        }
+    }
+}
+
 /// The theme folders the installed plugins bring (none without plugins).
 pub fn theme_folders(settings: &Path) -> Vec<PathBuf> {
     match shared(settings) {

@@ -178,6 +178,17 @@ pub fn say(logger: &str, message: &str) {
     log(Level::Info, logger, message);
 }
 
+/// A bug's word (a panic's message and its place) goes into the log as well as onto the
+/// standard error: the app in the background has no console to say it on, and a report of
+/// "the panel stands still" is worth little without it.
+pub fn log_panics() {
+    std::panic::set_hook(Box::new(|bug| {
+        let said = format!("unexpected error: {}", bug.to_string().replace('\n', " | "));
+        eprintln!("libre-panel: {}{said}", panel_of_thread());
+        log(Level::Error, "libre_panel.app", &said);
+    }));
+}
+
 /// A line the plugin host logged (`level` by its Python name, its `logger`): said as the
 /// app's own are, and into the log.
 pub fn plugin_line(level: &str, logger: &str, message: &str) {

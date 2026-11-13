@@ -2,6 +2,7 @@
 //! config.toml, draws the theme's frames of the computer's readings and shows them on the
 //! panel, or writes them to a PNG file.
 
+mod accent;
 mod access;
 mod ai;
 mod arrangement;
@@ -501,7 +502,35 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 ),
                 _ => None,
             };
-            MainLoop::new(home, asked)?.run(&STOP, &|| mainloop::Ending::Quit);
+            loop {
+                let mut made = MainLoop::new(home.clone(), asked.clone())?;
+                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    made.run(&STOP, &|| mainloop::Ending::Quit);
+                }));
+                match ran {
+                    Ok(()) => break,
+                    // (a bug in a frame: `run` starts its loop again, as the app in the
+                    // background does; a single frame asked for has failed, and the bug's
+                    // word is said already)
+                    Err(_) if command == "run" => {
+                        drop(made);
+                        logs::say(
+                            "libre_panel.app",
+                            "the panel's loop crashed; starting again",
+                        );
+                        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                        while !STOP.load(std::sync::atomic::Ordering::Relaxed)
+                            && std::time::Instant::now() < until
+                        {
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
+                        if STOP.load(std::sync::atomic::Ordering::Relaxed) {
+                            break;
+                        }
+                    }
+                    Err(_) => return Err(String::new()),
+                }
+            }
         }
         "preview" => preview_command(args)?,
         "plugins" => {
@@ -1443,6 +1472,7 @@ fn own_handles() {
 
 pub fn main(default: &str) -> ExitCode {
     own_handles();
+    logs::log_panics();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     // the options before the command (`--config FILE tray --background`, the start at login
     // that the Python app wrote): they go after it

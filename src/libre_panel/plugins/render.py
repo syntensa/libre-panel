@@ -293,3 +293,37 @@ def label_for(cls: type) -> str:
     labels = getattr(cls, "label", {}) or {}
     name = getattr(cls, "name", "") or getattr(cls, "type", "")
     return labels.get(i18n.language()) or labels.get("en") or name
+
+
+def editor_specs(installed: Any) -> dict[str, Any]:
+    """What the editor shows of the parts in ``installed`` (a registry): its widget types with
+    their fields and names, the building blocks they bring, its screens and toast styles."""
+    widgets: dict[str, Any] = {}
+    labels: dict[str, str] = {}
+    presets: list[dict[str, Any]] = []
+    for name in installed.names("widgets"):
+        cls = installed.get("widgets", name)
+        if cls is None:
+            continue
+        widgets[name] = {k: list(v) for k, v in cls.spec.items()}
+        labels[name] = label_for(cls)
+        defaults = {k: v[1] for k, v in cls.spec.items()}
+        for i, preset in enumerate(cls.presets):
+            widget = {"type": name, "id": "part", "x": 0, "y": 0, **defaults, **preset["widget"]}
+            text = preset.get("label", {})
+            presets.append(
+                {
+                    "id": f"{name}-{i + 1}",
+                    "name": text.get(i18n.language()) or text.get("en") or labels[name],
+                    "size": [widget.get("w", 100), widget.get("h", 100)],
+                    "widgets": [widget],
+                }
+            )
+    found: dict[str, dict[str, Any]] = {"screens": {}, "toasts": {}}
+    for kind, parts in found.items():
+        for name in installed.names(kind):
+            cls = installed.get(kind, name)
+            if cls is not None:
+                options = {k: list(v) for k, v in cls.options.items()}
+                parts[name] = {"label": label_for(cls), "options": options}
+    return {"widgets": widgets, "widget_labels": labels, "presets": presets, **found}

@@ -3,6 +3,8 @@
 //! and the effect fields, the look's blocks and ranges, the finishes, the panels, the fonts,
 //! icons and modules, and the building blocks drawn in a theme's palette.
 
+use std::path::Path;
+
 use lp_py::{Dict, Value};
 use lp_theme::specs::Field;
 use lp_theme::tables;
@@ -37,9 +39,9 @@ fn strs(items: &[&str]) -> Value {
     Value::List(items.iter().map(|&s| Value::from(s)).collect())
 }
 
-/// plugin_specs: the plugins' widget types, screens and toast styles, and the built-in toast
-/// styles besides the card (this build has no plugins yet: the band alone).
-fn plugin_specs() -> Dict {
+/// plugin_specs: the plugins' widget types, screens and toast styles (as their host tells
+/// them), and the built-in toast styles besides the card (the band), which come first.
+fn plugin_specs(settings: &Path) -> Dict {
     let language = lp_i18n::language();
     let label = match language.code() {
         "de" => "Band",
@@ -68,11 +70,25 @@ fn plugin_specs() -> Dict {
     band.insert("options".into(), Value::Dict(options));
     let mut toasts = Dict::default();
     toasts.insert("band".into(), Value::Dict(band));
+    let mut told = crate::plugins::editor_specs(settings).unwrap_or_default();
+    let mut part = |key: &str| match told.shift_remove(key) {
+        Some(Value::Dict(part)) => part,
+        _ => Dict::default(),
+    };
+    let (widgets, labels, screens) = (part("widgets"), part("widget_labels"), part("screens"));
+    for (name, style) in part("toasts") {
+        // (a plugin cannot take a built-in style's name)
+        toasts.entry(name).or_insert(style);
+    }
+    let presets = match told.shift_remove("presets") {
+        Some(Value::List(presets)) => presets,
+        _ => Vec::new(),
+    };
     let mut out = Dict::default();
-    out.insert("widgets".into(), Value::Dict(Dict::default()));
-    out.insert("widget_labels".into(), Value::Dict(Dict::default()));
-    out.insert("presets".into(), Value::List(Vec::new()));
-    out.insert("screens".into(), Value::Dict(Dict::default()));
+    out.insert("widgets".into(), Value::Dict(widgets));
+    out.insert("widget_labels".into(), Value::Dict(labels));
+    out.insert("presets".into(), Value::List(presets));
+    out.insert("screens".into(), Value::Dict(screens));
     out.insert("toasts".into(), Value::Dict(toasts));
     out
 }
@@ -96,7 +112,7 @@ fn finish_types(types: &[String]) -> Value {
 }
 
 /// _specs: what the editor knows of themes.
-pub fn specs(env: &Env, places: &Places) -> Value {
+pub fn specs(env: &Env, places: &Places, settings: &Path) -> Value {
     let mut presets = presets();
     if let Some(Value::List(list)) = presets.get_mut("presets") {
         for preset in list.iter_mut() {
@@ -131,7 +147,7 @@ pub fn specs(env: &Env, places: &Places) -> Value {
         .iter()
         .map(|(kind, table)| ((*kind).to_string(), fields(table)))
         .collect();
-    let plugins = plugin_specs();
+    let plugins = plugin_specs(settings);
     if let Some(Value::Dict(own)) = plugins.get("widgets") {
         widgets.extend(own.clone());
     }

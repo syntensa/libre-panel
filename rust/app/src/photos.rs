@@ -240,7 +240,7 @@ pub fn round_picture(
     };
     let dressed = lp_theme::versions::with_accent(
         &theme,
-        crate::mainloop::accent_of(&config.accent).as_deref(),
+        crate::accent::accent_of(&config.accent).as_deref(),
     );
     let dressed = lp_theme::versions::with_light_colours(&dressed, config.light_colours)
         .map_err(|why| failed(why.msg))?;

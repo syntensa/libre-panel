@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- **Windows' accent colour is taken again** (*Settings → Panel → Accent colour → Windows'*):
+  0.9 so far left the themes their own colours where it was chosen. It is read from Windows as
+  0.8 read it, and lightened as far as a dark panel needs it.
+- **What plugins bring is offered in the editor again**: their widget types and building blocks
+  in Design, their screens and their toast styles in Look, named in the app's language. 0.9 so
+  far knew them only where a theme's file named them.
+- **A bug in the panel's loop no longer leaves the panel standing still.** The first panel's
+  loop ended with it for good, and nothing was said of it (the loops of the panels beside it
+  started again). It starts again after five seconds, Status names the error meanwhile, and
+  what a bug says goes into the log with its place: a report can name it.
+- **What is said of the panel is in the app's language again**: that none was found, that it
+  restarts or is in use by another panel, what the pictures go to ("…, video 25 fps", "PNG
+  file …"), and the errors of the engine and of a serial port. The TURZX driver, the one of the
+  Turing panels, said all of this in English whatever the language.
+- **Design says rightly which version of a theme it edits.** On the 12.3" (and every panel
+  whose themes have a version of its size) it said "the version for a panel mounted
+  vertically"; it names the size the version is for, or that it is the one for beside a
+  companion.
+- **Start's "What's new" tells of 0.9** (it still told of 0.8): half the load, the icon in the
+  notification area as a switch, and, where the panel is mounted upside down, its start screen
+  written upright.
+
 ## 0.9.0rc3 — 2026-11-13
 
 The next release candidate of 0.9.0 to try (there was no rc2: what was tried between were
