@@ -410,7 +410,7 @@ administrator rights.
 ### With Python
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.8.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.0"
 libre-panel tray                    # the background app with its tray icon; opens its window
 libre-panel autostart enable        # start it whenever you log in
 ```
@@ -553,22 +553,23 @@ FanControl's fan curves, if you use FanControl.
 
 No, it is a false alarm. A detection whose name ends in `!ml`, as `Trojan:Win32/Bearfoos.A!ml`
 does, is a guess of Defender's machine learning, not a match with known malware, and such
-guesses hit new programs that are not signed and are built with PyInstaller, as Libre Panel's
-are. To be sure that your file is the one built here:
+guesses hit new programs that are not signed, as Libre Panel's are not yet. To be sure that
+your file is the one built here:
 
 - **Its SHA-256** is the one in `SHA256SUMS` on the release's page. In PowerShell:
-  `Get-FileHash .\libre-panel-0.8.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
+  `Get-FileHash .\libre-panel-0.9.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
 - **Where it was built:** from 0.8.0 on, GitHub signs for every download that this
   repository's release workflow built it, and from which commit:
-  `gh attestation verify libre-panel-0.8.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
+  `gh attestation verify libre-panel-0.9.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
 
 When it is, allow it in *Windows Security → Virus & threat protection → Protection history*
 (*Actions → Allow on device*), run the setup again, and report the file to Microsoft as a false
 alarm ([submit a file](https://www.microsoft.com/en-us/wdsi/filesubmission), *Incorrectly
 detected as malware/malicious*). When it is not, it is not from here: delete it, and download
 Libre Panel from its [releases](https://github.com/syntensa/libre-panel/releases) only. From
-0.8.0 on the programs also say who made them, and the loader they start with is compiled for
-Libre Panel alone, not the one many programs share; signing the downloads is planned.
+0.8.0 on the programs also say who made them, and from 0.9.0 on they are compiled from Libre
+Panel's own Rust code, without PyInstaller's loader that many programs share; signing the
+downloads is planned.
 </details>
 
 <details>
