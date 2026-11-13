@@ -2245,6 +2245,9 @@ def test_the_update_check_is_told_as_updates_py_tells_it(servers: Any) -> None:
         [_release("v0.8.1rc3", html_url="http://example.com/x"), _release("v0.7.9")],
         [_release("vnope"), _release("0.8.1.1rc2", body="  \n\nlater\n\n" + "x" * 900)],
         _release("v1.0.0"), _release("v0.8.0"), _release("v0.9.0", prerelease=True), [], {},
+        # (releases just above and well above: what is seen differs whatever version runs, a
+        # release as much as a release candidate, whose own pre-releases a release never sees)
+        _release("v0.9.1"), _release("v0.10.0"),
         _release("v0.8.2", assets=[{"name": "../x", "browser_download_url": "https://x"},
                                    {"name": "SHA256SUMS", "browser_download_url": sums}]),
         "nothing",
