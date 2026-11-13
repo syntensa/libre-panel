@@ -114,7 +114,8 @@
       "uppercase": true,
       "letter_spacing": 3,
       "tabular": false,
-      "align": "right"
+      "align": "right",
+      "max_width": 188
     },
     {
       "type": "clock",
@@ -128,7 +129,8 @@
       "uppercase": true,
       "letter_spacing": 3,
       "tabular": false,
-      "align": "right"
+      "align": "right",
+      "max_width": 231
     },
     {
       "type": "module",

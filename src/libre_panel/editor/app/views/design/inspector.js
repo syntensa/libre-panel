@@ -18,22 +18,23 @@ import {
   activeLook,
   align,
   applyLook,
+  copySelection,
   deleteSelection,
   detachModule,
-  reassembleModule,
-  selectGroup,
   duplicateSelection,
-  copySelection,
   finerBy,
   kindName,
   lookName,
   looks,
   moduleKinds,
+  reassembleModule,
   refineGrid,
   renameWidget,
   resizeModuleBy,
+  selectGroup,
   setFlag,
   setModuleKind,
+  showSensor,
   sourceLabels,
   specOf,
 } from "./ops.js";
@@ -282,7 +283,8 @@ function widgetChange(widget, key) {
   return (value) => {
     if (key === "id") return renameWidget(widget, value);
     edit(`prop:${widget.id}:${key}`, () => {
-      widget[key] = value;
+      if (key === "sensor") showSensor(widget, value);
+      else widget[key] = value;
     });
   };
 }
@@ -721,7 +723,7 @@ function SharedSensor({ chosen }) {
     edit("multi:sensor", (current) => {
       for (const widget of current.widgets) {
         if (!ids.has(widget.id)) continue;
-        widget.sensor = value;
+        showSensor(widget, value);
         if (widget.needs === old) widget.needs = value;
       }
     });

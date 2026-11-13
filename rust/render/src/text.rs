@@ -216,12 +216,19 @@ impl Renderer {
         let tabular = widget::flag(w, "tabular", false);
         let joined = cursive(text); // (such text is laid out whole: see text_piece)
         let font = self.font(widget::text(w, "font"), size)?;
-        let width = |candidate: &str| -> Result<f64> {
-            if joined {
-                return Self::length(&font, candidate);
+        let rolls = widget::optional(w, "digits").unwrap_or("jump") != "jump";
+        let lettering = matches!(finish::of(w), Finish::Lettered(_));
+        let width = |font: &FallbackFont, candidate: &str| -> Result<f64> {
+            // As wide as it is drawn. A text drawn whole (`letters` says which is laid letter by
+            // letter) is not the sum of its letters: the font kerns them, and a space between
+            // words a fallback font draws is that font's.
+            let lettered = lettering && facets::usable(font);
+            let digits = tabular && candidate.chars().any(|c| DIGITS.contains(c));
+            if joined || (spacing == 0.0 && !lettered && !rolls && !digits) {
+                return Self::length(font, candidate);
             }
             let cell = if tabular {
-                Self::digit_cell(&font)?
+                Self::digit_cell(font)?
             } else {
                 0.0
             };
@@ -230,13 +237,13 @@ impl Renderer {
                 advances.push(if tabular && DIGITS.contains(ch) {
                     cell
                 } else {
-                    Self::advance(&font, ch)?
+                    Self::advance(font, ch)?
                 });
             }
             let gaps = candidate.chars().count().saturating_sub(1) as f64;
             Ok(lp_py::sum_floats(advances) + spacing * gaps)
         };
-        let measured = width(text)?;
+        let measured = width(&font, text)?;
         if measured <= limit as f64 {
             return Ok((text.to_string(), size));
         }
@@ -246,16 +253,31 @@ impl Renderer {
                 let s: String = t.iter().collect();
                 s.trim_end_matches(lp_py::isspace).to_string()
             };
-            while text.len() > 1 && width(&(trimmed(&text) + "…"))? > limit as f64 {
+            while text.len() > 1 && width(&font, &(trimmed(&text) + "…"))? > limit as f64 {
                 text.pop();
             }
             return Ok((trimmed(&text) + "…", size));
         }
-        if measured.is_nan() {
-            return Err(Failed("cannot convert float NaN to integer".into()));
+        // a smaller font makes the letters narrower, not the gaps a letter spacing sets between
+        // them: the letters get what the gaps leave of the room
+        let gaps = if joined {
+            0.0
+        } else {
+            spacing * text.chars().count().saturating_sub(1) as f64
+        };
+        let (letters, room) = (measured - gaps, limit as f64 - gaps);
+        let mut smaller = if letters > 0.0 && room > 0.0 {
+            ((size as f64 * room / letters).trunc() as i64).max(6)
+        } else {
+            6
+        };
+        // (and a font does not get narrower evenly: a size less where it is still too wide)
+        while smaller > 6
+            && width(&*self.font(widget::text(w, "font"), smaller)?, text)? > limit as f64
+        {
+            smaller -= 1;
         }
-        let shrunk = (size.saturating_mul(limit) as f64 / measured).trunc() as i64;
-        Ok((text.to_string(), shrunk.max(6)))
+        Ok((text.to_string(), smaller))
     }
 
     /// _text_piece: the text as a piece.

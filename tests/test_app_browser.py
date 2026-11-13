@@ -1753,6 +1753,61 @@ def test_toolbar_sensor_and_finish(page):
     assert widget(page, "cpu-label")["finish"] == "acrylic"
 
 
+GRAPH = """window.libre.doc.edit(null, (theme) => {
+  const specs = window.libre.store.get().specs;
+  const graph = { type: "graph", id: "course" };
+  for (const [key, [, usual]] of Object.entries({ ...specs.common, ...specs.widgets.graph }))
+    if (key !== "id") graph[key] = structuredClone(usual);
+  theme.widgets.push(graph);
+})"""
+
+
+def test_a_graph_takes_the_range_that_goes_with_its_sensor(page):
+    """A graph of a rate with the usual 0 to 100 is full all the time (bytes a second, as the I/O
+    graphs of a shared theme were): picking such a sensor leaves the graph its own range, a share
+    gets 0 to 100 back, and a range the person set stays. One step to undo."""
+    js(page, GRAPH)
+    js(page, "window.libre.doc.setSelection(['course'])")
+    inspector = page.locator(".inspector")
+
+    def pick(key):
+        inspector.locator(".sensor-button").first.click()
+        picker = page.locator(".sensor-picker")
+        picker.locator("input").fill(key)
+        picker.locator(f".sensor-row[data-key='{key}']").click()
+        expect(page.locator(".sensor-picker")).to_have_count(0)
+
+    assert (widget(page, "course")["min"], widget(page, "course")["max"]) == (0, 100)
+    pick("net.down")
+    assert (widget(page, "course")["sensor"], widget(page, "course")["max"]) == ("net.down", None)
+    page.keyboard.press("Control+z")  # the sensor and the range come back together
+    assert (widget(page, "course")["sensor"], widget(page, "course")["max"]) == ("cpu.load", 100)
+    pick("disk.read")
+    assert widget(page, "course")["max"] is None
+    pick("gpu.load")  # a share again: its usual range
+    assert widget(page, "course")["max"] == 100
+    pick("cpu.temp")  # a temperature keeps 0 to 100
+    assert widget(page, "course")["max"] == 100
+    js(
+        page,
+        "window.libre.doc.edit(null, () => { window.libre.doc.widgetById('course').max = 50; })",
+    )
+    pick("net.up")  # a range of the person's own is theirs
+    assert widget(page, "course")["max"] == 50
+    # the palette's "Show ..." goes the same way
+    js(
+        page,
+        "window.libre.doc.edit(null, () => { window.libre.doc.widgetById('course').max = 100; })",
+    )
+    js(page, "window.libre.commands.runCommand('sensor.fan.cpu')")
+    assert (widget(page, "course")["sensor"], widget(page, "course")["max"]) == ("fan.cpu", None)
+    # and the details say what an empty top means
+    inspector.locator(".details-button").click()
+    hint = inspector.locator(".field", has_text="as high as the highest value it shows")
+    expect(hint).to_be_visible()
+    expect(inspector.locator("input[placeholder='auto']").first).to_be_visible()
+
+
 def test_a_module_from_the_library(page):
     count = js(page, "window.libre.doc.widgets().length")
     tile = page.locator('.tile[data-item="module:ring"]').bounding_box()

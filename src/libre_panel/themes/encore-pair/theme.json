@@ -302,6 +302,7 @@
       "text": "Nothing playing",
       "font": "builtin:Barlow-SemiBold",
       "font_size": 44,
+      "max_width": 1042,
       "color": "@text2",
       "tabular": false,
       "translate": true,

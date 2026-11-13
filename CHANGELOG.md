@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- **A text set smaller for its room keeps to it.** A text with a room of its own (*max
+  width*) is set in a smaller font where it is too long. With a letter spacing, the gaps
+  between the letters were counted as if they got smaller with the font, so such a text
+  stayed a few pixels too wide: "SEGUNDA-FEIRA", set smaller for 164 px, took 168. And a text
+  without a letter spacing is drawn as a whole, but its width was added up letter by letter:
+  where its letters come from a second font (Cyrillic in most themes), the spaces between
+  the words are that font's and wider, so "Ничего не играет" was drawn 12 px past its room.
+  A text is measured the way it is drawn and set as small as its room needs, in your own
+  themes too; one that is cut with "…" is cut by the same measure.
+
+**Polished**
+- **Long days keep to their place.** Where a weekday or a month is long ("ПОНЕДЕЛЬНИК",
+  "SEGUNDA-FEIRA · 23 DE FEVEREIRO", "PONIEDZIAŁEK · 26 PAŹDZIERNIKA") the date ran into the
+  clock's seconds (Nimbus, on every landscape panel; Terra's stood 2 px beside them), over the
+  clock above it (Nimbus and Terra on end: weekday and date are one line under the clock
+  there now) or out of its card (Lumen and its pair on the 12.3", Studio on end). On such a
+  day the line is set a little smaller; no date is set smaller in English, German, French,
+  Italian, Japanese or Chinese.
+- **"Nothing playing" stays in its card** in Japanese (Encore on the 12.3": it ran on into
+  the clock's card) and in Russian (Encore on end).
+- **The moon's phase is named in full in every language.** Beside the moon the name was cut
+  where it is longer than English's: "Abnehmender…" in German for half the month,
+  "Gibbeuse…" in French, and in Russian six of the eight phases (nine screens of Almanac,
+  Encore, Nimbus and Terra did so in one language or another). The names are set as small as
+  the longest of the language needs, never smaller than the line under them; past that the
+  moon gives them room, a fifth of itself at most. The lines under the name are set smaller
+  too where they are too long, not cut ("Полнолуние через 27…").
+- **A ring's column keeps its shape where the PC cannot tell everything.** Without the
+  processor's temperature and power (Windows before the sensor service is set up, the power
+  on Linux without its rights, a graphics chip in the processor) Lumen's and Arena's rings
+  left those rows out, and the clock stood alone at the foot of an empty column. The rows
+  stay with their names and a dash, as the memory's always did.
+- **A graph of a rate is not full all the time.** In Design a graph kept the usual range of 0
+  to 100 whatever it showed: of bytes a second, a fan's speed or watts that is a full graph
+  as soon as anything happens (a theme shared with everyone had its two I/O graphs so). A
+  graph now takes its own range when such a sensor is picked, where it still had the usual
+  one; a share or a temperature gets 0 to 100 back, and a range of your own stays yours. Its
+  details say under *max* what an empty field means.
+- **Small things in the themes.** Round Report on the 5.2" (1280 × 720): the "%" of the
+  shares stood on their card's edge, the rows end inside it now. Nimbus on the same panel:
+  the clock began on the weather card's edge and stands 20 px clear of it. Slate: from 100 GB
+  of memory in use on, the number ran into "/ 128 GB" and is set smaller for its place. The
+  ring cards (Lumen, Arena): the graphics card's memory stood right against its name
+  ("VRAM13.3"), measured as three digits where it has a tenth.
+
 ## 0.9.0rc4 — 2026-11-13
 
 The next release candidate of 0.9.0 to try: the whole app gone over after rc3, for what did

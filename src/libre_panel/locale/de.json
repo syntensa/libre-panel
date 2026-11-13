@@ -921,6 +921,7 @@
     "slowest of the last frames {n} ms": "langsamstes der letzten Bilder {n} ms",
     "smoothing (ms)": "Glättung (ms)",
     "sqrt/log keep small values visible (network rates)": "Wurzel/log halten kleine Werte sichtbar (Netzwerk-Raten)",
+    "empty: as high as the highest value it shows (a rate or a speed has no fixed top)": "leer: so hoch wie der höchste gezeigte Wert (eine Rate oder eine Drehzahl hat keine feste Obergrenze)",
     "starting": "startet",
     "stopped": "angehalten",
     "strftime, e.g. {examples}": "strftime, z. B. {examples}",

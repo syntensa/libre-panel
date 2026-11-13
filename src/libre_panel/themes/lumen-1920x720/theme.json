@@ -175,7 +175,8 @@
       "color": "@text3",
       "letter_spacing": 4,
       "tabular": false,
-      "align": "center"
+      "align": "center",
+      "max_width": 496
     },
     {
       "type": "text",

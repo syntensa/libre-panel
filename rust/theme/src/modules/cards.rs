@@ -1018,9 +1018,9 @@ fn heat_of(b: &Build, sensor: &str) -> Value {
     }
 }
 
-/// _sample: the widest a reading may be, as text to measure.
+/// _sample: the widest a reading may be, as text to measure (`gb` writes a tenth too).
 fn sample(number: &str, unit: &str) -> &'static str {
-    if number.contains(".1f") {
+    if number.contains(".1f") || number.contains(":gb}") {
         "00.0"
     } else if ["MHz", "RPM", "MT/s"].contains(&unit) {
         "0000"
@@ -1256,7 +1256,8 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
     let total = total_of(widths, k);
     let left = if wide { x0 } else { cx - total / 2.0 };
     let edge = left + names_w + gap * k + number_w;
-    let kept = src.role == "mem";
+    // (what a PC often cannot tell stays on show as "--", so the column keeps its shape)
+    let kept = matches!(src.role, "cpu" | "gpu" | "mem");
     for (i, (sensor, _fmt, name)) in shown.iter().enumerate() {
         let (number, suffix) = &parts[i];
         let cap = row_top + i as f64 * 0.268 * d;

@@ -921,6 +921,7 @@
     "slowest of the last frames {n} ms": "el más lento de los últimos fotogramas: {n} ms",
     "smoothing (ms)": "suavizado (ms)",
     "sqrt/log keep small values visible (network rates)": "raíz/log mantienen visibles los valores pequeños (tasas de red)",
+    "empty: as high as the highest value it shows (a rate or a speed has no fixed top)": "vacío: tan alto como el valor más alto que muestra (una tasa o una velocidad no tiene un tope fijo)",
     "starting": "iniciando",
     "stopped": "detenido",
     "strftime, e.g. {examples}": "strftime, p. ej. {examples}",

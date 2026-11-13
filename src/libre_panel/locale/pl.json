@@ -921,6 +921,7 @@
     "slowest of the last frames {n} ms": "najwolniejsza z ostatnich klatek: {n} ms",
     "smoothing (ms)": "wygładzanie (ms)",
     "sqrt/log keep small values visible (network rates)": "pierwiastek/log utrzymują małe wartości widoczne (przepływność sieci)",
+    "empty: as high as the highest value it shows (a rate or a speed has no fixed top)": "puste: tak wysoko, jak najwyższa pokazywana wartość (szybkość transferu ani obroty nie mają stałej górnej granicy)",
     "starting": "uruchamianie",
     "stopped": "zatrzymano",
     "strftime, e.g. {examples}": "strftime, np. {examples}",

@@ -10,6 +10,18 @@ use crate::model::Result;
 const ARC_MIN: f64 = 16.0;
 /// seconds for a turn of a module's globe, where it moves
 const EARTH_SPIN_S: i64 = 180;
+/// The moon's phases as its name tells them (lp-sensors' sky), for the room the longest of
+/// them takes in the app's language.
+const MOON_PHASES: [&str; 8] = [
+    "New moon",
+    "Waxing crescent",
+    "First quarter",
+    "Waxing gibbous",
+    "Full moon",
+    "Waning gibbous",
+    "Last quarter",
+    "Waning crescent",
+];
 
 /// Puts `prefix` before the ids of the widgets from `start` on.
 fn prefix_ids(b: &mut Build, start: usize, prefix: &str) {
@@ -219,7 +231,8 @@ pub fn build_moon(b: &mut Build, _src: &Source) -> Result<()> {
 /// (name, sensor, format, scale of the type, role of its colour)
 type Line = (&'static str, &'static str, String, f64, &'static str);
 
-/// Lines of texts one under the other, from `top`.
+/// Lines of texts one under the other, from `top`; one too long for its room is cut
+/// (`fit` "ellipsis") or set smaller ("shrink").
 #[allow(clippy::too_many_arguments)]
 fn lines_of(
     b: &mut Build,
@@ -228,13 +241,14 @@ fn lines_of(
     mut top: f64,
     align: &str,
     width: f64,
+    fit: &str,
 ) -> Result<()> {
     let ts = b.ts as f64;
     for (name, key, fmt, scale, role) in lines {
         let size = ts * scale;
         let kw: Fields = vec![
             ("fallback", "".into()),
-            ("fit", "ellipsis".into()),
+            ("fit", fit.into()),
             ("hide_if_missing", true.into()),
         ];
         b.value(
@@ -261,8 +275,31 @@ fn lines_of(
 fn moon(b: &mut Build, x: f64, y: f64, w: f64, h: f64, details: bool, more: bool) -> Result<()> {
     let (ts, pad) = (b.ts as f64, b.pad as f64);
     let beside = w / fmax(1.0, h) >= 1.2 && w >= ts * 14.0;
+    let mut name = 1.25; // the size of the phase's name, in the module's text sizes
+    let mut disc = fmin(h * 0.82, w * 0.38); // (beside the lines)
+    if beside {
+        // A phase's name is longer in most languages than English's and was cut beside the
+        // moon. All eight are set as small as the widest of the language needs, down to a
+        // little above the line under them; past that the moon gives them room, a fifth of
+        // itself at most.
+        let mut room = w - disc - pad * 1.2;
+        let font = b.st("text_font");
+        let mut need = f64::MIN;
+        for phase in MOON_PHASES {
+            need = fmax(need, b.width_per_size(&font, &t(phase))?);
+        }
+        need *= ts * name;
+        if need > room {
+            let least = 1.05 / name;
+            if need * least > room {
+                disc = fmax(disc * 0.8, w - pad * 1.2 - need * least);
+                room = w - disc - pad * 1.2;
+            }
+            name *= fmax(least, room / need);
+        }
+    }
     let mut lines: Vec<Line> = vec![
-        ("name", "moon.name", "{value}".into(), 1.25, "text"),
+        ("name", "moon.name", "{value}".into(), name, "text"),
         (
             "lit",
             "moon.illumination",
@@ -291,9 +328,8 @@ fn moon(b: &mut Build, x: f64, y: f64, w: f64, h: f64, details: bool, more: bool
     }
     let block = lp_py::sum_floats(lines.iter().map(|l| CAP * ts * l.3))
         + ts * 0.9 * (lines.len() as f64 - 1.0);
-    let (disc, dx, dy, tx, align, width, top);
+    let (dx, dy, tx, align, width, top);
     if beside {
-        disc = fmin(h * 0.82, w * 0.38);
         (dx, dy) = (x, y + (h - disc) / 2.0);
         (tx, align, width) = (x + disc + pad * 1.2, "left", w - disc - pad * 1.2);
         top = y + (h - block) / 2.0;
@@ -320,7 +356,8 @@ fn moon(b: &mut Build, x: f64, y: f64, w: f64, h: f64, details: bool, more: bool
         ("glow_radius", 2.max(round(disc * 0.08)).into()),
     ];
     b.add("moon", "moon", fields)?;
-    lines_of(b, &lines, tx, top, align, width)
+    // (a line too long for its room is set smaller, not cut)
+    lines_of(b, &lines, tx, top, align, width, "shrink")
 }
 
 /// build_earth: the earth as it is now, lit by the sun, your place marked; whether it is day
@@ -418,5 +455,5 @@ fn earth(b: &mut Build, x: f64, y: f64, w: f64, h: f64, details: bool) -> Result
         b.add("text", name, fields)?;
     }
     top += CAP * big + ts * 1.0;
-    lines_of(b, &lines, tx, top, align, width)
+    lines_of(b, &lines, tx, top, align, width, "ellipsis")
 }

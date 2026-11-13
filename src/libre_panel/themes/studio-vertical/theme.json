@@ -157,6 +157,7 @@
       "color": "@tx_2",
       "tabular": false,
       "letter_spacing": 1.0,
+      "max_width": 377,
       "needs": "weather.temperature"
     },
     {
@@ -169,6 +170,7 @@
       "color": "@tx_2",
       "tabular": false,
       "letter_spacing": 1,
+      "max_width": 391,
       "needs": "!weather.temperature, media.title"
     },
     {
