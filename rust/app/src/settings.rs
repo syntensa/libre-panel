@@ -62,7 +62,7 @@ const PATH_WORDS: [&str; 13] = [
     "output",
 ];
 /// The sensor sources of Libre Panel (sensors/base.py's), in its order.
-const PROVIDERS: [&str; 18] = [
+pub(crate) const PROVIDERS: [&str; 18] = [
     "psutil",
     "linux",
     "librehardwaremonitor",

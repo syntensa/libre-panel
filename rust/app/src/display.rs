@@ -340,8 +340,8 @@ fn any_panel(device: &DeviceConfig, settings: &Path, brightness: i64) -> Result<
                 .find(|(id, _)| *id == protocol)
                 .map_or(protocol, |(_, name)| name);
             Err(format!(
-                "{}: the {name} protocol is not in this build yet. Use driver = \"virtual\" \
-                 meanwhile",
+                "{}: the {name} protocol is not implemented yet. Use driver = \"virtual\" \
+                 meanwhile; see docs/HARDWARE.md for the plan.",
                 model.label()
             ))
         }
@@ -433,10 +433,14 @@ impl Display {
                 }
             },
             other => {
+                // (create_display's words)
+                let mut known = DRIVERS;
+                known.sort_unstable();
                 return Err(format!(
-                    "the driver {other:?} is not in this build yet (it has: {})",
-                    DRIVERS.join(", ")
-                ))
+                    "unknown display driver {} (available: {})",
+                    lp_py::repr(other),
+                    known.join(", ")
+                ));
             }
         };
         Ok(Display {

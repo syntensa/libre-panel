@@ -24,6 +24,46 @@
 - **Start's "What's new" tells of 0.9** (it still told of 0.8): half the load, the icon in the
   notification area as a switch, and, where the panel is mounted upside down, its start screen
   written upright.
+- **Start's list of themes names the right panel.** On the 12.3" it said "Turing 9.2″ ·
+  1920 × 720" of every theme whose first version is the 9.2"'s: the panel of that one beside
+  the size of the one shown. It names the panel of the version this panel shows.
+- **A proxy set in Windows is used again** (*Use a proxy server*, with its exceptions) for the
+  weather, the word of a new version and the community themes, as 0.8 used it: 0.9 so far
+  knew only the one the environment names, so a computer that reaches the web through its
+  proxy alone had none of the three. And a SOCKS proxy is gone through: the web client
+  connected past one, straight to the address.
+- **The command line says what 0.8's said.** `libre-panel doctor` prints each step as it takes
+  it (they were in the report alone, two empty lines in the terminal). `themes` lists each
+  theme with where it comes from and where it is, `models` with the sizes, how far the driver
+  is and the protocol (both listed names alone). `config path` and `config init [--force]`
+  are there again, as are `run --once` and `run --driver NAME`; a single frame that cannot be
+  shown ends with the panel's error instead of trying on. `--help` after a command prints the
+  help, and a command that is none ends with 2.
+- **What config.toml names and nobody has is said in plain words.** A driver, a sensor source
+  or a service that is none was "not in this build yet", words of the time the program was
+  written in: "unknown display driver 'x' (available: …)", "sensor source 'x' not started:
+  unknown sensor provider 'x' (available: …)", "service 'x': not installed". And `"demo"` is
+  a sensor source by its name again.
+- **Linux: helper programs that ended are not left behind.** Where there is no system D-Bus (a
+  container, a minimal system), the two that follow sleep and locking ended at once and stayed
+  as defunct processes, in Diagnose's table of the load with 0 MB each. They are collected,
+  such a process is not listed, and the computer is not asked to wait before it sleeps where
+  the panel would not hear of it.
+
+**Polished** (the app gone over in every view, in all ten languages, at the window's default
+and smallest size)
+- **Design shows the panel without a mesh over it.** A fine module grid (Lumen's: 96 × 72
+  cells on the 12.3") was drawn cell by cell, none smaller than six pixels: thousands of dashed
+  boxes over the clock and the graphs. Cells too small to tell apart on the screen are not
+  drawn; while a module moves, dots stand at the steps it moves by. Larger cells as before.
+- **The header's search field says whole words**: its phrase, its first word, or nothing (its
+  glass alone). Beside a running panel's chip it said "Suchen o…" in German at the window's
+  default size; there it says "Suchen oder Befehl …" now, without the hint of its keys.
+- **Design keeps its words whole in a small window**: the zoom bar's "1 : 1" stays on one line
+  at the window's smallest size, the way to the fine-tuning shows its whole list (on a second
+  line where it must, where an ellipsis cut it in every language), the chevron of the way to
+  Look stays beside its last word, and the rail is as wide as its longest label needs (the
+  Russian "Изображения" stood out of its button).
 
 ## 0.9.0rc3 — 2026-11-13
 

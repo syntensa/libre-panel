@@ -1,6 +1,6 @@
 //! A file from the web, as the Python app's urllib.request.urlopen fetches one: http and
 //! https, the certificates the system trusts, redirects followed, the proxy the environment
-//! names, an answer of 400 and above an error.
+//! names or Windows is set to (proxy.rs), an answer of 400 and above an error.
 //!
 //! Nothing is sent but the request for the address: no cookies are kept and no body goes out.
 
@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use ureq::tls::{RootCerts, TlsConfig};
 use ureq::Agent;
+
+pub mod proxy;
 
 /// Why an address gave nothing.
 #[derive(Clone, Debug, PartialEq)]
@@ -26,10 +28,11 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-fn agent(timeout: f64) -> Agent {
+fn agent(url: &str, timeout: f64) -> Agent {
     let wait = Some(Duration::from_secs_f64(timeout));
     // (urlopen's timeout is that of each step: connecting, each write, each read)
     Agent::config_builder()
+        .proxy(proxy::proxy_for(url))
         .timeout_resolve(wait)
         .timeout_connect(wait)
         .timeout_send_request(wait)
@@ -53,7 +56,7 @@ pub fn get(
     timeout: f64,
     limit: usize,
 ) -> Result<Vec<u8>, Error> {
-    let mut request = agent(timeout).get(url);
+    let mut request = agent(url, timeout).get(url);
     for (name, value) in headers {
         request = request.header(*name, *value);
     }
@@ -93,6 +96,7 @@ pub fn open_https(
     }
     let wait = Some(Duration::from_secs_f64(timeout));
     let agent: Agent = Agent::config_builder()
+        .proxy(proxy::proxy_for(url))
         .timeout_resolve(wait)
         .timeout_connect(wait)
         .timeout_send_request(wait)
@@ -160,6 +164,7 @@ pub fn get_same_host(
 ) -> Result<Vec<u8>, Error> {
     let wait = Some(Duration::from_secs_f64(timeout));
     let agent: Agent = Agent::config_builder()
+        .proxy(proxy::proxy_for(url))
         .timeout_resolve(wait)
         .timeout_connect(wait)
         .timeout_send_request(wait)

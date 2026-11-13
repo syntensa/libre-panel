@@ -46,9 +46,12 @@ export function startThemes({ themes, models, pages, model, defaultId = null }) 
   const special = new Set((pages?.pages || []).filter(kept).map((page) => page.theme));
   const upright = mounted() === "portrait";
   const items = themes.map((theme) => {
-    const made = models.find((item) => item.id === theme.model);
-    // the size the panel shows it at: its version for a bar on end, where it has one
-    const [w, h] = (themeEntry(versionFor(theme.id)) || theme).size || [];
+    // the panel it is made for and its size, as this panel shows it: its version for this panel
+    // (its size, or a bar on end) where it has one. The name of the panel the first version is
+    // for beside the size of another said "Turing 9.2″ · 1920 × 720" on the 12.3″.
+    const version = themeEntry(versionFor(theme.id)) || theme;
+    const made = models.find((item) => item.id === version.model);
+    const [w, h] = version.size || [];
     const size = w ? `${w} × ${h}` : null;
     const where = [made ? panelName(made) : null, size].filter(Boolean).join(" · ");
     const shown = theme.id === normal;

@@ -41,6 +41,9 @@ import { addModule, addPicture, addWidget, boxOf, insertPreset, kindName, module
 import { FloatingToolbar, widgetMenu } from "./toolbar.js";
 import { PageTabs } from "./pages.js";
 
+const CELL_SEEN = 10; // px on the screen: a cell of the module grid smaller than this is not drawn
+const DOTS_APART = 16; // px on the screen between the dots that stand for a fine grid, at least
+
 const ZOOM_STEPS = [0.1, 0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.5, 2, 3, 4, 6, 8];
 const MARGIN = { x: 40, top: 70, bottom: 104 }; // room around the panel for tabs, toolbar and zoom
 const FRAME = 22; // the frame around the picture: padding and border
@@ -448,11 +451,31 @@ export function Canvas() {
   const cells = [];
   if (gridShown) {
     const busy = libDrag || interaction?.kind === "cells" || interaction?.kind === "cell-resize";
-    for (let row = 0; row < grid.rows; row++) {
-      for (let col = 0; col < grid.columns; col++) {
-        if (!busy && blockers(list, grid, [col, row, 1, 1]).length) continue;
-        cells.push(html`<div class="cell" key=${`c${col}-${row}`} style=${place(cellBox(grid, col, row))}></div>`);
+    if (Math.min(grid.cell_w, grid.cell_h) * z >= CELL_SEEN) {
+      for (let row = 0; row < grid.rows; row++) {
+        for (let col = 0; col < grid.columns; col++) {
+          if (!busy && blockers(list, grid, [col, row, 1, 1]).length) continue;
+          cells.push(html`<div class="cell" key=${`c${col}-${row}`} style=${place(cellBox(grid, col, row))}></div>`);
+        }
       }
+    } else if (busy) {
+      // A fine grid's cells are too small on the screen to draw each (thousands of them lay over
+      // the panel as a mesh): nothing while nothing moves, and while a module does, dots at the
+      // steps it moves by (every second, fourth … of them where those are close together too).
+      const [sx, sy] = moduleSteps(grid);
+      const apart = (step) => {
+        let px = step * z;
+        while (px < DOTS_APART) px *= 2;
+        return px;
+      };
+      const [x, y, w, h] = cellBox(grid, 0, 0, grid.columns, grid.rows);
+      cells.push(html`<div class="cell-dots" key="dots" style=${{
+        left: `${x * z}px`,
+        top: `${y * z}px`,
+        width: `${w * z + 2}px`,
+        height: `${h * z + 2}px`,
+        backgroundSize: `${apart(sx * (grid.cell_w + grid.gap))}px ${apart(sy * (grid.cell_h + grid.gap))}px`,
+      }}></div>`);
     }
   }
   const zone = libDrag?.zone?.area ? libDrag.zone : interaction?.kind === "cells" ? interaction.zone : null;

@@ -999,8 +999,8 @@ impl Hub {
         notes
     }
 
-    /// The sources config.toml names, as far as this build has them; the names of those it
-    /// has not.
+    /// The sources config.toml names; the names of those nobody brings (a misspelt one, a
+    /// plugin's that is not installed), each of which is noted in create_provider's words.
     pub fn of(config: &lp_config::Config, demo: bool) -> (Hub, Vec<String>) {
         let sensors = &config.sensors;
         let mut sources: Vec<Box<dyn Source>> = Vec::new();
@@ -1019,6 +1019,7 @@ impl Hub {
         } else {
             for name in &sensors.providers {
                 match name.as_str() {
+                    "demo" => sources.push(Box::new(Demo::new())), // (named in config.toml)
                     "psutil" => {
                         let mut source =
                             crate::psutil::System::new(sensors.options.get(name), wanted.clone());
@@ -1125,7 +1126,24 @@ impl Hub {
                         match opened {
                             Some(Ok(source)) => sources.push(Box::new(source)),
                             Some(Err(why)) => notes.push(why),
-                            None => missing.push(other.to_string()),
+                            None => {
+                                // (a misspelt source must not stop the panel: said, and on)
+                                let mut known: Vec<String> = (crate::settings::PROVIDERS.iter())
+                                    .map(|name| name.to_string())
+                                    .collect();
+                                if let Some(Ok(host)) = crate::plugins::shared(&settings) {
+                                    known.extend(host.names("sensors"));
+                                }
+                                known.sort();
+                                known.dedup();
+                                let name = lp_py::repr(other);
+                                notes.push(format!(
+                                    "sensor source {name} not started: unknown sensor provider \
+                                     {name} (available: {})",
+                                    known.join(", ")
+                                ));
+                                missing.push(other.to_string());
+                            }
                         }
                     }
                 }

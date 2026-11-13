@@ -291,6 +291,8 @@ pub struct Options {
     pub speed_seconds: f64,
     /// the temperatures-and-power step (None: not asked)
     pub sensors: Option<Sensors>,
+    /// each step said as it is taken (`libre-panel doctor` in a terminal; the app shows them)
+    pub said: bool,
 }
 
 pub struct Doctor<'a> {
@@ -324,6 +326,10 @@ impl<'a> Doctor<'a> {
         } else {
             format!(" — {detail}")
         };
+        if self.options.said {
+            let mark = if result == "fail" { "FAIL" } else { result };
+            println!("[{mark:>4}] {name}{shown}");
+        }
         crate::logs::log(
             crate::logs::Level::Debug,
             "libre_panel.doctor_session",
@@ -1155,6 +1161,7 @@ fn run(shared: Arc<Shared>, answers: Receiver<Dict>, mut start: Start) {
         seconds_per_card: 6.0,
         speed_seconds: 20.0,
         sensors: None,
+        said: false,
     };
     let mut doctor = Doctor::new(Some(&questions), options);
     doctor.shared = Some(Arc::clone(&shared));
@@ -1257,6 +1264,7 @@ pub fn run_doctor(
             let file = config_file.to_path_buf();
             Box::new(move || sensors_check(&file, lp_config::platform(), None))
         }),
+        said: true,
     };
     let terminal = Terminal;
     let questions: Option<&dyn Questions> =

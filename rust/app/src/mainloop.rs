@@ -120,6 +120,8 @@ pub struct Asked {
     pub frames: Option<u64>,
     /// the port of the app's server (None: its usual one)
     pub port: Option<u16>,
+    /// this driver instead of config.toml's `[device] driver` (`run --driver virtual`)
+    pub driver: Option<String>,
 }
 
 /// What a loop of a panel beside the first has of it: its place in `[[panels]]`, and the
@@ -232,6 +234,8 @@ pub struct MainLoop {
     /// how often the panel failed in a row, and when it is tried again
     failures: u32,
     retry_at: f64,
+    /// why the one frame asked for (`run --once`) could not be shown: the loop ends with it
+    pub fatal: Option<String>,
     /// a panel was in use: one that is gone is waited for (`driver = "auto"`)
     had_panel: bool,
     renderer: Option<Renderer>,
@@ -386,15 +390,10 @@ impl MainLoop {
                 ..RunStatus::default()
             };
         }
-        let (mut hub, missing) = Hub::of(&config, asked.demo);
+        // (a source nobody brings is noted by the hub, and said with its first readings)
+        let (mut hub, _) = Hub::of(&config, asked.demo);
         hub.add(Box::new(crate::sensors::Services(Arc::clone(&host))));
         say(&format!("readings from: {}", hub.names().join(", ")));
-        if !missing.is_empty() {
-            say(&format!(
-                "sensor sources not in this build yet: {}",
-                missing.join(", ")
-            ));
-        }
         let judged: Arc<Mutex<Judged>> = Arc::default();
         let asks = Arc::clone(&judged);
         host.set_judge(Some(Box::new(move |toast| {
@@ -507,6 +506,7 @@ impl MainLoop {
             panel: None,
             failures: 0,
             retry_at: 0.0,
+            fatal: None,
             had_panel: false,
             renderer: None,
             shown: String::new(),
@@ -829,7 +829,17 @@ impl MainLoop {
         if now < self.retry_at || crate::winsession::ending() {
             return false;
         }
-        let device = &self.config.device;
+        let asked_for;
+        let device = match &self.asked.driver {
+            Some(driver) => {
+                asked_for = lp_config::DeviceConfig {
+                    driver: driver.clone(),
+                    ..self.config.device.clone()
+                };
+                &asked_for
+            }
+            None => &self.config.device,
+        };
         let (moment, _) = moment();
         let away = crate::presence::away();
         let level = lp_config::night::brightness_now(device, &moment, away, None);
@@ -874,6 +884,11 @@ impl MainLoop {
     /// _Link._failed: a panel that is missing or gone is tried again with growing pauses (one
     /// that restarts to clear its hung decoder: soon), said once.
     fn failed(&mut self, why: &str, now: f64) {
+        if self.asked.frames == Some(1) && self.beside.is_none() {
+            // (app.run's `once`: a single frame is sent, and a device's error is raised)
+            self.fatal = Some(why.to_string());
+            return;
+        }
         if self.failures == 0 {
             say(&format!(
                 "panel not available: {why} (retrying in the background)"
@@ -1962,11 +1977,8 @@ impl MainLoop {
     pub fn run(&mut self, stop: &AtomicBool, ending: &dyn Fn() -> Ending) {
         while !stop.load(Ordering::Relaxed) {
             let mut wait = self.step();
-            if self
-                .asked
-                .frames
-                .is_some_and(|frames| self.frames >= frames)
-            {
+            let drawn = (self.asked.frames).is_some_and(|frames| self.frames >= frames);
+            if drawn || self.fatal.is_some() {
                 break;
             }
             // (in short naps, so that a stop is followed at once)

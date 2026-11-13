@@ -1516,15 +1516,35 @@ def hidden_text(locator):
     )
 
 
+# the search field's phrase and its first word
+SEARCH_SAYS = {
+    "en": ("Search or command …", "Search"),
+    "de": ("Suchen oder Befehl …", "Suchen"),
+}
+
+
 def search_words(page):
-    """The width of the words the header's search field shows (0: none, its glass alone)."""
+    """What the header's search field says (its phrase, its first word, or "" for its glass
+    alone), and how much of that its box hides, in pixels."""
     return js(
         page,
         """(() => {
           const words = document.querySelector('.topbar .search-trigger-text');
-          return words && words.getClientRects().length ? words.getBoundingClientRect().width : 0;
+          if (!words || !words.getClientRects().length) return ["", 0];
+          const range = document.createRange();
+          range.selectNodeContents(words);
+          const hidden = range.getBoundingClientRect().width - words.getBoundingClientRect().width;
+          return [words.innerText.trim(), Math.max(0, hidden)];
         })()""",
     )
+
+
+def whole_search_words(page, language):
+    """The search field says its phrase or its first word, whole, or nothing: never a word cut
+    ("Search or…", "Suchen o…")."""
+    said, hidden = search_words(page)
+    phrase, word = SEARCH_SAYS[language]
+    return said in (phrase, word, "") and hidden < 0.5
 
 
 @pytest.mark.parametrize("language", ["en", "de"])
@@ -1569,8 +1589,39 @@ def test_the_search_field_gives_way_before_the_name_of_the_theme(background, lan
             page.set_viewport_size({"width": size[0], "height": size[1]})
             assert header_overflow(page) == [], size
             assert hidden_text(name) < 0.1, size
-            # its words ("Search or…"), or none: its glass alone, never a letter or two
-            assert search_words(page) == 0 or search_words(page) >= 60, size
+            # its phrase, its first word, or none: its glass alone, never a word cut
+            assert whole_search_words(page, language), (size, search_words(page))
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_the_search_field_says_whole_words_or_none(background, language):
+    """With the running panel's chip in the header the search field had room for half its
+    phrase at the window's default size in German, and said "Suchen o…" (the header counted
+    sixty pixels of words as enough). It says its phrase where that fits (without the hint of
+    its keys, and with the tabs closer together, where it must), else its first word, else
+    nothing: its glass."""
+    from libre_panel import i18n
+
+    app, url = background
+    i18n.set_language(language)
+    phrase, word = SEARCH_SAYS[language]
+    with browser_page(url, "design", size=(1920, 1000), allow=PICTURE) as page:
+        bar = page.locator(".topbar")
+        expect(bar).to_have_attribute("data-fit", "")
+        assert search_words(page) == [phrase, 0]
+        said = []
+        for width in (1920, 1600, 1440, 1366, 1280, 1200, 1100):
+            page.set_viewport_size({"width": width, "height": 800})
+            assert header_overflow(page) == [], width
+            assert whole_search_words(page, language), (width, search_words(page))
+            said.append(search_words(page)[0])
+        # from the phrase to the word to the glass, never back
+        order = [phrase, word, ""]
+        assert [order.index(text) for text in said] == sorted(order.index(text) for text in said)
+        assert said[0] == phrase and said[-1] == ""
+        assert word in said  # (a width at which the word alone has room)
+        # the button keeps its name for a screen reader whatever it shows
+        expect(page.locator(".topbar .search-trigger")).to_have_attribute("aria-label", phrase)
 
 
 @pytest.mark.parametrize("language", ["en", "de"])
@@ -1583,7 +1634,9 @@ def test_with_two_panels_the_header_gives_way_in_steps_and_the_name_stays_whole(
     the search field's keys, the tabs closer together, the search field to its glass, the unsaved
     mark to its dot, the chip to its name, the brand to its icon, the panel switch to its
     numbers): the name stays whole down to 1280 px, nothing reaches beyond the window down to
-    1100, at 1920 nothing gives way, and what gave way keeps its name."""
+    1100, at 1920 nothing gives way (but, in German, the hint of the search field's keys: its
+    phrase "Suchen oder Befehl …" was cut there, which counted as its words), and what gave
+    way keeps its name."""
     from libre_panel import i18n
 
     choose_theme(isolated_home)
@@ -1598,14 +1651,21 @@ def test_with_two_panels_the_header_gives_way_in_steps_and_the_name_stays_whole(
         expect(name).to_have_text("Libre Default")
         expect(page.locator(".unsaved")).to_be_visible()
         bar = page.locator(".topbar")
-        assert header_overflow(page) == []
-        expect(bar).to_have_attribute("data-fit", "")  # all of it, with its words
+        phrase = {"en": "Search or command …", "de": "Suchen oder Befehl …"}[language]
+
+        def all_of_it():
+            """Nothing gives way but, in German, the hint of the search field's keys."""
+            assert header_overflow(page) == []
+            assert set(bar.get_attribute("data-fit").split()) <= {"keys"}
+            assert search_words(page) == [phrase, 0]  # its whole phrase
+
+        all_of_it()
         steps = 0
         for width in (1600, 1440, 1366, 1280):
             page.set_viewport_size({"width": width, "height": 800})
             assert header_overflow(page) == [], width
             assert hidden_text(name) < 0.1, width
-            assert search_words(page) == 0 or search_words(page) >= 60, width
+            assert whole_search_words(page, language), (width, search_words(page))
             fit = bar.get_attribute("data-fit").split()
             assert len(fit) >= steps, (width, fit)  # narrower, no less gives way
             steps = len(fit)
@@ -1620,8 +1680,7 @@ def test_with_two_panels_the_header_gives_way_in_steps_and_the_name_stays_whole(
         expect(first).to_have_attribute("aria-checked", "true")
         # wider again, all of it shows again
         page.set_viewport_size({"width": 1920, "height": 1000})
-        assert header_overflow(page) == []
-        expect(bar).to_have_attribute("data-fit", "")
+        all_of_it()
 
 
 def test_select_move_undo_redo(page):

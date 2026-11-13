@@ -435,14 +435,119 @@ def test_a_config_that_is_wrong_is_said_in_config_py_s_words(tmp_path: Path) -> 
     assert "fps: must be between 1 and 60" in done.stderr
 
 
-def test_it_lists_what_it_knows(tmp_path: Path) -> None:
-    themes = _run(tmp_path, "themes").stdout.split()
-    assert themes == sorted(p.name for p in BUILTIN_THEMES_DIR.iterdir()
-                            if (p / "theme.json").is_file())  # fmt: skip
-    models = _run(tmp_path, "models").stdout
-    assert "majesty-9.16" in models
-    assert _run(tmp_path, "nope").returncode == 1
-    assert "libre-panel run" in _run(tmp_path, "help").stdout  # (no command starts the app)
+def _python(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """cli.py run with its settings in ``home``."""
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(home)}
+    command = [sys.executable, "-m", "libre_panel", *args]
+    return subprocess.run(
+        command, env=env, capture_output=True, encoding="utf-8", timeout=120, check=False
+    )
+
+
+def test_it_lists_what_it_knows_as_cli_py_lists_it(tmp_path: Path) -> None:
+    """`themes` (each with where it comes from and where it is), `models` (the sizes, how far
+    the driver is, the protocol) and `config path` as cli.py prints them: the program listed
+    names alone. The MAJESTY 9.16" is the program's own (it came with its drivers)."""
+    themes = _run(tmp_path, "themes").stdout.splitlines()
+    assert [line.split()[0] for line in themes] == sorted(
+        p.name for p in BUILTIN_THEMES_DIR.iterdir() if (p / "theme.json").is_file()
+    )
+    theirs = _python(tmp_path, "themes").stdout.splitlines()
+    assert len(themes) == len(theirs)
+    for mine, their in zip(themes, theirs, strict=True):
+        # (the id and where it comes from in columns as wide, and the folder the same one)
+        (name, source, folder), (_, _, their_folder) = mine.split(None, 2), their.split(None, 2)
+        assert mine.index(folder) == their.index(their_folder) and source == "built-in", mine
+        assert mine[: mine.index(folder)] == their[: their.index(their_folder)], mine
+        assert Path(folder).samefile(their_folder) and Path(folder).name == name, mine
+    where = Path(_run(tmp_path, "config", "path").stdout.strip())
+    assert where == Path(_python(tmp_path, "config", "path").stdout.strip())
+    assert where.name == "config.toml" and where.parent.samefile(tmp_path)
+    models = _run(tmp_path, "models").stdout.splitlines()
+    assert models[0].split() == ["model", "panel", "landscape", "portrait", "driver", "protocol"]
+    own = [line for line in models if line.startswith("majesty-9.16 ")]
+    assert len(own) == 1 and "1920x462" in own[0]
+    theirs = _python(tmp_path, "models").stdout.splitlines()
+    assert [line for line in models if line not in own] == theirs
+
+
+def test_config_init_writes_the_default_config_as_cli_py_does(tmp_path: Path) -> None:
+    from libre_panel.config import default_config_toml
+
+    file = tmp_path / "config.toml"
+    done = _run(tmp_path, "config", "init")
+    assert (done.returncode, done.stdout.strip()) == (0, f"wrote {file}"), done.stderr
+    assert file.read_text("utf-8") == default_config_toml()
+    again = _run(tmp_path, "config", "init")
+    assert again.returncode == 1
+    said = f"libre-panel: {file} already exists (use --force to overwrite)"
+    assert again.stderr.strip() == said
+    file.write_text('theme = "mine"\n', "utf-8")
+    assert _run(tmp_path, "config", "init", "--force").returncode == 0
+    assert file.read_text("utf-8") == default_config_toml()
+    # with no action: where it is and what it says
+    told = _run(tmp_path, "config").stdout.splitlines()
+    assert told[0] == str(file) and told[1].startswith("theme: ")
+
+
+def test_the_command_line_helps_and_refuses_as_cli_py_does(tmp_path: Path) -> None:
+    """`--help` after a command prints the help (it was "unknown option --help", and `themes
+    --help` listed the themes); a command that is none ends with 2, as argparse's errors do;
+    `run --once` draws one frame, `--driver` takes the place of config.toml's driver, and a
+    panel that cannot be opened ends a single frame with its error (the loop tried on)."""
+    usage = _run(tmp_path, "help").stdout
+    assert "libre-panel run" in usage  # (no command starts the app)
+    for command in ("run", "preview", "themes", "doctor"):
+        for flag in ("--help", "-h"):
+            done = _run(tmp_path, command, flag)
+            assert (done.returncode, done.stdout) == (0, usage), (command, flag)
+    nope = _run(tmp_path, "nope")
+    assert nope.returncode == 2 and "unknown command nope" in nope.stderr
+    config = 'theme = "lumen"\n[device]\ndriver = "nonsense"\n[sensors]\nproviders = []\n'
+    (tmp_path / "config.toml").write_text(config, encoding="utf-8")
+    once = _run(tmp_path, "run", "--once", "--driver", "virtual", "--demo")
+    assert once.returncode == 0, once.stderr
+    assert "showing on PNG file" in once.stderr
+    with Image.open(tmp_path / "libre-panel-frame.png") as frame:
+        assert frame.size == (1920, 480)
+    failed = _run(tmp_path, "run", "--once", "--demo")
+    assert failed.returncode == 1
+    known = "unknown display driver 'nonsense' (available: auto, hongtai, turzx, virtual)"
+    assert failed.stderr.strip().splitlines()[-1] == f"libre-panel: {known}"
+
+
+def test_what_config_toml_names_and_nobody_has_is_said_in_plain_words(tmp_path: Path) -> None:
+    """A sensor source or a service that is none was "not in this build yet", words of the
+    time the program was written in. They are said as the Python app says them, and "demo" is
+    a source by its name, as it is there."""
+    config = (
+        'theme = "lumen"\n[device]\ndriver = "virtual"\noutput = "panel.png"\n'
+        '[sensors]\nproviders = ["demo", "psutill"]\n[services]\nenabled = ["nonsense"]\n'
+    )
+    (tmp_path / "config.toml").write_text(config, encoding="utf-8")
+    done = _run(tmp_path, "run", "--frames", "2")
+    assert done.returncode == 0, done.stderr
+    assert "readings from: demo," in done.stderr
+    unknown = "sensor source 'psutill' not started: unknown sensor provider 'psutill'"
+    assert f"{unknown} (available: audio, calendar, demo, " in done.stderr
+    assert "service 'nonsense': not installed" in done.stderr
+    assert "this build" not in done.stderr
+
+
+def test_the_doctor_says_each_step_in_the_terminal(tmp_path: Path) -> None:
+    """`libre-panel doctor` printed empty lines where cli.py's doctor says each step as it
+    takes it: the steps were in the report alone."""
+    (tmp_path / "config.toml").write_text('[device]\ndriver = "virtual"\n', encoding="utf-8")
+    report = tmp_path / "report.txt"
+    done = _run(tmp_path, "doctor", "--no-questions", "--report", str(report))
+    lines = done.stdout.splitlines()
+    assert lines[0] == "Libre Panel doctor — close the TURZX app before starting."
+    steps = [line for line in lines if re.match(r"\[( ok|FAIL|skip|info)\] ", line)]
+    assert steps and steps[0].startswith("[info] environment — ")
+    # each step said is one of the report's, in its order
+    written = re.findall(r"^\[(?:OK|FAIL|SKIP|INFO)\] (.+)$", report.read_text("utf-8"), re.M)
+    assert [re.split(r" — ", step[7:])[0] for step in steps] == written
+    assert any(line.startswith("Result: ") for line in lines)
 
 
 def test_it_lists_librehardwaremonitor_s_readings_as_the_python_app_names_them(

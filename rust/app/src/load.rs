@@ -111,6 +111,9 @@ mod os {
     pub fn facts(pid: u32) -> Option<Facts> {
         let folder = Path::new("/proc").join(pid.to_string());
         let (mut name, fields) = stat(&folder.join("stat"))?;
+        if fields.first().is_some_and(|state| state == "Z") {
+            return None; // (it has ended and waits to be asked how: no process of the app's any more)
+        }
         let field = |n: usize| fields.get(n).and_then(|f| f.parse::<f64>().ok());
         let (user, system, start) = (field(11)?, field(12)?, field(19)?);
         let rss = cat(&folder.join("statm"))

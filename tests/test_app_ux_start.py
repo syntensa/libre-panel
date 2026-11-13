@@ -604,6 +604,34 @@ def test_a_theme_goes_out_as_a_file_and_comes_back_in_from_one(
         ]
 
 
+def test_the_list_names_the_panel_of_the_version_this_panel_shows(app_url, isolated_home):  # noqa: F811
+    """On the 12.3″ the list said "Turing 9.2″ · 1920 × 720" of Almanac and Arena: the panel
+    their first version is made for beside the size of the version this panel shows. It names
+    the panel of that version."""
+    from test_app_browser import app_answer
+
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-12.3-usb")
+    answer = app_answer()
+    answer["panel"] = {**answer["panel"], "theme": "lumen", "model": "turing-12.3-usb",
+                       "size": [1920, 720]}  # fmt: skip
+
+    def app(route, request):
+        if request.method != "GET":
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    with browser_page(app_url, "home", routes={"**/api/app": app}, allow=PICTURE) as page:
+        note = page.locator(".quick-theme[data-theme='almanac'] .quick-theme-note")
+        expect(note).to_have_text("Turing 12.3″ · 1920 × 720")
+        # one with no version for this panel says what it is made for
+        column = page.locator(".quick-theme[data-theme='column'] .quick-theme-note")
+        if column.count():
+            expect(column).to_have_text("Turing 3.5″ · 320 × 480")
+
+
 def test_the_community_themes_are_asked_for_once_opened_and_one_installs(
     app_url,  # noqa: F811
     isolated_home,

@@ -846,8 +846,11 @@ function LookTiles({ theme }) {
 
 /** The way to Look, where the theme's look is set in full. */
 function ToLook({ text }) {
+  // (the last word and the chevron break together; a text without spaces breaks where it does)
+  const at = text.lastIndexOf(" ");
+  const chevron = html`<${Icon} name="chevron-right" size=${13} />`;
   return html`<button type="button" class="link-btn inspector-link" onClick=${() => navigate("look")}>
-    ${text} <${Icon} name="chevron-right" size=${13} />
+    ${at < 0 ? html`${text} ${chevron}` : html`${text.slice(0, at + 1)}<span class="link-end">${text.slice(at + 1)} ${chevron}</span>`}
   </button>`;
 }
 

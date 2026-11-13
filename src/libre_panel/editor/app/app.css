@@ -394,7 +394,12 @@ a:hover {
 .search-trigger.wide .search-trigger-text {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* its first word, shown where the phrase has no room (data-fit, below) */
+.search-trigger.wide .search-word {
+  display: none;
 }
 
 /* In a narrow window the search field gives up room first, down to its smallest, then the panel
@@ -450,12 +455,27 @@ a:hover {
 }
 
 /* Where the header has too little room for all it shows, it gives way in steps, each after the
-   one before, as far as it must (measured: header.js, GIVE_WAY): the search field keeps its words
-   rather than the hint of its keys, the tabs come closer together, the search field is its glass,
-   the unsaved mark its dot, the panel chip a dot and a name, the brand its icon, "Panel 1 |
+   one before, as far as it must (measured: header.js, GIVE_WAY): the search field keeps its
+   words rather than the hint of its keys, the tabs come closer together, the search field says
+   its first word instead of its phrase (whole words, never one cut), then is its glass, the
+   unsaved mark its dot, the panel chip a dot and a name, the brand its icon, "Panel 1 |
    Panel 2" the numbers, the way to the settings its gear. What gives way keeps its name. */
 .topbar[data-fit~="keys"] > .search-trigger.wide .kbd {
   display: none;
+}
+
+.topbar[data-fit~="phrase"] > .search-trigger.wide {
+  width: auto;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.topbar[data-fit~="phrase"] > .search-trigger.wide .search-phrase {
+  display: none;
+}
+
+.topbar[data-fit~="phrase"] > .search-trigger.wide .search-word {
+  display: inline;
 }
 
 .topbar[data-fit~="tabs"] {

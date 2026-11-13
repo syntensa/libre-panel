@@ -250,7 +250,7 @@ pub type Callback = Box<dyn Fn() + Send + Sync>;
 /// computer sleeps (the delay lock is let go after it), `on_wake` after it woke; locking and
 /// unlocking of this session go to presence.rs.
 pub struct Watcher {
-    monitor: Mutex<Option<Child>>,
+    monitor: Arc<Mutex<Option<Child>>>,
     inhibitor: Arc<Mutex<Option<Child>>>,
 }
 
@@ -313,6 +313,8 @@ impl Watcher {
             .stderr(Stdio::null())
             .spawn()?;
         let lines = monitor.stdout.take().map(BufReader::new);
+        let monitor = Arc::new(Mutex::new(Some(monitor)));
+        let ended = Arc::clone(&monitor);
         let inhibitor: Arc<Mutex<Option<Child>>> = Arc::default();
         inhibit(&inhibitor);
         let held = Arc::clone(&inhibitor);
@@ -340,11 +342,17 @@ impl Watcher {
                     None => {}
                 }
             }
+            // The monitor ended (at once where there is no system bus, as in a container):
+            // nothing is heard any more. Neither it nor the delay lock stays behind as a
+            // process that has ended, and the computer does not wait for a panel that would
+            // not hear of its sleep.
+            let over = ended.lock().ok().and_then(|mut monitor| monitor.take());
+            if let Some(mut child) = over {
+                let _ = child.wait();
+            }
+            let_go(&held);
         })?;
-        Ok(Watcher {
-            monitor: Mutex::new(Some(monitor)),
-            inhibitor,
-        })
+        Ok(Watcher { monitor, inhibitor })
     }
 
     pub fn stop(&self) {

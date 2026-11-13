@@ -78,11 +78,9 @@ impl Company {
         }
         if let Ok(mut said) = self.lacking.lock() {
             if lacking != *said {
-                if !lacking.is_empty() {
-                    say(&format!(
-                        "services not in this build yet: {}",
-                        lacking.join(", ")
-                    ));
+                for name in &lacking {
+                    // (ServiceManager's words for one nobody brings)
+                    say(&format!("service {}: not installed", lp_py::repr(name)));
                 }
                 *said = lacking;
             }

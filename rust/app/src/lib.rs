@@ -86,7 +86,8 @@ static STOP: AtomicBool = AtomicBool::new(false);
 const USAGE: &str = "\
 Libre Panel
 
-  libre-panel run [options]     show the theme on the panel until stopped (Ctrl+C)
+  libre-panel run [options]     show the theme on the panel until stopped (Ctrl+C); --once:
+                                one frame, --driver NAME: this driver instead of config.toml's
   libre-panel start [options]   the same as a background app: with the keyboard shortcuts
                                 of config.toml, the panel paused and resumed by them (the
                                 command when none is given)
@@ -114,7 +115,9 @@ Libre Panel
                                 as administrator: what the sensors need (Windows), and on
                                 Linux the panel's access, the fan chip's driver and, with
                                 --rapl, the processor's power (--linux, --dry-run, --json)
-  libre-panel config            where config.toml is, and whether it is right
+  libre-panel config [path | init [--force]]
+                                where config.toml is, and whether it is right (path: where
+                                it belongs; init: a new one with the defaults)
   libre-panel quit [--timeout S]  quit the running app (and wait until it is gone)
   libre-panel notify TEXT [--title T] [--seconds S] [--icon NAME] [--level info|warning|error]
                                 a notice on the panel of the running app
@@ -338,6 +341,8 @@ fn asked(args: &[String]) -> Result<Asked, String> {
                 );
             }
             "--demo" => asked.demo = true,
+            "--once" => asked.frames = Some(1), // (cli.py's `run --once`)
+            "--driver" => asked.driver = Some(value("--driver")?),
             other => return Err(format!("unknown option {other}")),
         }
     }
@@ -349,9 +354,28 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
         "version" | "--version" | "-V" => println!("libre-panel {}", lp_py::VERSION),
         "help" | "--help" | "-h" => print!("{USAGE}"),
         "models" => {
+            // (_cmd_models' table: the sizes, how far the driver is, the protocol)
+            println!(
+                "{:<18} {:<42} {:>10} {:>10}  {:<12} protocol",
+                "model", "panel", "landscape", "portrait", "driver"
+            );
             let majesty = std::iter::once(&lp_devices::hongtai::MAJESTY);
             for model in lp_devices::models::MODELS.iter().chain(majesty) {
-                println!("{:<28} {}", model.id, model.label());
+                let (lw, lh) = model.size("landscape");
+                let (pw, ph) = model.size("portrait");
+                let label = model.label();
+                let named = label.split_once(' ').map_or("", |(_, rest)| rest);
+                let protocol = (lp_devices::models::PROTOCOLS.iter())
+                    .find(|(id, _)| *id == model.protocol)
+                    .map_or(model.protocol, |(_, name)| name);
+                println!(
+                    "{:<18} {:<42} {:>10} {:>10}  {:<12} {protocol}",
+                    model.id,
+                    format!("{} {named}", model.vendor),
+                    format!("{lw}x{lh}"),
+                    format!("{pw}x{ph}"),
+                    model.driver,
+                );
             }
         }
         "ports" => {
@@ -368,31 +392,55 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             }
         }
         "themes" => {
+            // (_cmd_themes: each once, with where it comes from and where it is)
             let home = Home::find()?;
-            let places = home.places();
-            let folders = std::iter::once(&places.user)
-                .chain(&places.plugins)
-                .chain(std::iter::once(&places.builtin));
-            for folder in folders {
-                let mut names: Vec<String> = std::fs::read_dir(folder)
-                    .into_iter()
-                    .flatten()
-                    .flatten()
-                    .filter(|entry| entry.path().join("theme.json").is_file())
-                    .filter_map(|entry| entry.file_name().into_string().ok())
-                    .collect();
-                names.sort();
-                for name in names {
-                    println!("{name}");
-                }
+            for theme in lp_theme::versions::list_themes(&home.places()) {
+                let text = |key: &str| match theme.get(key) {
+                    Some(lp_py::Value::Str(text)) => text.clone(),
+                    _ => String::new(),
+                };
+                println!("{:<24} {:<9} {}", text("id"), text("source"), text("path"));
             }
         }
         "config" => {
-            let asked = asked(args)?;
+            // (_cmd_config's actions: `path`, where it belongs, and `init [--force]`, a new
+            // one with the defaults; with neither, where it is and what it says)
+            let (action, args) = match args.split_first() {
+                Some((first, rest)) if first == "path" || first == "init" => (first.as_str(), rest),
+                _ => ("", args),
+            };
+            if action == "path" {
+                println!(
+                    "{}",
+                    lp_config::dirs::config_dir().join("config.toml").display()
+                );
+                return Ok(());
+            }
+            let force = args.iter().any(|arg| arg == "--force");
+            let rest: Vec<String> =
+                (args.iter().filter(|arg| *arg != "--force").cloned()).collect();
+            let asked = asked(&rest)?;
             let file = match asked.config {
                 Some(file) => file,
                 None => Home::find()?.config_file(),
             };
+            if action == "init" {
+                return match lp_config::edit::write_default_config(
+                    &file,
+                    force,
+                    lp_config::platform(),
+                ) {
+                    Ok(()) => {
+                        println!("wrote {}", file.display());
+                        Ok(())
+                    }
+                    Err(why) if why.class == "FileExistsError" => Err(format!(
+                        "{} already exists (use --force to overwrite)",
+                        file.display()
+                    )),
+                    Err(why) => Err(why.msg),
+                };
+            }
             println!("{}", file.display());
             let config = lp_config::load_config(&file, lp_config::platform()).map_err(|e| e.msg)?;
             let theme = if config.theme_given {
@@ -423,7 +471,7 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                 None => Home::find()?.config_file(),
             };
             let config = lp_config::load_config(&file, lp_config::platform()).map_err(|e| e.msg)?;
-            let (mut hub, missing) = sensors::Hub::of(&config, asked.demo);
+            let (mut hub, _) = sensors::Hub::of(&config, asked.demo);
             // Some sources read only while a theme shows their keys: asked for as a theme
             // would, so they are listed ("lhm:*" is every sensor of LibreHardwareMonitor).
             let mut keys = ["cpu.load", "gpu.load", "audio.*", "lhm:*", "temp.*"]
@@ -474,12 +522,6 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                     eprintln!("\nnote: {hint}");
                 }
             }
-            if !missing.is_empty() {
-                eprintln!(
-                    "libre-panel: sensor sources not in this build yet: {}",
-                    missing.join(", ")
-                );
-            }
         }
         "run" | "render" => {
             let mut asked = asked(args)?;
@@ -508,7 +550,10 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
                     made.run(&STOP, &|| mainloop::Ending::Quit);
                 }));
                 match ran {
-                    Ok(()) => break,
+                    Ok(()) => match made.fatal.take() {
+                        Some(why) => return Err(why),
+                        None => break,
+                    },
                     // (a bug in a frame: `run` starts its loop again, as the app in the
                     // background does; a single frame asked for has failed, and the bug's
                     // word is said already)
@@ -727,7 +772,11 @@ fn run(command: &str, args: &[String]) -> Result<(), String> {
             stopped.store(true, std::sync::atomic::Ordering::Relaxed);
             session.stop();
         }
-        other => return Err(format!("unknown command {other}\n\n{USAGE}")),
+        other => {
+            // (a usage error ends with 2, as argparse's)
+            eprintln!("libre-panel: unknown command {other}\n\n{USAGE}");
+            std::process::exit(2);
+        }
     }
     Ok(())
 }
@@ -1500,6 +1549,11 @@ pub fn main(default: &str) -> ExitCode {
         None => (default.to_string(), Vec::new()),
     };
     let rest: Vec<String> = rest.into_iter().chain(leading).collect();
+    // (`libre-panel run --help`: the help, whatever the command; a notice's own words stay)
+    if command != "notify" && rest.iter().any(|arg| arg == "--help" || arg == "-h") {
+        print!("{USAGE}");
+        return ExitCode::SUCCESS;
+    }
     // a portable copy's first start takes over the settings of the user's own folder; and
     // what an earlier version kept in the cache and this one does not goes
     match lp_config::dirs::take_over_into_portable() {
