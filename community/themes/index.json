@@ -44,6 +44,17 @@
       "preview": "gold-time-vertical/preview.png",
       "zip": "gold-time-vertical/gold-time-vertical.zip",
       "sha256": "4d6137250db864a8fc5b01bd478ed3a52676b8f9128f474864bfd9004c61add9"
+    },
+    {
+      "name": "Basic Computer Info",
+      "author": "Will Daher",
+      "description": "Time, CPU, C Drive, I/O, Weather.",
+      "sizes": [
+        "320x480"
+      ],
+      "preview": "basic-computer-info/preview.png",
+      "zip": "basic-computer-info/basic-computer-info.zip",
+      "sha256": "8ad16e029921fd9d6321d10b80fb7809633e0acce17c5aa0fc89f27eefc5cf4e"
     }
   ]
 }
