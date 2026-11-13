@@ -109,6 +109,37 @@
     </div>
   </section>
 
+  <section id="rust" aria-labelledby="rust-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">New in 0.9</p>
+        <h2 id="rust-title">“Just rewrite it in Rust!” We did.</h2>
+        <p>The internet's oldest joke, and here it is: Libre Panel, fully rewritten in Rust. The
+          drawing, the drivers of all 54 panel models, the sensors, the services, the app's server,
+          its window and tray: some 200,000 lines of Rust. Your panel shows the same pictures, pixel
+          for pixel; your PC does a lot less for them. Settings and themes carry over as they are.</p>
+      </div>
+      <table class="table">
+        <thead><tr><th scope="col">12.3", 25 fps</th><th scope="col">0.8.0</th><th scope="col">0.9.0</th><th scope="col">Saved</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Lumen</th><td data-label="0.8.0">32–36 % CPU, 145–156 MB</td><td data-label="0.9.0"><strong>21–23 % CPU, 104 MB</strong></td><td data-label="Saved">34 % CPU, 30 % RAM</td></tr>
+          <tr><th scope="row">Arena</th><td data-label="0.8.0">37–38 % CPU, 147–150 MB</td><td data-label="0.9.0"><strong>30–33 % CPU, 99 MB</strong></td><td data-label="Saved">17 % CPU, 34 % RAM</td></tr>
+          <tr><th scope="row">Encore</th><td data-label="0.8.0">12 % CPU, 134 MB</td><td data-label="0.9.0"><strong>7 % CPU, 92–94 MB</strong></td><td data-label="Saved">38 % CPU, 31 % RAM</td></tr>
+        </tbody>
+      </table>
+      <p class="legacy">The 12.3" at 25 fps, Libre Panel's app and engine together, through the engine to the
+        panel: processor in % of one core, private memory; the demo's readings, a minute each, in turn on the same Linux machine.
+        The first picture is on the panel 0.4 to 1.0 s after the start, instead of 0.7 to 2.0 s.</p>
+      <div class="callout">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+        <p><strong>Proven, not promised.</strong> The Python app stays in the repository as the reference:
+          525 comparison tests hold the new program against it with every change, and each of the 99
+          built-in themes, still and moving, matches it pixel for pixel.
+          <a href="https://github.com/syntensa/libre-panel/releases/latest">All of 0.9.0</a></p>
+      </div>
+    </div>
+  </section>
+
   <section id="features" aria-labelledby="features-title">
     <div class="wrap">
       <div class="head">

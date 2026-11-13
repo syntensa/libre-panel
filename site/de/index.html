@@ -110,6 +110,38 @@
     </div>
   </section>
 
+  <section id="rust" aria-labelledby="rust-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Neu in 0.9</p>
+        <h2 id="rust-title">„Schreib's doch einfach in Rust neu!“ Haben wir.</h2>
+        <p>Der älteste Witz des Internets, und hier ist er: Libre Panel, komplett in Rust neu
+          geschrieben. Das Zeichnen, die Treiber aller 54 Panel-Modelle, die Sensoren, die Dienste, der
+          Server der App, ihr Fenster und Tray: rund 200.000 Zeilen Rust. Dein Panel zeigt dieselben
+          Bilder, Pixel für Pixel; dein PC tut viel weniger dafür. Einstellungen und Themes bleiben, wie
+          sie sind.</p>
+      </div>
+      <table class="table">
+        <thead><tr><th scope="col">12,3", 25 fps</th><th scope="col">0.8.0</th><th scope="col">0.9.0</th><th scope="col">Gespart</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Lumen</th><td data-label="0.8.0">32–36 % CPU, 145–156 MB</td><td data-label="0.9.0"><strong>21–23 % CPU, 104 MB</strong></td><td data-label="Gespart">34 % CPU, 30 % RAM</td></tr>
+          <tr><th scope="row">Arena</th><td data-label="0.8.0">37–38 % CPU, 147–150 MB</td><td data-label="0.9.0"><strong>30–33 % CPU, 99 MB</strong></td><td data-label="Gespart">17 % CPU, 34 % RAM</td></tr>
+          <tr><th scope="row">Encore</th><td data-label="0.8.0">12 % CPU, 134 MB</td><td data-label="0.9.0"><strong>7 % CPU, 92–94 MB</strong></td><td data-label="Gespart">38 % CPU, 31 % RAM</td></tr>
+        </tbody>
+      </table>
+      <p class="legacy">Das 12,3" mit 25 fps, App und Engine von Libre Panel zusammen, durch die Engine bis zum
+        Panel: Prozessor in % eines Kerns, privater Speicher; die Demo-Werte, je eine Minute, abwechselnd auf demselben
+        Linux-Rechner. Das erste Bild steht 0,4 bis 1,0 s nach dem Start auf dem Panel statt nach 0,7 bis 2,0 s.</p>
+      <div class="callout">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+        <p><strong>Belegt, nicht versprochen.</strong> Die Python-App bleibt als Referenz im Repository:
+          525 Vergleichstests prüfen das neue Programm bei jeder Änderung gegen sie, und jedes der 99
+          eingebauten Themes, stehend und bewegt, stimmt Pixel für Pixel mit ihr überein.
+          <a href="https://github.com/syntensa/libre-panel/releases/latest">Alles zu 0.9.0</a> (englisch)</p>
+      </div>
+    </div>
+  </section>
+
   <section id="features" aria-labelledby="features-title">
     <div class="wrap">
       <div class="head">

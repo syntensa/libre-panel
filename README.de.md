@@ -17,7 +17,7 @@
 <p align="center">
   <b>Neu in 0.9: komplett in Rust neu geschrieben.</b> Ein Drittel weniger Arbeitsspeicher, bis
   zu 38 % weniger Prozessorlast und ein schnellerer Start, bei Pixel für Pixel denselben Bildern
-  auf dem Panel (<a href="CHANGELOG.md">die Zahlen</a>, englisch).
+  auf dem Panel (<a href="#in-rust-neu-geschrieben">die Zahlen</a>).
 </p>
 
 <p align="center">
@@ -42,6 +42,7 @@
 
 <p align="center">
   <b>
+    <a href="#in-rust-neu-geschrieben">Neu in 0.9</a> ·
     <a href="#funktionen">Funktionen</a> ·
     <a href="#die-app">Die App</a> ·
     <a href="#themes">Themes</a> ·
@@ -92,6 +93,31 @@
   Kipye · UsbPCMonitor · XuanFang · Lian Li · Thermalright · BeadaPanel · NZXT Kraken ·
   Thermaltake · <a href="#unterstützte-panels">alle Panels</a></sub>
 </p>
+
+## In Rust neu geschrieben
+
+> *„Schreib's doch einfach in Rust neu!“* – der älteste Witz des Internets. Nur ist es keiner
+> mehr: Seit 0.9 ist **Libre Panel in Rust geschrieben**.
+
+Das Zeichnen, die Treiber aller 54 Panel-Modelle, die Sensoren, die Dienste, der Server der App,
+ihr Fenster und Tray: rund 200.000 Zeilen Rust. Dein Panel zeigt dieselben Bilder, Pixel für
+Pixel; dein PC tut viel weniger dafür. Einstellungen und Themes bleiben, wie sie sind.
+
+| 12,3", 25 fps | 0.8.0 | 0.9.0 | Gespart |
+|---|---|---|---|
+| Lumen | 32–36 % CPU, 145–156 MB | **21–23 % CPU, 104 MB** | 34 % CPU, 30 % RAM |
+| Arena | 37–38 % CPU, 147–150 MB | **30–33 % CPU, 99 MB** | 17 % CPU, 34 % RAM |
+| Encore | 12 % CPU, 134 MB | **7 % CPU, 92–94 MB** | 38 % CPU, 31 % RAM |
+
+<sub>App und Engine von Libre Panel zusammen, durch die Engine bis zum Panel: Prozessor in % eines
+Kerns, privater Speicher; die Demo-Werte, je eine Minute, abwechselnd auf demselben
+Linux-Rechner. Das erste Bild steht 0,4 bis 1,0 s nach dem Start auf dem Panel statt nach 0,7 bis
+2,0 s.</sub>
+
+**Belegt, nicht versprochen.** Die Python-App bleibt als Referenz im Repository: 525
+Vergleichstests prüfen das neue Programm bei jeder Änderung gegen sie, und jedes der 99
+eingebauten Themes, stehend und bewegt, stimmt Pixel für Pixel mit ihr überein
+([alles zu 0.9.0](CHANGELOG.md), englisch).
 
 ## Funktionen
 

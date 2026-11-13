@@ -17,7 +17,7 @@
 <p align="center">
   <b>New in 0.9: rewritten in Rust.</b> A third less memory, up to 38 % less processor and a
   quicker start, with the same pictures on the panel, pixel for pixel
-  (<a href="CHANGELOG.md">the numbers</a>).
+  (<a href="#rewritten-in-rust">the numbers</a>).
 </p>
 
 <p align="center">
@@ -42,6 +42,7 @@
 
 <p align="center">
   <b>
+    <a href="#rewritten-in-rust">New in 0.9</a> ·
     <a href="#features">Features</a> ·
     <a href="#the-app">The app</a> ·
     <a href="#themes">Themes</a> ·
@@ -92,6 +93,29 @@
   Kipye · UsbPCMonitor · XuanFang · Lian Li · Thermalright · BeadaPanel · NZXT Kraken ·
   Thermaltake · <a href="#supported-panels">every panel</a></sub>
 </p>
+
+## Rewritten in Rust
+
+> *"Just rewrite it in Rust!"* — the internet's oldest joke. Well, we're not joking: since 0.9,
+> **Libre Panel is written in Rust**.
+
+The drawing, the drivers of all 54 panel models, the sensors, the services, the app's server,
+its window and tray: some 200,000 lines of Rust. Your panel shows the same pictures, pixel for
+pixel; your PC does a lot less for them. Settings and themes carry over as they are.
+
+| 12.3", 25 fps | 0.8.0 | 0.9.0 | Saved |
+|---|---|---|---|
+| Lumen | 32–36 % CPU, 145–156 MB | **21–23 % CPU, 104 MB** | 34 % CPU, 30 % RAM |
+| Arena | 37–38 % CPU, 147–150 MB | **30–33 % CPU, 99 MB** | 17 % CPU, 34 % RAM |
+| Encore | 12 % CPU, 134 MB | **7 % CPU, 92–94 MB** | 38 % CPU, 31 % RAM |
+
+<sub>Libre Panel's app and engine together, through the engine to the panel: processor in % of
+one core, private memory; the demo's readings, a minute each, in turn on the same Linux machine.
+The first picture is on the panel 0.4 to 1.0 s after the start, instead of 0.7 to 2.0 s.</sub>
+
+**Proven, not promised.** The Python app stays in the repository as the reference: 525
+comparison tests hold the new program against it with every change, and each of the 99 built-in
+themes, still and moving, matches it pixel for pixel ([all of 0.9.0](CHANGELOG.md)).
 
 ## Features
 
