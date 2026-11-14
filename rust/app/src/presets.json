@@ -1,0 +1,790 @@
+{
+ "presets": [
+  {
+   "id": "ring",
+   "name": "Ring with value",
+   "size": [
+    140,
+    172
+   ],
+   "widgets": [
+    {
+     "type": "gauge",
+     "id": "ring",
+     "x": 0,
+     "y": 0,
+     "w": 140,
+     "h": 140,
+     "sensor": "cpu.load",
+     "thickness": 12,
+     "color": "$accent_deep",
+     "color2": "$accent",
+     "background": "#ffffff10",
+     "glow": 0.5,
+     "glow_radius": 7
+    },
+    {
+     "type": "metric",
+     "id": "value",
+     "x": 70,
+     "y": 52,
+     "sensor": "cpu.load",
+     "format": "{value:.0f}%",
+     "font_size": 32,
+     "color": "$text",
+     "align": "center",
+     "font": "builtin:Barlow-SemiBold"
+    },
+    {
+     "type": "text",
+     "id": "label",
+     "x": 70,
+     "y": 155,
+     "text": "CPU",
+     "font_size": 13,
+     "color": "$muted",
+     "align": "center",
+     "letter_spacing": 3
+    }
+   ]
+  },
+  {
+   "id": "bar-row",
+   "name": "Bar row",
+   "size": [
+    320,
+    30
+   ],
+   "widgets": [
+    {
+     "type": "text",
+     "id": "label",
+     "x": 0,
+     "y": 4,
+     "text": "TEMP",
+     "font_size": 14,
+     "color": "$muted",
+     "letter_spacing": 2
+    },
+    {
+     "type": "metric",
+     "id": "value",
+     "x": 150,
+     "y": 0,
+     "sensor": "cpu.temp",
+     "format": "{value:.0f}{unit}",
+     "font_size": 20,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold",
+     "color_rules": [
+      {
+       "above": 75,
+       "color": "$warn"
+      },
+      {
+       "above": 88,
+       "color": "$crit"
+      }
+     ]
+    },
+    {
+     "type": "bar",
+     "id": "bar",
+     "x": 166,
+     "y": 9,
+     "w": 154,
+     "h": 8,
+     "sensor": "cpu.temp",
+     "min": 30,
+     "max": 95,
+     "color": "$accent_deep",
+     "color2": "$accent",
+     "background": "#ffffff10",
+     "radius": 4,
+     "glow": 0.5,
+     "glow_radius": 6,
+     "color_rules": [
+      {
+       "above": 75,
+       "color": "$warn"
+      },
+      {
+       "above": 88,
+       "color": "$crit"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "big-number",
+   "name": "Big number",
+   "size": [
+    160,
+    86
+   ],
+   "widgets": [
+    {
+     "type": "text",
+     "id": "label",
+     "x": 0,
+     "y": 3,
+     "text": "CPU LOAD",
+     "font_size": 13,
+     "color": "$muted",
+     "letter_spacing": 2
+    },
+    {
+     "type": "metric",
+     "id": "value",
+     "x": 116,
+     "y": 20,
+     "sensor": "cpu.load",
+     "format": "{value:.0f}",
+     "font_size": 60,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold",
+     "glow": 0.3
+    },
+    {
+     "type": "text",
+     "id": "unit",
+     "x": 120,
+     "y": 56,
+     "text": "%",
+     "font_size": 24,
+     "color": "$muted"
+    }
+   ]
+  },
+  {
+   "id": "clock",
+   "name": "Clock and date",
+   "size": [
+    240,
+    96
+   ],
+   "widgets": [
+    {
+     "type": "clock",
+     "id": "time",
+     "x": 0,
+     "y": 6,
+     "format": "%H:%M",
+     "font_size": 64,
+     "font": "builtin:Barlow-SemiBold",
+     "color": "$text",
+     "glow": 0.25
+    },
+    {
+     "type": "clock",
+     "id": "date",
+     "x": 2,
+     "y": 76,
+     "format": "%A, %d %B",
+     "font_size": 17,
+     "color": "$muted",
+     "tabular": false
+    }
+   ]
+  },
+  {
+   "id": "weather",
+   "name": "Weather",
+   "size": [
+    220,
+    56
+   ],
+   "widgets": [
+    {
+     "type": "icon",
+     "id": "icon",
+     "x": 0,
+     "y": 6,
+     "icon": "weather",
+     "size": 42,
+     "color": "$muted",
+     "stroke": 1.8,
+     "hide_if_missing": true
+    },
+    {
+     "type": "weather",
+     "id": "temp",
+     "x": 54,
+     "y": 2,
+     "field": "temperature",
+     "format": "{value:.0f}°",
+     "font_size": 32,
+     "font": "builtin:Barlow-SemiBold",
+     "color": "$text",
+     "hide_if_missing": true
+    },
+    {
+     "type": "weather",
+     "id": "desc",
+     "x": 56,
+     "y": 38,
+     "field": "description",
+     "format": "{value}",
+     "font_size": 15,
+     "color": "$muted",
+     "tabular": false,
+     "hide_if_missing": true
+    }
+   ]
+  },
+  {
+   "id": "network",
+   "name": "Network down/up",
+   "size": [
+    300,
+    28
+   ],
+   "widgets": [
+    {
+     "type": "icon",
+     "id": "down-icon",
+     "x": 0,
+     "y": 3,
+     "icon": "download",
+     "size": 20,
+     "color": "$good",
+     "stroke": 2.2
+    },
+    {
+     "type": "metric",
+     "id": "down",
+     "x": 26,
+     "y": 2,
+     "sensor": "net.down",
+     "format": "{value:bytes}/s",
+     "font_size": 20,
+     "color": "$text",
+     "tabular": false
+    },
+    {
+     "type": "icon",
+     "id": "up-icon",
+     "x": 160,
+     "y": 3,
+     "icon": "upload",
+     "size": 20,
+     "color": "$up",
+     "stroke": 2.2
+    },
+    {
+     "type": "metric",
+     "id": "up",
+     "x": 186,
+     "y": 2,
+     "sensor": "net.up",
+     "format": "{value:bytes}/s",
+     "font_size": 20,
+     "color": "$text",
+     "tabular": false
+    }
+   ]
+  },
+  {
+   "id": "fan",
+   "name": "Fan with speed",
+   "size": [
+    156,
+    48
+   ],
+   "widgets": [
+    {
+     "type": "fan",
+     "id": "fan",
+     "x": 0,
+     "y": 0,
+     "w": 48,
+     "h": 48,
+     "sensor": "gpu.fan",
+     "color": "$accent",
+     "max_rpm": 3000
+    },
+    {
+     "type": "metric",
+     "id": "label",
+     "x": 60,
+     "y": 6,
+     "sensor": "gpu.fan",
+     "format": "{label:upper}",
+     "font_size": 14,
+     "color": "$muted",
+     "letter_spacing": 2,
+     "tabular": false,
+     "max_width": 96,
+     "fit": "shrink"
+    },
+    {
+     "type": "metric",
+     "id": "value",
+     "x": 112,
+     "y": 20,
+     "sensor": "gpu.fan",
+     "format": "{value:.0f}",
+     "font_size": 24,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold"
+    },
+    {
+     "type": "text",
+     "id": "unit",
+     "x": 118,
+     "y": 30,
+     "text": "RPM",
+     "font_size": 14,
+     "color": "$muted"
+    }
+   ]
+  },
+  {
+   "id": "history-card",
+   "name": "History card",
+   "size": [
+    420,
+    130
+   ],
+   "widgets": [
+    {
+     "type": "rect",
+     "id": "card",
+     "x": 0,
+     "y": 0,
+     "w": 420,
+     "h": 130,
+     "color": "$card",
+     "color2": "$card2",
+     "radius": 12,
+     "outline": "$edge"
+    },
+    {
+     "type": "text",
+     "id": "title",
+     "x": 16,
+     "y": 17,
+     "text": "CPU HISTORY",
+     "font_size": 13,
+     "color": "$muted",
+     "letter_spacing": 2
+    },
+    {
+     "type": "metric",
+     "id": "value",
+     "x": 404,
+     "y": 10,
+     "sensor": "cpu.load",
+     "format": "{value:.0f}%",
+     "font_size": 24,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold"
+    },
+    {
+     "type": "graph",
+     "id": "graph",
+     "x": 10,
+     "y": 44,
+     "w": 400,
+     "h": 78,
+     "sensor": "cpu.load",
+     "history": 120,
+     "min": 0,
+     "max": 100,
+     "color": "$accent",
+     "fill": true,
+     "fill_fade": true,
+     "smooth": true,
+     "line_width": 2,
+     "grid": 2,
+     "grid_color": "#ffffff0c",
+     "glow": 0.4,
+     "glow_radius": 6
+    }
+   ]
+  },
+  {
+   "id": "cpu-card",
+   "name": "CPU card",
+   "size": [
+    376,
+    186
+   ],
+   "widgets": [
+    {
+     "type": "rect",
+     "id": "card",
+     "x": 0,
+     "y": 0,
+     "w": 376,
+     "h": 186,
+     "color": "$card",
+     "color2": "$card2",
+     "radius": 14,
+     "outline": "$edge"
+    },
+    {
+     "type": "icon",
+     "id": "icon",
+     "x": 16,
+     "y": 14,
+     "icon": "cpu",
+     "size": 22,
+     "color": "$accent",
+     "stroke": 1.9,
+     "glow": 0.5,
+     "glow_radius": 6
+    },
+    {
+     "type": "text",
+     "id": "title",
+     "x": 46,
+     "y": 17,
+     "text": "CPU",
+     "font_size": 16,
+     "color": "$accent",
+     "font": "builtin:Barlow-SemiBold",
+     "letter_spacing": 3
+    },
+    {
+     "type": "metric",
+     "id": "load",
+     "x": 124,
+     "y": 46,
+     "sensor": "cpu.load",
+     "format": "{value:.0f}",
+     "font_size": 58,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold",
+     "glow": 0.3
+    },
+    {
+     "type": "text",
+     "id": "pct",
+     "x": 128,
+     "y": 80,
+     "text": "%",
+     "font_size": 24,
+     "color": "$muted"
+    },
+    {
+     "type": "metric",
+     "id": "power",
+     "x": 18,
+     "y": 112,
+     "sensor": "cpu.power",
+     "format": "{value:.0f} W",
+     "font_size": 16,
+     "color": "$muted",
+     "fallback": ""
+    },
+    {
+     "type": "gauge",
+     "id": "temp-ring",
+     "x": 250,
+     "y": 16,
+     "w": 108,
+     "h": 108,
+     "sensor": "cpu.temp",
+     "min": 20,
+     "max": 100,
+     "thickness": 9,
+     "color": "$accent_deep",
+     "color2": "$accent",
+     "background": "#ffffff0f",
+     "ticks": 8,
+     "tick_color": "#ffffff22",
+     "glow": 0.5,
+     "glow_radius": 6,
+     "color_rules": [
+      {
+       "above": 75,
+       "color": "$warn"
+      },
+      {
+       "above": 88,
+       "color": "$crit"
+      }
+     ]
+    },
+    {
+     "type": "metric",
+     "id": "temp",
+     "x": 304,
+     "y": 54,
+     "sensor": "cpu.temp",
+     "format": "{value:.0f}°",
+     "font_size": 28,
+     "color": "$text",
+     "align": "center",
+     "font": "builtin:Barlow-SemiBold",
+     "fallback": "--",
+     "color_rules": [
+      {
+       "above": 75,
+       "color": "$warn"
+      },
+      {
+       "above": 88,
+       "color": "$crit"
+      }
+     ]
+    },
+    {
+     "type": "text",
+     "id": "temp-label",
+     "x": 304,
+     "y": 89,
+     "text": "TEMP",
+     "font_size": 11,
+     "color": "$muted",
+     "align": "center",
+     "letter_spacing": 2
+    },
+    {
+     "type": "graph",
+     "id": "graph",
+     "x": 12,
+     "y": 136,
+     "w": 352,
+     "h": 42,
+     "sensor": "cpu.load",
+     "history": 90,
+     "min": 0,
+     "max": 100,
+     "color": "$accent",
+     "fill": true,
+     "fill_fade": true,
+     "smooth": true,
+     "line_width": 2,
+     "glow": 0.35,
+     "glow_radius": 6
+    }
+   ]
+  },
+  {
+   "id": "section",
+   "name": "Section with three rows",
+   "size": [
+    450,
+    172
+   ],
+   "widgets": [
+    {
+     "type": "rect",
+     "id": "card",
+     "x": 0,
+     "y": 0,
+     "w": 450,
+     "h": 172,
+     "color": "$card",
+     "color2": "$card2",
+     "radius": 12,
+     "outline": "$edge"
+    },
+    {
+     "type": "icon",
+     "id": "icon",
+     "x": 16,
+     "y": 12,
+     "icon": "gpu",
+     "size": 22,
+     "color": "$accent",
+     "stroke": 1.9,
+     "glow": 0.5,
+     "glow_radius": 6
+    },
+    {
+     "type": "text",
+     "id": "title",
+     "x": 48,
+     "y": 13,
+     "text": "GPU",
+     "font_size": 19,
+     "color": "$accent",
+     "font": "builtin:Barlow-SemiBold",
+     "letter_spacing": 3
+    },
+    {
+     "type": "rect",
+     "id": "rule",
+     "x": 16,
+     "y": 44,
+     "w": 418,
+     "h": 2,
+     "color": "$accent",
+     "color2": "#00000000",
+     "gradient": "horizontal",
+     "radius": 1
+    },
+    {
+     "type": "text",
+     "id": "label-0",
+     "x": 16,
+     "y": 66,
+     "text": "TEMP",
+     "font_size": 16,
+     "color": "$muted",
+     "letter_spacing": 2
+    },
+    {
+     "type": "metric",
+     "id": "value-0",
+     "x": 229,
+     "y": 60,
+     "sensor": "gpu.temp",
+     "format": "{value:.0f}{unit}",
+     "font_size": 23,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold"
+    },
+    {
+     "type": "bar",
+     "id": "bar-0",
+     "x": 247,
+     "y": 71,
+     "w": 183,
+     "h": 8,
+     "sensor": "gpu.temp",
+     "min": 30,
+     "max": 95,
+     "color": "$accent_deep",
+     "color2": "$accent",
+     "background": "#ffffff0d",
+     "radius": 4,
+     "glow": 0.55,
+     "glow_radius": 6
+    },
+    {
+     "type": "text",
+     "id": "label-1",
+     "x": 16,
+     "y": 102,
+     "text": "POWER",
+     "font_size": 16,
+     "color": "$muted",
+     "letter_spacing": 2
+    },
+    {
+     "type": "metric",
+     "id": "value-1",
+     "x": 229,
+     "y": 96,
+     "sensor": "gpu.power",
+     "format": "{value:.0f} W",
+     "font_size": 23,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold"
+    },
+    {
+     "type": "bar",
+     "id": "bar-1",
+     "x": 247,
+     "y": 107,
+     "w": 183,
+     "h": 8,
+     "sensor": "gpu.power",
+     "min": 0,
+     "max": 350,
+     "color": "$accent_deep",
+     "color2": "$accent",
+     "background": "#ffffff0d",
+     "radius": 4,
+     "glow": 0.55,
+     "glow_radius": 6
+    },
+    {
+     "type": "text",
+     "id": "label-2",
+     "x": 16,
+     "y": 138,
+     "text": "FAN",
+     "font_size": 16,
+     "color": "$muted",
+     "letter_spacing": 2
+    },
+    {
+     "type": "metric",
+     "id": "value-2",
+     "x": 229,
+     "y": 132,
+     "sensor": "gpu.fan",
+     "format": "{value:.0f} RPM",
+     "font_size": 23,
+     "color": "$text",
+     "align": "right",
+     "font": "builtin:Barlow-SemiBold"
+    },
+    {
+     "type": "bar",
+     "id": "bar-2",
+     "x": 247,
+     "y": 143,
+     "w": 183,
+     "h": 8,
+     "sensor": "gpu.fan",
+     "min": 0,
+     "max": 3000,
+     "color": "$accent_deep",
+     "color2": "$accent",
+     "background": "#ffffff0d",
+     "radius": 4,
+     "glow": 0.55,
+     "glow_radius": 6
+    }
+   ]
+  },
+  {
+   "id": "icon-label",
+   "name": "Icon with label",
+   "size": [
+    160,
+    26
+   ],
+   "widgets": [
+    {
+     "type": "icon",
+     "id": "icon",
+     "x": 0,
+     "y": 1,
+     "icon": "temperature",
+     "size": 22,
+     "color": "$accent",
+     "stroke": 2
+    },
+    {
+     "type": "text",
+     "id": "label",
+     "x": 30,
+     "y": 5,
+     "text": "CPU TEMP",
+     "font_size": 15,
+     "color": "$muted",
+     "letter_spacing": 2
+    }
+   ]
+  }
+ ],
+ "tokens": {
+  "accent": "#2EE6D6",
+  "accent_deep": "#0F6B64",
+  "text": "#E8EEF4",
+  "muted": "#93A1B2",
+  "dim": "#5F6E80",
+  "card": "#111822",
+  "card2": "#0C1219",
+  "edge": "#1F2A36",
+  "good": "#34D399",
+  "up": "#F472B6",
+  "warn": "#F5C46B",
+  "crit": "#F87171"
+ }
+}

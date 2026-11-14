@@ -403,6 +403,116 @@ def test_on_a_bar_on_end_design_edits_the_upright_version_and_says_so(app_url, i
         waits_for(page, lambda: settings_config().theme == "lumen-mine-vertical")
 
 
+def test_on_a_panel_of_its_own_size_design_says_which_version_it_edits(app_url, isolated_home):  # noqa: F811
+    """On the 12.3" Design opens Lumen's version for that size, and said of it that it was "for
+    a panel mounted vertically": it names the size the version is for."""
+    import json
+
+    from test_app_browser import app_answer
+
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-12.3-usb")
+    answer = app_answer()
+    answer["panel"] = {**answer["panel"], "theme": "lumen", "model": "turing-12.3-usb",
+                       "size": [1920, 720]}  # fmt: skip
+
+    def app(route, request):
+        if request.method != "GET":
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    with browser_page(app_url, routes={"**/api/app": app}) as page:
+        page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-1920x720'")
+        version = page.locator(".inspector .inspector-version")
+        expect(version).to_contain_text("The version of Lumen for a panel of 1920 × 720")
+        expect(version).not_to_contain_text("vertically")
+
+
+# how many lines an element's text stands on
+LINES = """(el) => {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  return new Set([...range.getClientRects()].map((box) => Math.round(box.top))).size;
+}"""
+
+
+def test_design_keeps_its_words_whole_in_a_small_window(app_url, isolated_home):  # noqa: F811
+    """What a look over every view, language and window size found in Design. At the window's
+    smallest size the zoom bar broke "1 : 1" into two lines (it had half a narrow stage to
+    itself). The way to the fine-tuning cut its list short with an ellipsis, in every language.
+    The way to Look left its chevron alone on a second line where the words just filled the
+    first. And the Russian "Изображения" stood out of its button in the rail."""
+    from libre_panel import i18n
+
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, size=(1100, 700)) as page:
+        assert page.locator(".zoom-bar .zoom-text", has_text="1 : 1").evaluate(LINES) == 1
+        details = page.locator(".inspector .details-button span")
+        expect(details).to_contain_text("Fine-tuning: ")
+        assert details.evaluate("(el) => el.scrollWidth - el.clientWidth") <= 0  # all of it
+        assert details.evaluate("(el) => getComputedStyle(el).textOverflow") == "clip"
+        end = page.locator(".inspector .inspector-link .link-end")
+        expect(end).to_have_text("Look")
+        assert end.locator("svg").count() == 1  # the chevron goes where the last word goes
+        assert end.evaluate("(el) => getComputedStyle(el).whiteSpace") == "nowrap"
+    i18n.set_language("ru")
+    with browser_page(app_url, size=(1100, 700)) as page:
+        beyond = js(
+            page,
+            """[...document.querySelectorAll('.rail-item')].map((button) => {
+              const label = button.querySelector('span');
+              if (!label) return 0;
+              const inner = label.getBoundingClientRect();
+              const outer = button.getBoundingClientRect();
+              return Math.max(outer.left - inner.left, inner.right - outer.right);
+            })""",
+        )
+        assert len(beyond) >= 4 and max(beyond) <= 0, beyond
+        rail = page.locator(".rail").bounding_box()
+        assert 68 < rail["width"] < 110  # (wider than with the short words, by what they need)
+
+
+def test_a_fine_grid_does_not_lie_over_the_panel_as_a_mesh(app_url, isolated_home):  # noqa: F811
+    """Lumen's grid is fine (96 × 48 cells, 96 × 72 on the 12.3″): drawn cell by cell, none
+    smaller than six pixels, it lay over the clock and the graph as a mesh of thousands of
+    dashed boxes. Cells too small to be told apart on the screen are not drawn while nothing
+    moves; while a module does, dots stand at the steps it moves by. Cells large enough to be
+    seen are drawn as they were."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url) as page:
+        page.wait_for_function("window.libre.store.get().render.grid?.columns === 96")
+        cells = page.locator(".overlay .cell")
+        dots = page.locator(".overlay .cell-dots")
+        expect(cells).to_have_count(0)
+        expect(dots).to_have_count(0)
+        box = page.locator(".overlay .box.module").first.bounding_box()
+        start = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.move(*start)
+        page.mouse.down()
+        page.mouse.move(start[0] + 40, start[1], steps=6)
+        expect(dots).to_have_count(1)  # one lattice, not a box for every cell
+        expect(cells).to_have_count(0)
+        apart = dots.evaluate("(el) => getComputedStyle(el).backgroundSize")
+        assert all(float(px) >= 16 for px in re.findall(r"[\d.]+", apart)), apart
+        page.mouse.move(*start, steps=6)
+        page.mouse.up()
+        expect(dots).to_have_count(0)
+        # a grid of large cells: each free one is drawn
+        js(
+            page,
+            """window.libre.doc.edit('grid', (theme) => {
+              theme.widgets = theme.widgets.filter((widget) => widget.id === 'card');
+              Object.assign(theme.widgets[0], { col: 0, row: 0, cols: 2, rows: 2 });
+              theme.grid = { columns: 8, rows: 2, gap: 12, margin: 16 };
+            })""",
+        )
+        page.wait_for_function("window.libre.store.get().render.grid?.columns === 8")
+        expect(cells).to_have_count(12)  # (8 × 2, less the four the card slot lies on)
+        expect(dots).to_have_count(0)
+
+
 def test_the_volume_is_switched_on_for_every_screen_and_its_look_tried_on_in_look(
     app_url,  # noqa: F811
     isolated_home,

@@ -1,0 +1,43 @@
+[package]
+name = "lp-services"
+description = "Libre Panel's services and the host between them and the main loop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }
+lp-render = { path = "../render" }
+lp-pixels = { path = "../pixels" }
+lp-text = { path = "../text" }
+lp-i18n = { path = "../i18n" }
+lp-devices = { path = "../devices" }
+lp-decode = { path = "../decode" }
+lp-sensors = { path = "../sensors" }
+indexmap = "2"
+num-bigint = "0.4"
+sha2 = "0.10"
+getrandom = "0.2"
+# the databases of Amazon Games and Lutris (read only)
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[target.'cfg(windows)'.dependencies]
+# the registry (the launchers' games, Steam's folder), the programs that run, the window in
+# front and the folders the shell knows (Downloads, Pictures)
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Wdk_System_SystemInformation",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_SystemInformation",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

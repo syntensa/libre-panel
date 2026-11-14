@@ -84,13 +84,7 @@ impl Source {
     fn new(w: usize, h: usize, pixels: Vec<u8>) -> Source {
         let shown = pixels
             .chunks_exact(w * 4)
-            .map(|row| {
-                let alpha = |x: &usize| row[x * 4 + 3] != 0;
-                match (0..w).find(alpha) {
-                    Some(first) => (first, (first..w).rfind(alpha).map_or(first + 1, |x| x + 1)),
-                    None => (0, 0),
-                }
-            })
+            .map(|row| shown_in(row, w))
             .collect();
         Source {
             w,
@@ -99,6 +93,31 @@ impl Source {
             shown,
         }
     }
+}
+
+/// Of a row of `w` RGBA pixels: its first column whose alpha is not 0 and the one after its
+/// last (0, 0 for none). Four pixels whose alphas are all 0 are passed over at once (a strip's
+/// rows above its curve are clear).
+fn shown_in(row: &[u8], w: usize) -> (usize, usize) {
+    const ALPHAS: u128 = 0xFF00_0000_FF00_0000_FF00_0000_FF00_0000;
+    let clear4 = |x: usize| {
+        let four: [u8; 16] = row[x * 4..x * 4 + 16].try_into().expect("four pixels");
+        u128::from_le_bytes(four) & ALPHAS == 0
+    };
+    let alpha = |x: &usize| row[x * 4 + 3] != 0;
+    let mut x = 0;
+    while x + 4 <= w && clear4(x) {
+        x += 4;
+    }
+    let Some(first) = (x..w).find(alpha) else {
+        return (0, 0);
+    };
+    let mut end = w;
+    while end >= first + 4 && clear4(end - 4) {
+        end -= 4;
+    }
+    let last = (first..end).rfind(alpha).unwrap_or(first);
+    (first, last + 1)
 }
 
 /// The most rotors kept (fan.rs): those used last stay, the one used longest ago goes first
@@ -1424,6 +1443,35 @@ mod tests {
 
     fn rgba(w: usize, h: usize, p: [u8; 4]) -> Vec<u8> {
         p.repeat(w * h)
+    }
+
+    #[test]
+    fn where_a_row_shows_is_found_four_pixels_at_a_time_as_one_at_a_time() {
+        // (rows of every width up to 40, clear but for a few pixels anywhere, alphas of 0, 1
+        // and 255 among colours that are not 0)
+        let mut seed = 0x0123_4567_89AB_CDEFu64;
+        let mut next = |n: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % n as u64) as usize
+        };
+        for _ in 0..20000 {
+            let w = 1 + next(40);
+            let mut row = vec![0u8; w * 4];
+            for px in row.chunks_exact_mut(4) {
+                px[..3].copy_from_slice(&[255, 128, 7]);
+            }
+            for _ in 0..next(4) {
+                row[next(w) * 4 + 3] = [1, 255, 90][next(3)];
+            }
+            let alpha = |x: &usize| row[x * 4 + 3] != 0;
+            let want = match (0..w).find(alpha) {
+                Some(first) => (first, (first..w).rfind(alpha).map_or(first + 1, |x| x + 1)),
+                None => (0, 0),
+            };
+            assert_eq!(shown_in(&row, w), want, "{row:?}");
+        }
     }
 
     #[test]

@@ -17,6 +17,7 @@ mod draw;
 mod encoder;
 mod fan;
 mod globe;
+mod heap;
 // (the card's pictures as the panels take them: mf.rs's, on Windows; its tests everywhere)
 #[cfg_attr(not(windows), allow(dead_code))]
 mod h264;
@@ -445,7 +446,12 @@ fn small_pages() {
 #[cfg(not(target_os = "linux"))]
 fn small_pages() {}
 
+/// Large blocks kept for the next frame (heap.rs), on Windows.
+#[global_allocator]
+static HEAP: heap::Global = heap::Global::new(std::alloc::System);
+
 fn main() -> ExitCode {
+    heap::install(&HEAP);
     small_pages();
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {

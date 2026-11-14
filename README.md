@@ -15,6 +15,12 @@
 </p>
 
 <p align="center">
+  <b>New in 0.9: rewritten in Rust.</b> A third less memory, up to 38 % less processor and a
+  quicker start, with the same pictures on the panel, pixel for pixel
+  (<a href="#rewritten-in-rust">the numbers</a>).
+</p>
+
+<p align="center">
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-windows.png" width="300" alt="Download for Windows: the setup, for Windows 10 and 11, 64-bit"></a>
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-linux.png" width="260" alt="Download for Linux: the AppImage, x86-64"></a>
   <br>
@@ -36,6 +42,7 @@
 
 <p align="center">
   <b>
+    <a href="#rewritten-in-rust">New in 0.9</a> ·
     <a href="#features">Features</a> ·
     <a href="#the-app">The app</a> ·
     <a href="#themes">Themes</a> ·
@@ -86,6 +93,29 @@
   Kipye · UsbPCMonitor · XuanFang · Lian Li · Thermalright · BeadaPanel · NZXT Kraken ·
   Thermaltake · <a href="#supported-panels">every panel</a></sub>
 </p>
+
+## Rewritten in Rust
+
+> *"Just rewrite it in Rust!"* — the internet's oldest joke. Well, we're not joking: since 0.9,
+> **Libre Panel is written in Rust**.
+
+The drawing, the drivers of all 54 panel models, the sensors, the services, the app's server,
+its window and tray: some 200,000 lines of Rust. Your panel shows the same pictures, pixel for
+pixel; your PC does a lot less for them. Settings and themes carry over as they are.
+
+| 12.3", 25 fps | 0.8.0 | 0.9.0 | Saved |
+|---|---|---|---|
+| Lumen | 32–36 % CPU, 145–156 MB | **21–23 % CPU, 104 MB** | 34 % CPU, 30 % RAM |
+| Arena | 37–38 % CPU, 147–150 MB | **30–33 % CPU, 99 MB** | 17 % CPU, 34 % RAM |
+| Encore | 12 % CPU, 134 MB | **7 % CPU, 92–94 MB** | 38 % CPU, 31 % RAM |
+
+<sub>Libre Panel's app and engine together, through the engine to the panel: processor in % of
+one core, private memory; the demo's readings, a minute each, in turn on the same Linux machine.
+The first picture is on the panel 0.4 to 1.0 s after the start, instead of 0.7 to 2.0 s.</sub>
+
+**Proven, not promised.** The Python app stays in the repository as the reference: 525
+comparison tests hold the new program against it with every change, and each of the 99 built-in
+themes, still and moving, matches it pixel for pixel ([all of 0.9.0](CHANGELOG.md)).
 
 ## Features
 
@@ -148,9 +178,10 @@ that, and round again.
 
 <p><img src="docs/media/ai-card.gif" width="100%" alt="AI activity on Lumen: the weather card gives way by itself to Claude Code at work, with its moving sign, the tool at work, its session, what today cost and how much of five hours, seven days and the context is used; then it waits for you, in amber"></p>
 
-Claude Code and Codex on this PC: working, waiting for you or idle, with the tool at work, what today cost and how much of the plan's limits is used. On Lumen
-the AI card comes up by itself while one of them works; **Agents** gives them a screen of their
-own. Nothing leaves this PC ([AI activity](docs/CONFIGURATION.md#ai-activity)).
+Claude Code and Codex on this PC: working, waiting for you or idle, with the tool at work, what
+today cost and how much of the plan's limits is used. On Lumen the AI card comes up by itself
+while one of them works; **Agents** gives them a screen of their own. Nothing leaves this PC
+([AI activity](docs/CONFIGURATION.md#ai-activity)).
 
 ### Several panels at once
 
@@ -410,7 +441,7 @@ administrator rights.
 ### With Python
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.8.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.0"
 libre-panel tray                    # the background app with its tray icon; opens its window
 libre-panel autostart enable        # start it whenever you log in
 ```
@@ -553,22 +584,23 @@ FanControl's fan curves, if you use FanControl.
 
 No, it is a false alarm. A detection whose name ends in `!ml`, as `Trojan:Win32/Bearfoos.A!ml`
 does, is a guess of Defender's machine learning, not a match with known malware, and such
-guesses hit new programs that are not signed and are built with PyInstaller, as Libre Panel's
-are. To be sure that your file is the one built here:
+guesses hit new programs that are not signed, as Libre Panel's are not yet. To be sure that
+your file is the one built here:
 
 - **Its SHA-256** is the one in `SHA256SUMS` on the release's page. In PowerShell:
-  `Get-FileHash .\libre-panel-0.8.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
+  `Get-FileHash .\libre-panel-0.9.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
 - **Where it was built:** from 0.8.0 on, GitHub signs for every download that this
   repository's release workflow built it, and from which commit:
-  `gh attestation verify libre-panel-0.8.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
+  `gh attestation verify libre-panel-0.9.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
 
 When it is, allow it in *Windows Security → Virus & threat protection → Protection history*
 (*Actions → Allow on device*), run the setup again, and report the file to Microsoft as a false
 alarm ([submit a file](https://www.microsoft.com/en-us/wdsi/filesubmission), *Incorrectly
 detected as malware/malicious*). When it is not, it is not from here: delete it, and download
 Libre Panel from its [releases](https://github.com/syntensa/libre-panel/releases) only. From
-0.8.0 on the programs also say who made them, and the loader they start with is compiled for
-Libre Panel alone, not the one many programs share; signing the downloads is planned.
+0.8.0 on the programs also say who made them, and from 0.9.0 on they are compiled from Libre
+Panel's own Rust code, without PyInstaller's loader that many programs share; signing the
+downloads is planned.
 </details>
 
 <details>

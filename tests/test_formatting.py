@@ -42,6 +42,22 @@ def test_rates_and_sizes_as_spur_ii_sets_them():
     assert safe_format("{value:gb} {unit}", 2048, "MB") == "2.0 MB"  # the unit stays the reading's
 
 
+def test_an_amount_of_data_is_counted_from_the_unit_its_reading_comes_in():
+    # the memory comes in GB: taken for bytes, 16.4 GB read "16 B" (two shared themes showed it)
+    assert safe_format("{value:bytes}", 16.4, "GB") == "16.4 GB"
+    assert safe_format("{value:bytes}", 32, "GiB") == "32.0 GB"
+    assert safe_format("{value:bytes}", 0.5, "GB") == "512.0 MB"
+    assert safe_format("{value:bytes}", 13824, "MB") == "13.5 GB"  # a graphics card's memory
+    assert safe_format("{value:bytes}/s", 12, "MB/s") == "12.0 MB/s"
+    assert safe_format("{value:bytes}", 20000, "TB") == "20000.0 TB"
+    # a count of bytes as before, in steps of 1000; so is a reading of any other unit
+    assert safe_format("{value:bytes}", 16.4) == "16 B"
+    assert safe_format("{value:bytes}", 2_400_000, "B") == "2.4 MB"
+    assert safe_format("{value:bytes}/s", 2_400_000, "B/s") == "2.4 MB/s"
+    assert safe_format("{value:bytes}", 2_400_000, "W") == "2.4 MB"
+    assert human_bytes(1536, "KiB") == "1.5 MB"
+
+
 def test_texts_in_capitals():
     assert safe_format("{value:upper}", "Round report") == "ROUND REPORT"
     assert safe_format("{label:upper}: {value:.0f}", 7, label="CPU temp") == "CPU TEMP: 7"

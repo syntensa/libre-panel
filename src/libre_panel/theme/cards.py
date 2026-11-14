@@ -481,9 +481,12 @@ def _rows() -> dict[str, tuple[tuple[str, str, str], ...]]:
 
 
 # What a PC often cannot tell stays on show as "--" with its name, so the column keeps its
-# shape: the modules' temperature needs administrator rights, their speed a readable SMBIOS
-# table. The other sources leave a row out that has no reading.
-_KEPT = ("mem",)
+# shape: the memory modules' temperature needs administrator rights, their speed a readable
+# SMBIOS table; the processor's temperature and power need the sensor service on Windows and
+# the power its rights on Linux, and a graphics chip in the processor tells neither. (Those
+# two left their rows out until 0.9: the clock stood alone at the foot of an empty column.)
+# The other sources leave a row out that has no reading.
+_KEPT = ("cpu", "gpu", "mem")
 
 
 def _heat_of(b: _Build, sensor: str) -> list[dict[str, Any]]:
@@ -637,8 +640,9 @@ def build_instrument(b: _Build, src: M.Source) -> None:
 
 def _sample(number: str, unit: str) -> str:
     """The widest a reading may be, as text to measure: a clock, a fan or the memory's speed in
-    four digits."""
-    if ".1f" in number:
+    four digits, a size with its tenth (``gb`` writes one: the graphics card's memory was
+    measured as three digits, and "13.3" stood against its name)."""
+    if ".1f" in number or ":gb}" in number:
         return "00.0"
     return "0000" if unit in ("MHz", "RPM", "MT/s") else "000"
 

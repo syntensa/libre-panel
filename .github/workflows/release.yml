@@ -12,6 +12,10 @@ on:
         description: "Version for a draft release (e.g. 0.7.0rc2); empty: only build and test"
         required: false
         default: ""
+      from_run:
+        description: "With a draft: the CI run (its id) whose downloads it carries, built and tried there; empty: built and tried anew"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -25,7 +29,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev,usb,tray]"
+      - run: pip install -e .
       - name: The tag matches the version
         if: startsWith(github.ref, 'refs/tags/v') || inputs.draft != ''
         env:
@@ -37,7 +41,6 @@ jobs:
             exit 1
           fi
           grep -q "^## $version" CHANGELOG.md || { echo "::error::CHANGELOG.md has no section $version"; exit 1; }
-      - run: pytest -q
 
   python-package:
     timeout-minutes: 15
@@ -55,250 +58,28 @@ jobs:
           name: python-package
           path: dist/*
 
-  standalone:
-    # Build, package and test on each system: the program folder, then what
-    # people download (Windows setup, Linux AppImage), which is installed,
-    # started as autostart/double-click would, and removed.
-    timeout-minutes: 60
+  app:
+    # Libre Panel in Rust, built and tried as CI builds and tries it on every push (ci.yml): the
+    # Windows setup and portable zip (its job `try`: the setup installed for all users with every
+    # box, run and uninstalled), the Linux AppImage and archive (its job `appimage`: started as
+    # autostart starts it, with and without a tray; the archive unpacked and drawn from), after
+    # every comparison with the Python app and every test
     needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            name: windows-x64
-          # the oldest Ubuntu still offered: an AppImage takes glibc from the system it runs
-          # on, so it is built against the oldest one it is meant for (the AppImage catalog
-          # tests on the oldest LTS still in standard support; test_appimage.sh checks it)
-          - os: ubuntu-22.04
-            name: linux-x64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - run: pip install ".[usb,serial,tray,media,mqtt,screen]"
-      - name: PyInstaller, on Windows its loader compiled here
-        # Every program of the Windows download starts with PyInstaller's loader. The one it
-        # ships ready-made is the same file in countless programs, malware among them, and
-        # antivirus programs that judge by likeness took Libre Panel's for a trojan
-        # (Defender's "Trojan:Win32/Bearfoos.A!ml", 0.7.10): compiled from PyInstaller's
-        # source by this runner's compiler, it is Libre Panel's own. own_loader.py checks that
-        # it is not the shipped one.
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = Windows ]; then
-            PYINSTALLER_COMPILE_BOOTLOADER=1 pip install --no-binary pyinstaller pyinstaller
-            version=$(python -c "from importlib.metadata import version; print(version('pyinstaller'))")
-            pip download "pyinstaller==$version" --only-binary :all: --no-deps -d shipped-pyinstaller
-            python packaging/windows/own_loader.py shipped-pyinstaller/*.whl
-          else
-            pip install pyinstaller
-          fi
-      - name: Version
-        shell: bash
-        run: |
-          version=$(python -c "from importlib.metadata import version; print(version('libre-panel'))")
-          # four numbers for Windows: a hotfix's (0.6.8.1) as it is, 0.6.8 and 0.7.0rc1 with a 0
-          numeric=$(python -c "import re, sys; v = sys.argv[1]; n = re.findall(r'\d+', v)[:4 if re.fullmatch(r'[\d.]+', v) else 3]; print('.'.join((n + ['0'] * 4)[:4]))" "$version")
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "NUMERIC=$numeric" >> "$GITHUB_ENV"
-          case "${{ runner.os }}" in
-            Windows) echo "CLI=dist/libre-panel/libre-panel.exe" >> "$GITHUB_ENV"
-                     echo "GUI=dist/libre-panel/LibrePanel.exe" >> "$GITHUB_ENV" ;;
-            Linux)   echo "CLI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV"
-                     echo "GUI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV" ;;
-          esac
-      - name: LibreHardwareMonitor libraries and the app's window (Windows)
-        # From NuGet, each package checked against the SHA-256 pinned in the script; they
-        # are not in the repository. The spec bundles them, with pythonnet, which pywebview
-        # (the app's window, WebView2) uses too.
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          pip install ".[lhm,window]"
-          python packaging/windows/fetch_lhm.py
-      - name: The sensor service (Windows)
-        # A .NET program of its own (sensorhost/: no Python, no pythonnet), built against the
-        # libraries just fetched, which go beside it into "lhm"; the spec puts the folder into
-        # the downloads as "sensors". The .NET Framework's reference assemblies come from NuGet,
-        # pinned in sensorhost/packages.lock.json. CI's job sensor-host tests it against the
-        # Python service.
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          dotnet --version
-          dotnet build sensorhost -c Release -p:RestoreLockedMode=true \
-            -p:InformationalVersion="$VERSION" -p:FileVersion="$NUMERIC"
-      - name: ffmpeg, PresentMon and PawnIO's installer
-        # From the pages of their projects, each file checked against the SHA-256 pinned in the
-        # script, ffmpeg also against the licence it is passed on under (GPL, with libx264, not
-        # non-free); they are not in the repository. The spec puts them next to the program
-        # as "tools". Windows: ffmpeg, PresentMon and PawnIO's installer; Linux: ffmpeg.
-        shell: bash
-        run: python packaging/fetch_tools.py
-      - name: MinGW and libx264 (MSYS2, Windows)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        id: msys2
-        with:
-          msystem: MINGW64
-          update: false
-          # (x264's library alone: the package mingw-w64-x86_64-x264 is its program, which
-          # brings ffmpeg and a hundred more, a download that once broke off)
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-libx264
-      - name: The version of MSYS2's libx264
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: echo "X264_PACKAGE=$(pacman -Q mingw-w64-x86_64-libx264)" >> "$(cygpath -u "$GITHUB_ENV")"
-      - name: libx264 (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends libx264-dev
-          echo "X264_PACKAGE=libx264-dev $(dpkg-query -W -f='${Version}' libx264-dev)" >> "$GITHUB_ENV"
-      - name: Libre Panel's engine
-        # Built from engine/ with libx264 linked in (no library of x264's to carry beside it),
-        # put next to ffmpeg in the tools and said in SOURCES.txt with the x264 it carries and
-        # where that one's source is (packaging/add_engine.py); check_tools.py runs it below.
-        shell: bash
-        run: |
-          cd engine
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            mingw="$(cygpath -u '${{ steps.msys2.outputs.msys2-location }}')/mingw64"
-            export PATH="$mingw/bin:$PATH" CC=gcc AR=ar X264_DIR="$(cygpath -m "$mingw")" X264_STATIC=1
-            export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=gcc RUSTFLAGS="-C target-feature=+crt-static"
-            rustup target add x86_64-pc-windows-gnu
-            cargo build --release --target x86_64-pc-windows-gnu
-            built="target/x86_64-pc-windows-gnu/release/libre-panel-engine.exe"
-            recipe="MSYS2's recipe of the package: https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-x264"
-            target="--cargo-target x86_64-pc-windows-gnu"
-          else
-            X264_STATIC=1 cargo build --release
-            built="target/release/libre-panel-engine"
-            recipe="Ubuntu's source package: https://launchpad.net/ubuntu/+source/x264 (apt-get source x264)"
-            target=""
-          fi
-          cd ..
-          python packaging/add_engine.py packaging/bundled-tools "engine/$built" $target \
-            --x264 "from $X264_PACKAGE" \
-            --x264-source "x264: https://code.videolan.org/videolan/x264 (the commit its version names)" \
-            --x264-source "$recipe"
-      - name: Build
-        run: pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel.spec
-      - name: The programs say who made them (Windows)
-        # Their version resource (the spec's version_resource): what Explorer and Windows
-        # Security show of a program, and what an antivirus program weighs; the setup has its
-        # own from libre-panel.iss.
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          foreach ($exe in "LibrePanel.exe", "libre-panel.exe", "sensors/libre-panel-sensors.exe") {
-            $info = (Get-Item "dist/libre-panel/$exe").VersionInfo
-            if ($info.CompanyName -ne "Libre Panel contributors" -or $info.ProductVersion -ne $env:VERSION) {
-              throw "$exe says nothing of itself: $($info | Format-List | Out-String)"
-            }
-            "{0}: {1}, {2}, {3}" -f $exe, $info.FileDescription, $info.CompanyName, $info.ProductVersion
-          }
-      - name: Smoke test (render)
-        shell: bash
-        run: '"$CLI" preview lumen -o smoke.png'
-      - name: Smoke test (ffmpeg and PresentMon in the program folder)
-        # Every file is the one that was fetched; ffmpeg lists libx264 and encodes the video
-        # mode's stream; PresentMon starts; the app, started from this folder, finds them there
-        # before anything on the PATH.
-        shell: bash
-        run: python packaging/check_tools.py dist/libre-panel
-      - name: Smoke test (LibreHardwareMonitor in the bundle)
-        # Loads the bundled libraries through pythonnet and opens them. Needs no
-        # administrator rights; the CPU's sensors being out of reach is not a failure.
-        if: runner.os == 'Windows'
-        timeout-minutes: 5
-        shell: bash
-        run: '"$CLI" sensors --check-lhm'
-      - name: Smoke test (the sensor service in the bundle)
-        # The service's own program, in "sensors" with only what it needs, opens
-        # LibreHardwareMonitor on every kind of hardware and says what it finds. As a service,
-        # installed by the setup, it is tested in test_installer.py below.
-        if: runner.os == 'Windows'
-        timeout-minutes: 5
-        shell: bash
-        run: dist/libre-panel/sensors/libre-panel-sensors.exe --check
-      - name: Smoke test (the app's window in the bundle)
-        # Finds pywebview's WinForms backend with WebView2 and starts the .NET Framework,
-        # without opening a window (there is no desktop here). A runner without the WebView2
-        # runtime is said in the output; the build is what is tested.
-        if: runner.os == 'Windows'
-        timeout-minutes: 5
-        shell: bash
-        run: '"$CLI" window --check'
-      - name: Smoke test (the app's window opens)
-        # A real window, minimized, with the options the app's own window starts with, until
-        # its page has loaded: --check alone only proves that the backend loads (0.5.0's window
-        # passed it and then died at once on every PC, at an icon .NET could not use).
-        if: runner.os == 'Windows'
-        timeout-minutes: 5
-        shell: bash
-        run: '"$CLI" window --check --open'
-      - name: Smoke test (serial and USB libraries in the bundle)
-        shell: bash
-        run: |
-          out=$("$CLI" devices 2>&1)
-          echo "$out"
-          if grep -q "is not installed" <<<"$out"; then exit 1; fi
-      - name: Smoke test (background app, started as at login)
-        shell: bash
-        run: python packaging/smoke_test.py --tools "$GUI" tray --background
-
-      - name: Windows setup
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Copy-Item LICENSE, README.md, NOTICE.md dist/libre-panel/
-          # the zip keeps its settings in the folder "data" beside the program (config.portable_dir)
-          Copy-Item packaging/windows/portable.txt dist/libre-panel/
-          7z a "dist/libre-panel-$env:VERSION-windows-x64-portable.zip" ./dist/libre-panel/*
-          Remove-Item dist/libre-panel/portable.txt  # (not for the setup)
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
-          & $iscc "/DAppVersion=$env:VERSION" "/DNumericVersion=$env:NUMERIC" packaging\windows\libre-panel.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Test the Windows setup (install, run, uninstall)
-        # for all users with every task: the sensor service is installed, started, read
-        # through (as a plain user too, where the runner's logon allows) and removed again
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: python packaging/windows/test_installer.py "dist/libre-panel-$env:VERSION-windows-x64-setup.exe"
-
-      - name: Linux AppImage and archive
-        if: runner.os == 'Linux'
-        run: |
-          cp LICENSE README.md NOTICE.md dist/libre-panel/
-          tar -C dist -czf "dist/libre-panel-$VERSION-linux-x64.tar.gz" libre-panel
-          packaging/linux/build_appimage.sh "$VERSION" "dist/Libre_Panel-$VERSION-x86_64.AppImage"
-      - name: Test the AppImage (headless and on an X11 tray)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update && sudo apt-get install -y xvfb stalonetray
-          packaging/linux/test_appimage.sh "dist/Libre_Panel-$VERSION-x86_64.AppImage"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.name }}
-          if-no-files-found: error
-          path: |
-            dist/*.zip
-            dist/*-setup.exe
-            dist/*.tar.gz
-            dist/*.AppImage
+    # (not where a draft carries the downloads of a CI run that built and tried them: from_run)
+    if: ${{ !inputs.from_run }}
+    uses: ./.github/workflows/ci.yml
 
   github-release:
     timeout-minutes: 15
-    needs: [python-package, standalone]
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.draft != ''
+    needs: [python-package, app]
+    if: >-
+      !cancelled() && needs.python-package.result == 'success' &&
+      (needs.app.result == 'success' || (inputs.from_run && needs.app.result == 'skipped')) &&
+      (startsWith(github.ref, 'refs/tags/v') || inputs.draft != '')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read  # (the downloads of the CI run a draft carries: from_run)
       id-token: write  # (GitHub's signature on where each file was built: the attestations)
       attestations: write
     env:
@@ -308,8 +89,43 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
+          name: python-package
           path: artifacts
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.from_run }}
+        with:
+          name: libre-panel-rust-setup
+          path: artifacts
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.from_run }}
+        with:
+          name: libre-panel-rust-appimage
+          path: artifacts
+      # (a draft of the downloads a CI run built and tried: its jobs `try` and `appimage`)
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.from_run }}
+        with:
+          name: libre-panel-rust-setup
+          path: artifacts
+          run-id: ${{ inputs.from_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.from_run }}
+        with:
+          name: libre-panel-rust-appimage
+          path: artifacts
+          run-id: ${{ inputs.from_run }}
+          github-token: ${{ github.token }}
+      - name: The files under the names the app's "Update to" looks for
+        # (updates.py and rust/app's updates: -windows-x64-setup.exe, -windows-x64-portable.zip,
+        # -x86_64.AppImage, -linux-x64.tar.gz; CI's AppImage says "rust" in its name)
+        run: |
+          version="${TAG#v}"
+          mv "artifacts/Libre_Panel-$version-rust-x86_64.AppImage" "artifacts/Libre_Panel-$version-x86_64.AppImage"
+          for end in windows-x64-setup.exe windows-x64-portable.zip linux-x64.tar.gz; do
+            test -f "artifacts/libre-panel-$version-$end"
+          done
+          ls -l artifacts
       - name: Release notes from CHANGELOG.md
         run: |
           version="${TAG#v}"
@@ -328,6 +144,7 @@ jobs:
           mv SHA256SUMS artifacts/
           cat artifacts/SHA256SUMS
       - name: Where each file was built (attestations)
+        if: ${{ !inputs.from_run }}
         # GitHub signs for each file, in public (Sigstore), that this workflow built it from
         # this commit of this repository: `gh attestation verify FILE --repo
         # syntensa/libre-panel` checks a download against it (README's FAQ)
@@ -376,7 +193,7 @@ jobs:
   pypi:
     # Only once PyPI is set up (docs/RELEASING.md): repository variable PYPI_UPLOAD = true.
     timeout-minutes: 15
-    needs: [python-package, standalone]
+    needs: [python-package, app]
     # (not a pre-release: on PyPI everyone would have it)
     if: >-
       startsWith(github.ref, 'refs/tags/v') && vars.PYPI_UPLOAD == 'true' &&
@@ -398,7 +215,7 @@ jobs:
     # anyone signed in to GitHub may download a run's files, a release candidate's too.) After
     # the release and PyPI, whether they ran or not.
     if: always()
-    needs: [test, python-package, standalone, github-release, pypi]
+    needs: [test, python-package, app, github-release, pypi]
     timeout-minutes: 5
     runs-on: ubuntu-latest
     permissions:

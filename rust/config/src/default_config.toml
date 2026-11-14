@@ -1,0 +1,193 @@
+# Libre Panel configuration
+# Docs: https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md
+
+# The theme on the panel: a built-in theme or a folder in the user themes directory.
+# Without a theme line each panel shows its own default: Lumen on the 1920x480 bars (the
+# 8.8" and 9.2"), Libre Default on every other panel. To pick another, take out the # and
+# put its name there (or choose one in the app, on Start).
+# theme = "slate"
+
+# Screens in turn: themes one after another, each for its seconds, minutes or hours, and
+# from the top again after the last (or set them up in the app: Start, Screens in turn).
+# While it is on it stands in for the theme above; a game's theme and the autopilot go first.
+# [sequence]
+# on = true
+# steps = [
+#   { theme = "almanac", minutes = 5 },
+#   { theme = "nimbus", minutes = 5 },
+#   { theme = "studio", minutes = 10 },
+# ]
+
+# "auto" (the system language), "en", "de", "fr", "es", "it", "pl", "pt" (Brazil), "ru", "ja" or
+# "zh": the app, the tray and the date and weather texts on the panel.
+language = "auto"
+
+# Optional: override how often sensors are read (milliseconds); the theme sets it.
+# refresh_ms = 1000
+
+# Whether Libre Panel looks once a day for a newer version (a request to GitHub; Start then
+# says so). Not set, Start asks once.
+# check_updates = true
+
+# Whether other programs may show a notice on the panel (libre-panel notify, a script, a
+# Stream Deck button), with the key in notify.json; see Settings → Game mode and more.
+# allow_notify = false
+
+# Whether Libre Panel shows its icon in the notification area (the tray), with its menu. Off:
+# the app opens from the Start menu or the list of apps, and a second start shows its window.
+# tray_icon = false
+
+# Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
+# system by pressing the keys. The actions: pause, brightness_up, brightness_down, open,
+# next_scene, timer (start or pause the timer service), timer_reset, mic_mute (the microphone);
+# enabled = false switches all of them off and keeps the keys written here.
+# [hotkeys]
+# pause = "Ctrl+Alt+P"
+
+# Frames per second: values glide smoothly between sensor readings.
+# 1 turns animation off (least CPU and USB traffic).
+fps = 10
+
+# The look of the weather symbols and the moon (or choose it in the app: Settings, Weather
+# and place): "vivid", sharp and with much to them (the sun in its corona, rain near and
+# far, snow crystals that turn, the moon as it looks), or "classic", the first, calmer one.
+# A theme may give a symbol a look of its own.
+# symbols = "vivid"
+
+[device]
+# Your panel. "auto" detects it; list all models with:  libre-panel models
+# e.g. "turing-3.5", "turing-5", "turing-8.8-usb", "turing-9.2-usb", "turing-2.1"
+model = "auto"
+# "auto" uses a connected panel and otherwise writes PNG frames to `output`;
+# "turzx" insists on the panel, "virtual" never touches hardware.
+driver = "auto"
+# 0-100
+brightness = 60
+# 180 shows the picture upside down, for a panel mounted the other way round.
+rotate = 0
+# How the panel is mounted: "landscape", or "portrait" for a bar that stands on end. Each
+# theme is then shown in its version for it where it has one (Lumen as Lumen Vertical).
+# Empty: as each theme is made.
+orientation = ""
+# Motion: "auto" keeps it calm on the older USB serial panels, which are slower (symbols stand,
+# numbers jump, a picture a second, no fades between themes) and full on the others; "full"
+# or "calm" for every panel.
+motion = "auto"
+# Smooth motion (video mode): the range of the video's values as the panel shows them, "auto"
+# (as the model is known to: full on the 12.3", limited elsewhere), "limited" or "full". If
+# black looks grey in video mode and right as stills, the panel wants "full" (Settings →
+# Panel → Check the colours compares them on the panel).
+# video_range = "auto"
+# true: the panel goes dark when Libre Panel quits (Windows shutting down too), and lights up
+# again when it starts; false: it keeps the last picture.
+dark_on_quit = false
+# true: dark while the computer sleeps (Windows), lit again when it wakes; false: the panel
+# keeps the last picture through the night where its USB port stays powered.
+dark_on_sleep = true
+# true: a brightness of its own at night (0: dark), from night_from to night_to (over
+# midnight too); the brightness above holds the rest of the day.
+night = false
+night_from = "22:00"
+night_to = "07:00"
+night_brightness = 10
+# Where frames go when no panel is used (relative = in this settings folder).
+output = "libre-panel-frame.png"
+# Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
+# picks the wrong port, name it, e.g. "COM5" or "/dev/ttyACM0".
+port = ""
+
+[video]
+# TURZX USB panels: the whole picture as H.264 video, up to 50 frames a second
+# instead of about 9. "auto" turns it on where it is proven (the 9.2") once ffmpeg
+# is found and local_clip names the panel's standby clip (see the configuration
+# guide, Video); "on" and "off" decide by themselves.
+# mode = "auto"
+# local_clip = ""
+# The app asks for that name once, on Start (the tray points to it), and sets this to true when
+# it was answered, whichever way. Put false to be asked again.
+# clip_asked = false
+# Who turns the frames' colours into video: "auto" the graphics card where a colour check found
+# it converting exactly as the processor does (it runs once by itself in the background, again
+# for a new ffmpeg or graphics driver), else ffmpeg on the processor (BT.601: the colours as
+# drawn); "card" the card always (AMD's, NVIDIA's and Intel's encoders; an AMD card was
+# measured shifting the colours); "rgb" the processor always, the way of before (three bytes a
+# pixel). Settings → Panel → Check the colours says who converts and why.
+# pixels = "auto"
+
+[sensors]
+# Sensor sources, queried in this order: for each reading the first source that
+# has one wins. Available: load (CPU and GPU load ten times a second), audio (the
+# volume and mute of the default output: Windows, Linux with wpctl or pactl),
+# psutil, librehardwaremonitor (Windows: GPU, temperatures, power, fans), linux
+# (Linux: temperatures, fans, power and the graphics card, read from the kernel
+# and NVIDIA's driver), calendar, homeassistant, mqtt, presentmon, demo, plus any
+# installed sensor plugin (see the configuration guide for their settings). load
+# and audio work only while a theme or a service shows their readings. The sun,
+# the moon and what is playing come by themselves.
+providers = @PROVIDERS@
+
+[sensors.librehardwaremonitor]
+# Windows: the GPU, temperatures, power and fans come from LibreHardwareMonitor. The
+# Windows downloads read it inside Libre Panel, no other program is needed. The CPU's
+# temperature and power also need Libre Panel to run as administrator
+# (libre-panel autostart enable --elevated) and the PawnIO driver (https://pawnio.eu).
+# "auto" reads it inside Libre Panel where it can and else asks the web server of a
+# LibreHardwareMonitor that you run yourself; "inprocess" and "webserver" choose. With a
+# pip install, inside needs pip install "libre-panel[lhm]" and dll_dir: the folder with
+# LibreHardwareMonitor's .NET libraries.
+# mode = "auto"
+# dll_dir = ""
+# The web server of LibreHardwareMonitor, at url:
+# Run it as administrator and turn on Options -> Remote Web Server -> Run.
+# While it does not run those readings show "--" and nothing else is lost.
+url = "http://127.0.0.1:8085/data.json"
+# Without an answer for this many seconds its readings disappear ("--" on the
+# panel) instead of staying as they were; 0 keeps the last ones.
+# stale_seconds = 5
+
+[sensors.linux]
+# Linux: with several graphics cards, the one whose name has this in it gives the gpu.*
+# readings ("RX 7900", "RTX 4070"); by default the one gpu.name names. Libre Panel reads
+# NVIDIA cards through the driver's library (NVML); "off" never loads it.
+# gpu = ""
+# nvidia = "auto"
+
+[sensors.psutil]
+# What a theme's ping connects to (host:port); only while a theme shows the ping.
+# ping = "1.1.1.1:443"
+
+[hardware]
+# The names a theme shows for the processor (cpu.name), the graphics card (gpu.name) and
+# the memory (mem.name). Libre Panel finds them itself and shortens them: "Ryzen 5 7600",
+# "GeForce RTX 4070", "Kingston DDR5-5600 32 GB". Text of your own is shown instead, as
+# you write it; empty means as found. The names stay on this computer.
+# cpu_name = ""
+# gpu_name = ""
+# memory_name = ""
+# How the fans turn on the panel, where a theme leaves it to you: the look of their rotor,
+# "noctua-g2" (Noctua's NF-A12x25 / NF-A14x25 G2, the default), "noctua-a12x25" (the first
+# NF-A12x25), "noctua-a14" (the first 140 mm, NF-A14) or "libre" (Libre Panel's own), and
+# their colours, "theme" (the theme's) or "own" (the look's: Noctua's brown and beige).
+# fan_look = "noctua-g2"
+# fan_paint = "theme"
+# Names of your own for the fans, by the sensor that measures each (the app sets them in
+# Settings -> Sensors); without one a fan goes by the name FanControl gives it, else by
+# the sensor's own ("Fan #1"). A fan may have a look and colours of its own too.
+# [[hardware.fans]]
+# sensor = "fan.lpc.fan_1"
+# name = "Intake"
+# look = "noctua-a12x25"
+# paint = "own"
+
+[weather]
+# Weather is off by default. Turn it on and set your own location.
+enabled = false
+provider = "open-meteo"
+# Find coordinates with:  libre-panel location "Your City"  (or in the app: Settings)
+# latitude = 0.0
+# longitude = 0.0
+# What the app calls the place (the app writes it when you pick one).
+# place = ""
+# "metric" (°C, km/h) or "imperial" (°F, mph)
+units = "metric"
+update_minutes = 15

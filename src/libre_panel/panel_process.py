@@ -47,8 +47,8 @@ SHOWN_S = 0.2  # its picture, asked for (Start, the picture of all panels), at m
 FIRST_PICTURE_S = 1.0  # how long the first read of it waits for it to come
 START_S = 30.0  # a process that says nothing for so long after its start is ended
 # what comes back of the panel's RunStatus (not its picture, the drivers' counters or a hub)
-SENT = ("state", "target", "theme", "default_theme", "missing_theme", "sequence", "size",
-        "model", "detail", "frames", "mode", "stats")  # fmt: skip
+SENT = ("state", "target", "theme", "default_theme", "missing_theme", "missing_why", "sequence",
+        "size", "model", "detail", "frames", "mode", "stats")  # fmt: skip
 _PIDS: dict[int, int] = {}  # the panels' processes started here: process id -> panel number
 
 

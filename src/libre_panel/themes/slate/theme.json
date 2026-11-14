@@ -495,7 +495,8 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "glow": 0.3,
-      "tabular": true
+      "tabular": true,
+      "max_width": 98
     },
     {
       "type": "metric",

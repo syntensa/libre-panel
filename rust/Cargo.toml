@@ -1,0 +1,23 @@
+# Libre Panel in Rust (docs/RUST.md): the crates of the app as they come, each checked
+# against the Python app it replaces.
+[workspace]
+resolver = "2"
+members = ["py", "pixels", "decode", "text", "devices", "i18n", "theme", "config", "render", "net", "sensors", "services", "check", "app", "desktop"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "GPL-3.0-or-later"
+publish = false
+
+[profile.release]
+opt-level = 3
+debug = false
+codegen-units = 1
+lto = "thin"
+panic = "unwind"
+
+# the comparisons run thousands of cases: the tests' own build optimized too
+[profile.test]
+opt-level = 2

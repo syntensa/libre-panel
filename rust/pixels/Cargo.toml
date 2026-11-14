@@ -1,0 +1,11 @@
+[package]
+name = "lp-pixels"
+description = "Pillow's image operations as Libre Panel uses them, to the bit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }

@@ -9,21 +9,23 @@
 
 /* -- the rail --------------------------------------------------------------------------------- */
 
+/* as wide as its longest label needs (68 px with the short ones): a long one, the Russian
+   "Изображения", stood out of its button */
 .rail {
-  width: 68px;
+  min-width: 68px;
   flex-shrink: 0;
   border-right: 1px solid var(--line);
   background: var(--panel);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 14px 0;
+  align-items: stretch;
+  padding: 14px 7px;
   gap: 6px;
 }
 
 .rail-item {
-  width: 54px;
-  padding: 8px 0;
+  min-width: 54px;
+  padding: 8px 4px;
   border-radius: 10px;
   border: none;
   background: transparent;
@@ -756,6 +758,14 @@
   pointer-events: none;
 }
 
+/* a fine grid while a module moves: a dot at each step (its cells are too small to draw each) */
+.cell-dots {
+  position: absolute;
+  background-image: radial-gradient(circle at 1px 1px, rgba(147, 161, 178, 0.6) 1px, transparent 1.6px);
+  background-position: -1px -1px;
+  pointer-events: none;
+}
+
 .drop {
   position: absolute;
   border: 2px solid var(--accent);
@@ -984,6 +994,9 @@
   background: rgba(20, 28, 38, 0.92);
   border: 1px solid var(--line-5);
   z-index: 3;
+  /* its own width, whatever the stage's: half a narrow stage broke "1 : 1" into two lines */
+  width: max-content;
+  white-space: nowrap;
 }
 
 .zoom-value {
@@ -1274,12 +1287,17 @@
   line-height: 1.45;
 }
 
-/* the chevron follows the last word: a text that wraps keeps it beside the end, not apart */
+/* the chevron follows the last word: a text that wraps keeps it beside the end, not apart, and
+   one that just fills the line takes its last word along rather than leave the chevron alone */
 .inspector-link {
   display: block;
   align-self: flex-start;
   margin-top: 6px;
   text-align: left;
+}
+
+.inspector-link .link-end {
+  white-space: nowrap;
 }
 
 .inspector-link svg {
@@ -1332,10 +1350,15 @@
   text-align: left;
 }
 
+/* what the fine-tuning holds, all of it: a long list takes a second line rather than an ellipsis */
 .details-button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.details-button svg {
+  flex-shrink: 0;
 }
 
 .details-button:hover {

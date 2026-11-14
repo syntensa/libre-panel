@@ -60,6 +60,19 @@ export const nameOf = (widget) => (isModule(widget) ? kindName(widget.module) : 
 /** The fields of a widget type: the common ones and its own ({key: [kind, default]}). */
 export const specOf = (type) => ({ ...(specs()?.common || {}), ...(specs()?.widgets?.[type] || {}) });
 
+// -- what a widget shows ---------------------------------------------------------
+
+/** A widget shows another sensor. A graph's range goes with it where it still is one of the two
+ * usual ones: 0 to 100 for a share or a temperature, its own (no top) for a rate, a speed or an
+ * amount, of which a top of 100 shows nothing but a full graph. A range the person set stays. */
+export function showSensor(widget, key) {
+  widget.sensor = key;
+  if (widget.type !== "graph" || widget.min !== 0 || (widget.max !== 100 && widget.max !== null)) return;
+  const unit = store.get().sensors.find((sensor) => sensor.key === key)?.unit;
+  if (unit === undefined) return; // (a sensor the list does not hold: nothing is known of it)
+  widget.max = unit === "%" || unit === "°C" ? 100 : null;
+}
+
 // -- adding ----------------------------------------------------------------------
 
 /** A widget of a type with its defaults; `at` is where its top left goes. */

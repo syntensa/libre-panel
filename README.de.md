@@ -15,6 +15,12 @@
 </p>
 
 <p align="center">
+  <b>Neu in 0.9: komplett in Rust neu geschrieben.</b> Ein Drittel weniger Arbeitsspeicher, bis
+  zu 38 % weniger Prozessorlast und ein schnellerer Start, bei Pixel für Pixel denselben Bildern
+  auf dem Panel (<a href="#in-rust-neu-geschrieben">die Zahlen</a>).
+</p>
+
+<p align="center">
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-windows-de.png" width="299" alt="Download für Windows: das Setup, für Windows 10 und 11, 64 Bit"></a>
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img src="docs/images/button-linux-de.png" width="260" alt="Download für Linux: das AppImage, x86-64"></a>
   <br>
@@ -36,6 +42,7 @@
 
 <p align="center">
   <b>
+    <a href="#in-rust-neu-geschrieben">Neu in 0.9</a> ·
     <a href="#funktionen">Funktionen</a> ·
     <a href="#die-app">Die App</a> ·
     <a href="#themes">Themes</a> ·
@@ -86,6 +93,31 @@
   Kipye · UsbPCMonitor · XuanFang · Lian Li · Thermalright · BeadaPanel · NZXT Kraken ·
   Thermaltake · <a href="#unterstützte-panels">alle Panels</a></sub>
 </p>
+
+## In Rust neu geschrieben
+
+> *„Schreib's doch einfach in Rust neu!“* – der älteste Witz des Internets. Nur ist es keiner
+> mehr: Seit 0.9 ist **Libre Panel in Rust geschrieben**.
+
+Das Zeichnen, die Treiber aller 54 Panel-Modelle, die Sensoren, die Dienste, der Server der App,
+ihr Fenster und Tray: rund 200.000 Zeilen Rust. Dein Panel zeigt dieselben Bilder, Pixel für
+Pixel; dein PC tut viel weniger dafür. Einstellungen und Themes bleiben, wie sie sind.
+
+| 12,3", 25 fps | 0.8.0 | 0.9.0 | Gespart |
+|---|---|---|---|
+| Lumen | 32–36 % CPU, 145–156 MB | **21–23 % CPU, 104 MB** | 34 % CPU, 30 % RAM |
+| Arena | 37–38 % CPU, 147–150 MB | **30–33 % CPU, 99 MB** | 17 % CPU, 34 % RAM |
+| Encore | 12 % CPU, 134 MB | **7 % CPU, 92–94 MB** | 38 % CPU, 31 % RAM |
+
+<sub>App und Engine von Libre Panel zusammen, durch die Engine bis zum Panel: Prozessor in % eines
+Kerns, privater Speicher; die Demo-Werte, je eine Minute, abwechselnd auf demselben
+Linux-Rechner. Das erste Bild steht 0,4 bis 1,0 s nach dem Start auf dem Panel statt nach 0,7 bis
+2,0 s.</sub>
+
+**Belegt, nicht versprochen.** Die Python-App bleibt als Referenz im Repository: 525
+Vergleichstests prüfen das neue Programm bei jeder Änderung gegen sie, und jedes der 99
+eingebauten Themes, stehend und bewegt, stimmt Pixel für Pixel mit ihr überein
+([alles zu 0.9.0](CHANGELOG.md), englisch).
 
 ## Funktionen
 
@@ -151,10 +183,10 @@ fünf Minuten dies, zehn Minuten das, und wieder von vorn.
 
 <p><img src="docs/media/ai-card.gif" width="100%" alt="KI-Aktivität auf Lumen: Die Wetter-Karte macht von selbst Claude Code bei der Arbeit Platz, mit seinem bewegten Zeichen, dem Werkzeug bei der Arbeit, seiner Sitzung, den Kosten des Tages und wie viel von fünf Stunden, sieben Tagen und dem Kontext verbraucht ist; dann wartet es auf dich, in Bernstein"></p>
 
-Claude Code und Codex auf diesem PC und die Cloud-Sitzungen von Claude Code: arbeitet, wartet
-auf dich oder ruht, mit dem Werkzeug bei der Arbeit, den Kosten des Tages und wie viel von den
-Limits des Abos verbraucht ist. Auf Lumen kommt die KI-Karte von selbst, während eines davon
-arbeitet; **Agents** gibt ihnen einen eigenen Bildschirm. Nichts verlässt diesen PC
+Claude Code und Codex auf diesem PC: arbeitet, wartet auf dich oder ruht, mit dem Werkzeug bei
+der Arbeit, den Kosten des Tages und wie viel von den Limits des Abos verbraucht ist. Auf Lumen
+kommt die KI-Karte von selbst, während eines davon arbeitet; **Agents** gibt ihnen einen eigenen
+Bildschirm. Nichts verlässt diesen PC
 ([KI-Aktivität](docs/CONFIGURATION.md#ai-activity), englisch).
 
 ### Mehrere Panels zugleich
@@ -230,10 +262,10 @@ paar Buchstaben.</td>
 - **Gestalten**: Bausteine aufs Panel ziehen. Ein Modul passt sich dem Platz an, den du ihm
   gibst, und zeigt umso mehr, je größer es ist; 35 davon, von jedem Kern über den Ping, einen
   Timer und den Stromverbrauch des PCs bis zum nächsten Termin.
-- **Start** zeigt das Panel auf einen Blick, die Themes dafür und die der Community, die Karten
-  und die Abfolge; **Live** zeigt, wie es läuft, und mit eingeschaltetem Gedächtnis den
-  **Verlauf**: Temperaturen, Last und Leistung über einen Tag, eine Woche oder einen Monat, dazu
-  die gespielten Spiele.
+- **Start** zeigt das Panel auf einen Blick (ein Klick zeigt sein Bild groß), die Themes dafür
+  und die der Community, die Karten und die Abfolge; **Zustand** zeigt, wie es läuft, und mit
+  eingeschaltetem Gedächtnis den **Verlauf**: Temperaturen, Last und Leistung über einen Tag,
+  eine Woche oder einen Monat, dazu die gespielten Spiele.
 - **Einstellungen** schreibt die `config.toml` für dich, Kommentare bleiben stehen, und findet
   die Namen von Prozessor, Grafikkarte und Arbeitsspeicher selbst. **Tastenkürzel** halten das
   Panel an, ändern seine Helligkeit oder öffnen die App aus jedem Fenster.
@@ -315,7 +347,7 @@ zur Seite, wenn seine Messwerte fehlen, und kostet nichts, solange kein Theme es
 **Noch nicht unterstützt:** GUITION 3,5", Fuldho 3,5", AX206-Bilderrahmen sowie TL LCD,
 Galahad II LCD und Lancool 207 von Lian Li.
 
-**Du hast ein unverifiziertes?** Der Panel-Test in der App (*Live → Diagnose*, oder
+**Du hast ein unverifiziertes?** Der Panel-Test in der App (*Zustand → Diagnose*, oder
 `libre-panel doctor`) prüft es von Anfang bis Ende und schreibt einen Bericht ohne
 Seriennummern; ein Klick öffnet einen
 [Panel-Bericht](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
@@ -362,9 +394,10 @@ unter Windows und Linux.
 
 1. **Hersteller-App beenden.** Sie hält das Panel für sich fest.
 2. **Libre Panel starten**, mit angestecktem Panel. Die Windows-Downloads sind noch nicht
-   signiert: SmartScreen fragt einmal nach (*Weitere Informationen → Trotzdem ausführen*).
-   Unter Linux bietet *Start* an, deinem Benutzer Zugriff auf das Panel zu geben
-   ([was dabei geschieht](docs/CONFIGURATION.md#linux-sensors-and-panel-access)).
+   signiert: SmartScreen fragt einmal nach (*Weitere Informationen → Trotzdem ausführen*), und
+   Microsoft Defender hat einen schon für einen Trojaner gehalten ([ein Fehlalarm, und wie du
+   sichergehst](#faq)). Unter Linux bietet *Start* an, deinem Benutzer Zugriff auf das Panel
+   zu geben ([was dabei geschieht](docs/CONFIGURATION.md#linux-sensors-and-panel-access)).
 3. **Einen Look wählen.** *Start* fragt „Wie soll es aussehen?“ mit den Themes für das
    gefundene Panel: Lumen auf den 8,8"- und 9,2"-Leisten, Libre Default auf den anderen.
 4. **Einschalten, was du willst.** In den *Einstellungen*: Wetter und Ort, Videomodus, die
@@ -424,7 +457,7 @@ Administratorrechte.
 ### Mit Python
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.8.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.0"
 libre-panel tray                    # die Hintergrund-App mit Tray-Symbol; öffnet ihr Fenster
 libre-panel autostart enable        # bei jeder Anmeldung starten
 ```
@@ -481,9 +514,7 @@ Anfragen mit einem geheimen Token, der bei jedem Start neu ist.
 - **Die KI-Aktivität** ist aus, bis du sie einschaltest und Claude Code oder Codex einrichtest.
   Ihre Hooks geben, was sie tun, nur an Libre Panel auf diesem PC weiter, mit einem eigenen
   Schlüssel; für die Nutzung des Abos fragt Libre Panel die Programme, die mit deiner Anmeldung
-  bei ihren eigenen Servern nachfragen. Die Cloud-Sitzungen von Claude Code schicken, wenn du
-  sie einrichtest, ihren Zustand (nie einen Prompt) an ein ntfy-Topic mit einer langen
-  Zufallsadresse, das Libre Panel liest.
+  bei ihren eigenen Servern nachfragen.
 - **Die Namen deiner Hardware** landen nie im Log, und `libre-panel doctor` schreibt keine
   Seriennummern und keine persönlichen Pfade in seinen Bericht.
 </details>
@@ -569,6 +600,32 @@ das dritte Kästchen des Setups (oder *Alle Sensoren freischalten*) nimmt dich a
 nächsten Anmeldung ([wie](docs/CONFIGURATION.md#more-sensor-sources)). Wo RivaTuner Statistics
 Server ohnehin läuft, kann Libre Panel die Bildraten stattdessen von dort nehmen. Die
 Kühlungsanalyse liest die Lüfterkurven von FanControl, falls du FanControl nutzt.
+</details>
+
+<details>
+<summary><b>Windows Defender meldet einen Trojaner. Stimmt das?</b></summary>
+<br>
+
+Nein, das ist ein Fehlalarm. Ein Fund, dessen Name auf `!ml` endet, wie
+`Trojan:Win32/Bearfoos.A!ml`, ist eine Vermutung von Defenders maschinellem Lernen, kein Treffer
+bekannter Schadsoftware, und solche Vermutungen treffen neue Programme ohne Signatur, wie es die
+von Libre Panel noch sind. So gehst du sicher, dass deine Datei die hier gebaute ist:
+
+- **Ihre SHA-256** ist die in `SHA256SUMS` auf der Seite des Releases. In der PowerShell:
+  `Get-FileHash .\libre-panel-0.9.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
+- **Wo sie gebaut wurde:** Ab 0.8.0 bestätigt GitHub mit seiner Signatur für jeden Download,
+  dass der Release-Workflow dieses Repositorys ihn gebaut hat, und aus welchem Commit:
+  `gh attestation verify libre-panel-0.9.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
+
+Wenn sie es ist, erlaube sie unter *Windows-Sicherheit → Viren- & Bedrohungsschutz →
+Schutzverlauf* (*Aktionen → Auf Gerät zulassen*), starte das Setup noch einmal und melde die
+Datei Microsoft als Fehlalarm
+([Datei einreichen](https://www.microsoft.com/en-us/wdsi/filesubmission), *Incorrectly detected
+as malware/malicious*). Wenn nicht, stammt sie nicht von hier: Lösche sie und lade Libre Panel
+nur von seinen [Releases](https://github.com/syntensa/libre-panel/releases). Ab 0.8.0 sagen die
+Programme auch, wer sie gemacht hat, und ab 0.9.0 sind sie aus Libre Panels eigenem Rust-Code
+kompiliert, ohne den Lader von PyInstaller, den viele Programme teilen; das Signieren der
+Downloads ist geplant.
 </details>
 
 <details>

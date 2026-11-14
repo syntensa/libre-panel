@@ -54,6 +54,7 @@ language = "auto"              # "auto" (system language), "en", "de", "fr", "es
 # refresh_ms = 1000            # override the theme's refresh interval
 # check_updates = true        # look once a day for a newer version (not set: Start asks)
 # allow_notify = false        # other programs may show a notice (see below)
+# tray_icon = false           # its icon in the notification area (the tray), with its menu
 fps = 10                       # 1-60; values glide between readings
 # [transitions]                # how the panel goes from one screen to the next
 # default = "fade"             # (see "Transitions"; Settings → Panel → Transitions)
@@ -206,22 +207,25 @@ administrator rights, a backup is not restored from the app.
 
 ## Light mode
 
-Always on, with nothing to set (0.8 had a switch, `light_mode`; an old config.toml's is let be,
-and it goes from the file with the next setting written). The app's pictures (every theme's,
-Design's and Look's, the building blocks', the start screen's) are drawn in a process of their
-own, which ends once the app's window has been closed (or hidden) for a minute, and all it took
-goes with it. Libre Panel then also lets go of what else only the app needs: its pictures of
-the themes (and of the community's), and the letters, symbols and pieces of every theme they
-were drawn with. For fifteen seconds after that the renderer's caches note what the panel draws
-with; that stays, the rest goes, so the panel draws on as before. Then the memory goes back to
-the system; Windows also takes back the pages the panel does not touch, which is what Task
-Manager shows (they come back as the panel touches them). The app takes a moment longer to
-open again.
+Always on, with nothing to set (0.8 had a switch, `light_mode`; an old config.toml's is let be, and
+it goes from the file with the next setting written). Once the app's window has been closed (or
+hidden) for a minute, or was never opened since Libre Panel started (a start at login), Libre Panel
+lets go of what only the app needs: its pictures of the themes, of the community's and of the start
+screen. For fifteen seconds after that, what all drawing shares (the fans' rotors, the weather's
+symbols, the moon, the AI signs) notes what the panel draws with; that stays, and so does whatever a
+panel has drawn with before (a fan that stands still, the night's weather by day), and the rest
+goes: the panel draws on as before and makes nothing again. Then the memory goes back to the system;
+Windows also takes back the pages the panel does not touch, which is what Task Manager shows (they
+come back as the panel touches them). The app takes a moment longer to open again.
 
-On Linux Libre Panel keeps its memory in two heaps for all its threads, not up to eight per
-core (glibc's `MALLOC_ARENA_MAX`; set in the environment, yours holds). While the window stays
-closed, it also gives the heaps' free pages back every fifteen seconds (on Windows its heaps'
-free memory): the heap keeps what a frame's work freed for the program otherwise.
+While the window stays closed, Libre Panel also gives the heaps' free memory back every fifteen
+seconds: the heap keeps what a frame's work freed for the program otherwise. A frame's large
+pictures (a quarter of a megabyte and more) are kept for the next frame, and go back to the
+system two seconds after they were last asked for (a paused panel's at the next of these
+looks). On Linux they are blocks of the system's own: glibc's mmap threshold is held at
+256 KB, unless `MALLOC_MMAP_THRESHOLD_` or `GLIBC_TUNABLES` is set in the environment, which
+then decide and leave the keeping to glibc. On Windows the heap gives such blocks back by
+itself. `LP_HEAP_KEEP=0` in the environment leaves all of it to the system's allocator.
 
 ## New versions
 
@@ -1846,7 +1850,7 @@ answer too.
 | `mode` | `"auto"` | `"auto"`: on where proven (9.2", 12.3"), with ffmpeg and `local_clip`; `"on"`, `"off"` |
 | `fps` | 25 | frames per second (1–60). 25 looks smooth on the panels, and a graph moves a pixel a frame. Beside 25, 30 takes about a tenth more of the processor, 50 about 60 % more and 60 about 80 % more, 20 about a tenth less (Libre Panel and ffmpeg's x264 together, Lumen on the 12.3", where something moves in every frame; a screen that rests between its readings takes less at any rate); *Settings → Panel* says so under the choice. 60 is an experiment the panels do not keep up with |
 | `device_fps` | 60 | the rate reported to the panel; must be at least `fps`. The panel's player never catches up once behind, so it gets a little more than it needs |
-| `crf` | 20 | quality, 0–51; lower is sharper and needs more bits (20 was measured on the 12.3" and the 9.2" at about 3–4 Mbit/s at 50 fps on a screen that moves; 25 was the first measurement's) |
+| `crf` | 20 | quality, 0–51; lower is sharper and needs more bits (20 was measured on the 12.3" and the 9.2" at about 3–4 Mbit/s at 50 fps on a screen that moves; 25 was the first measurement's). Libre Panel's engine gives x264 a constant quantizer two below it (18 at 20: on Lumen as many bits as x264's CRF 20 took, with a cleaner picture) and keeps `maxrate` itself, as a bucket of a second's bits; x264 through ffmpeg takes it as its CRF |
 | `preset` | `"superfast"` | x264 speed preset |
 | `keyframe_s` | 10 | seconds between keyframes; below 3 flat backgrounds visibly pulse |
 | `maxrate` | `"auto"` | highest bit rate: `"auto"` starts at 2 Mbit/s for the 9.2" (1920×480 at 50 fps) and proportionally more for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel up the steps 3 · 4 · 6 · 8 · 12 · 16 · 24 · 32 Mbit/s: a step down while the panel takes less than it is sent, never below the start (a panel that cannot keep up there cannot keep up with the pictures: fewer `fps` help), a step up after a calm minute; the *Data rate* tile under Live says the cap in force. Or a fixed rate such as `"1500k"` or `"4M"` |

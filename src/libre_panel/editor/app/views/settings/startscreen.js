@@ -90,6 +90,8 @@ export function StartScreenCard() {
   };
   const writing = Boolean(busy);
   const more = (config.panels || []).length > 0; // more panels: this card is the one chosen at the top
+  // a panel mounted upside down: its logo and clip are written turned round, as its frames are
+  const turned = (panel > 1 ? (config.panels || [])[panel - 2]?.rotate : config.device?.rotate) === 180;
   return html`<${Card} id="start-screen"
     title=${more ? `${t("Start screen")} · ${t("Panel {number}", { number: panel })}` : t("Start screen")}
     text=${t("The panel's own screens, in the look you choose and made for its size: the logo it shows when it is switched on, and the clip it plays when the PC starts, until Libre Panel shows its themes.")}>
@@ -105,6 +107,9 @@ export function StartScreenCard() {
     </div>
     ${chosen && !chosen.measured
       ? html`<${Note}>${t("Measured on the 9.2\"; this panel has the same firmware, but writing to it has not been tried yet.")}<//>`
+      : null}
+    ${turned
+      ? html`<${Note}>${t("The panel is mounted upside down: the logo and the clip are written turned round, so that they are upright on it. Write them again when you turn the panel round.")}<//>`
       : null}
     <div class="fan-look-tiles boot-look-tiles" role="radiogroup" aria-label=${t("Look of the start screen")}>
       ${(info.designs || ["libre-panel"]).map(

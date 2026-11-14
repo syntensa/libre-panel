@@ -88,6 +88,10 @@ language = "auto"
 # Stream Deck button), with the key in notify.json; see Settings → Game mode and more.
 # allow_notify = false
 
+# Whether Libre Panel shows its icon in the notification area (the tray), with its menu. Off:
+# the app opens from the Start menu or the list of apps, and a second start shows its window.
+# tray_icon = false
+
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
 # system by pressing the keys. The actions: pause, brightness_up, brightness_down, open,
 # next_scene, timer (start or pause the timer service), timer_reset, mic_mute (the microphone);
@@ -736,6 +740,7 @@ class Config:
     transitions: TransitionsConfig = field(default_factory=TransitionsConfig)
     check_updates: bool | None = None  # a look for a newer version once a day; None: not asked
     allow_notify: bool = False  # other programs may show a notice (notify.py)
+    tray_icon: bool = False  # its icon in the notification area (the tray), with its menu
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
@@ -1034,6 +1039,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.check_updates = _expect(data["check_updates"], bool, "check_updates")
     if "allow_notify" in data:
         cfg.allow_notify = _expect(data["allow_notify"], bool, "allow_notify")
+    if "tray_icon" in data:
+        cfg.tray_icon = _expect(data["tray_icon"], bool, "tray_icon")
     # (what an old config says of a setting that is no more is let be: GONE)
     if "switches" in data:
         cfg.switches = _switches(data["switches"])

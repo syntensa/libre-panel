@@ -557,7 +557,7 @@ def test_the_memory_instrument_shows_what_is_free_its_temperature_and_its_speed(
     assert seen["r1"] == f"{snap.value('mem.temp'):.0f}"
 
 
-def test_a_memory_reading_a_pc_cannot_give_stays_on_show_as_dashes_with_its_name():
+def test_a_reading_a_pc_cannot_give_stays_on_show_as_dashes_with_its_name():
     # the modules' temperature needs administrator rights, their speed a readable SMBIOS table
     snap = snapshot_with(drop=("mem.temp", "mem.speed"))
     renderer = Renderer(card_theme("instrument", 1, 2, source="mem"), preview=True)
@@ -566,10 +566,22 @@ def test_a_memory_reading_a_pc_cannot_give_stays_on_show_as_dashes_with_its_name
     assert {"r0-label", "r1-label", "r2-label"} <= set(seen)  # the column keeps its shape
     assert not {"r1-unit", "r2-unit"} & set(seen)  # a unit with no number would be noise
     assert "r0-unit" in seen
-    # a processor's missing reading leaves its row out, as it always did
+    # the processor's temperature and power need the sensor service on Windows, the power its
+    # rights on Linux: their rows stay too (they were left out, and the clock stood alone at
+    # the foot of an empty column)
     cpu = Renderer(card_theme("instrument", 1, 2, source="cpu"), preview=True)
-    seen = texts_drawn(cpu, snapshot_with(drop=("cpu.temp",)))
-    assert "r0" not in seen and "r0-label" not in seen and "r1" in seen
+    seen = texts_drawn(cpu, snapshot_with(drop=("cpu.temp", "cpu.power")))
+    assert (seen["r0"], seen["r1"]) == ("--", "--") and seen["r2"] != "--"
+    assert {"r0-label", "r1-label", "r2-label"} <= set(seen)
+    assert not {"r0-unit", "r1-unit"} & set(seen) and "r2-unit" in seen
+    # ... and a graphics chip's in the processor, which tells neither
+    gpu = Renderer(card_theme("instrument", 1, 2, source="gpu"), preview=True)
+    seen = texts_drawn(gpu, snapshot_with(drop=("gpu.temp", "gpu.power")))
+    assert (seen["r0"], seen["r1"]) == ("--", "--") and {"r0-label", "r1-label"} <= set(seen)
+    # a drive's missing reading leaves its row out, as every other source's
+    disk = Renderer(card_theme("instrument", 1, 2, source="disk"), preview=True)
+    seen = texts_drawn(disk, snapshot_with(drop=("disk.read",)))
+    assert "r2" not in seen and "r2-label" not in seen and "r1" in seen
 
 
 def test_the_readings_fit_in_their_rows_and_never_run_into_their_names():
@@ -604,7 +616,8 @@ def test_an_instrument_without_its_readings_is_empty_and_the_disk_takes_a_missin
     assert "ring" not in names and "value" not in names
     partial = snapshot_with(drop=("cpu.temp",))
     names, _, _ = drawn("instrument", partial, 1, 2, source="cpu")
-    assert "ring" in names and "r0" not in names and "r1" in names  # the missing row is left out
+    assert "ring" in names and {"r0", "r0-label", "r1"} <= set(names)  # the missing row: "--"
+    assert "r0-unit" not in names
 
 
 def test_the_instrument_is_lit_unless_the_theme_says_otherwise():

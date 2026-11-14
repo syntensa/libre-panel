@@ -1,0 +1,18 @@
+[package]
+name = "lp-theme"
+description = "Libre Panel's themes as theme/ reads, checks and writes them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }
+lp-pixels = { path = "../pixels" }
+lp-devices = { path = "../devices" }
+lp-i18n = { path = "../i18n" }
+lp-text = { path = "../text" }
+indexmap = "2"
+num-bigint = "0.4"
+num-traits = "0.2"

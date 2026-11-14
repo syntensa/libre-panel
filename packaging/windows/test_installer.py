@@ -1,6 +1,9 @@
 """Install the Windows setup silently, check it, run it, uninstall it.
 
-python packaging/windows/test_installer.py dist/libre-panel-X-windows-x64-setup.exe
+python packaging/windows/test_installer.py [--rust] dist/libre-panel-X-windows-x64-setup.exe
+
+--rust: the setup carries the Rust app (docs/RUST.md, CI's job `try`): the same checks, with
+the smoke test's and check_tools.py's for a build that is not the Python app's.
 
 It installs for all users with every task, the sensor service among them (CI's runner is an
 administrator), and proves that the service runs, that its folder and its pipe let others
@@ -352,7 +355,7 @@ def install(setup, tasks):
     )
 
 
-def main(setup):
+def main(setup, rust=False):
     install(setup, TASKS)
     check((APP / "LibrePanel.exe").is_file(), "LibrePanel.exe installed")
     check((APP / "libre-panel.exe").is_file(), "libre-panel.exe installed")
@@ -376,14 +379,22 @@ def main(setup):
     # video mode, the game frame rates and the CPU's sensors need no other download: here they
     # are as installed, ffmpeg encodes the video mode's stream, PresentMon starts, and the
     # app finds them first (packaging/check_tools.py).
-    subprocess.run([sys.executable, str(CHECK_TOOLS), str(APP)], check=True, timeout=300)
+    other = ["--no-discovery"] if rust else []
+    subprocess.run([sys.executable, str(CHECK_TOOLS), str(APP), *other], check=True, timeout=300)
     check((APP / "tools" / "PawnIO_setup.exe").is_file(), "PawnIO's installer is carried")
 
     check_sensor_service()
 
     # The installed program works as autostart would start it, and its video mode misses nothing.
     subprocess.run(
-        [sys.executable, str(SMOKE), "--tools", str(APP / "LibrePanel.exe"), "--background"],
+        [
+            sys.executable,
+            str(SMOKE),
+            "--tools",
+            *(["--rust"] if rust else []),
+            str(APP / "LibrePanel.exe"),
+            "--background",
+        ],  # fmt: skip
         check=True,
     )
 
@@ -423,4 +434,5 @@ def main(setup):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    given = sys.argv[1:]
+    main(next(arg for arg in given if arg != "--rust"), rust="--rust" in given)

@@ -1,0 +1,26 @@
+[package]
+name = "lp-check"
+description = "Runs Libre Panel's Rust operations it reads, for the comparisons with the Python app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }
+lp-i18n = { path = "../i18n" }
+lp-render = { path = "../render" }
+lp-pixels = { path = "../pixels" }
+lp-decode = { path = "../decode" }
+lp-text = { path = "../text" }
+lp-devices = { path = "../devices" }
+lp-theme = { path = "../theme" }
+lp-config = { path = "../config" }
+lp-sensors = { path = "../sensors" }
+lp-services = { path = "../services" }
+indexmap = "2"
+num-bigint = "0.4"
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+base64 = "0.22"
+sha2 = "0.10"

@@ -2204,9 +2204,17 @@ class Renderer:
         spacing = widget.get("letter_spacing", 0)
         tabular = widget.get("tabular", False)
         joined = cursive(text)  # (such text is laid out whole: see _text_piece)
+        finish = self._finishes.get(widget.get("id", ""))
+        rolls = widget.get("digits", "jump") != "jump"
 
         def width(candidate: str, font: Any) -> float:
-            if joined:
+            # As wide as it is drawn. A text drawn whole (:meth:`_letters` says which is laid
+            # letter by letter) is not the sum of its letters: the font kerns them, and a space
+            # between words a fallback font draws is that font's. "Ничего не играет" was 12 px
+            # wider than its letters one by one, and stood out of its card.
+            lettered = finish is not None and finish.lettering(self, widget, font, candidate)
+            digits = tabular and any(ch in _DIGITS for ch in candidate)
+            if joined or not (spacing or lettered or rolls or digits):
                 return font.getlength(candidate)
             cell = self._digit_cell(font) if tabular else 0
             advances = [
@@ -2222,7 +2230,15 @@ class Renderer:
             while len(text) > 1 and width(text.rstrip() + "…", font) > limit:
                 text = text[:-1]
             return text.rstrip() + "…", size
-        return text, max(6, int(size * limit / measured))
+        # a smaller font makes the letters narrower, not the gaps a letter spacing sets between
+        # them: the letters get what the gaps leave of the room
+        gaps = 0 if joined else spacing * max(0, len(text) - 1)
+        letters, room = measured - gaps, limit - gaps
+        smaller = max(6, int(size * room / letters)) if letters > 0 and room > 0 else 6
+        # (and a font does not get narrower evenly: a size less where it is still too wide)
+        while smaller > 6 and width(text, self.font(widget.get("font", ""), smaller)) > limit:
+            smaller -= 1
+        return text, smaller
 
     def _text_piece(
         self, widget: dict[str, Any], text: str, color: str, laid: bool = True

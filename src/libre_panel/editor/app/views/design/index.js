@@ -47,6 +47,7 @@ import {
   selectAll,
   selectSameKind,
   setFlag,
+  showSensor,
   specOf,
 } from "./ops.js";
 import { PagesPanel } from "./pages.js";
@@ -318,7 +319,7 @@ registerProvider(() => {
         group: () => t("Sensors"),
         icon: "sensor",
         rank: 70,
-        run: () => edit(null, () => withSensor.forEach((widget) => (widget.sensor = sensor.key))),
+        run: () => edit(null, () => withSensor.forEach((widget) => showSensor(widget, sensor.key))),
       });
     }
   }

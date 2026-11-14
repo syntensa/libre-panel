@@ -26,6 +26,7 @@ import {
   selectSameKind,
   sendModules,
   setFlag,
+  showSensor,
   sourceLabels,
   specOf,
 } from "./ops.js";
@@ -33,7 +34,8 @@ import { SensorButton, sensorName } from "./sensors.js";
 
 const change = (widget, key) => (value) =>
   edit(`tool:${widget.id}:${key}`, () => {
-    widget[key] = value;
+    if (key === "sensor") showSensor(widget, value);
+    else widget[key] = value;
   });
 
 /** The menu of the selection (the toolbar's "more", and a right click on the canvas). */

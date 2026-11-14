@@ -243,11 +243,20 @@ class PanelService:
         missing = self.status.missing_theme
         if not missing:
             return ""
+        shown = self.status.theme or self.status.default_theme
+        if self.status.missing_why:  # (it is there, with an error in it: said, not "gone")
+            return t(
+                "The theme “{name}” cannot be loaded ({why}), so the panel shows “{shown}”. "
+                "Mend it, or choose a theme in the tray menu or on Start.",
+                name=missing,
+                why=self.status.missing_why,
+                shown=shown,
+            )
         return t(
             "The theme “{name}” is no longer installed, so the panel shows “{shown}”. "
             "Choose a theme in the tray menu or on Start.",
             name=missing,
-            shown=self.status.theme or self.status.default_theme,
+            shown=shown,
         )
 
     def _hint(self) -> str:

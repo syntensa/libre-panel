@@ -1,0 +1,61 @@
+Libre Panel in Rust: the whole app to try
+=========================================
+
+This folder is Libre Panel written anew in Rust (docs/RUST.md): the app, its window, its tray
+icon and the panels, with no Python in it. It is not an installer: nothing is installed, and
+it starts only when you start it.
+
+It reads and writes the same config.toml and data as the Libre Panel you installed
+(%APPDATA%\LibrePanel): what you change in its window, the installed app finds too. Keep a
+copy of config.toml if you want to be able to go back.
+
+What is in the folder
+---------------------
+  LibrePanel.exe           the app without a console window, as the start menu would start it
+  libre-panel.exe          the same in the terminal (run, start, doctor, sensors, ...:
+                           .\libre-panel.exe help)
+  libre-panel-window.exe   its window (WebView2, as the installed app's)
+  libre-panel-tray.exe     its tray icon
+  tools\                   Libre Panel's engine (a TURZX panel's video), ffmpeg (videos, the
+                           Player, the panel as a monitor), PresentMon (a game's frame rate),
+                           PawnIO's installer, with their licences and SOURCES.txt
+  sensors\                 the sensor service (LibreHardwareMonitor: temperatures, power, fans)
+  share\                   themes, fonts, translations
+  licenses\                the licences of everything in the folder
+
+To try it
+---------
+1. Quit Libre Panel (its tray icon, Quit) and the TURZX app: only one program can have the
+   panels.
+2. Double-click LibrePanel.exe: the app starts as the installed one does, with its tray
+   icon, every panel of config.toml and the app's window. Quit in the icon's menu ends it.
+   The log (the tray icon's menu opens it) is worth copying if something is wrong.
+3. Use it as you use the installed app: Start, Status, Themes, Design, Player, Settings.
+
+   In a terminal (PowerShell) in this folder:
+   .\libre-panel.exe start          the app with what it says in the terminal, until Ctrl+C
+   .\libre-panel.exe doctor         the panel check, with a report
+   .\libre-panel.exe sensors        the readings and their keys
+
+What to look at
+---------------
+- Do all panels show their themes, the right way up, in their colours, smoothly (seconds,
+  graphs, bars, videos)?
+- Readings: temperatures, power and fans (Settings → Unlock all sensors, where the installed
+  app has not set the service up yet), a game's frame rate, what is playing.
+- The window: every page; Design (move a module, save); Themes (switch, import); Player (a
+  video on a panel); Settings → Panels (a monitor on a panel).
+- The tray icon's menu; the keyboard shortcuts of config.toml.
+- Processor load and memory of libre-panel.exe, libre-panel-engine.exe and
+  libre-panel-sensors.exe in Task Manager, beside the installed app's with the same themes.
+- After Quit: does the installed Libre Panel start as before?
+
+What it does not do yet
+-----------------------
+- Updates: it says when a newer Libre Panel is out, but does not download or install it;
+  this folder is replaced by a newer one by hand.
+- No installer and no start menu entry: Settings → Start with Windows starts THIS folder's
+  libre-panel.exe at login; turn it off again before you delete the folder.
+
+Anything that looks or works differently from the installed app is worth telling, with the
+terminal's output or the log.

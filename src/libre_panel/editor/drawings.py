@@ -52,54 +52,17 @@ def plugin_specs() -> dict[str, Any]:
     """Installed plugin widget types, screens and toast styles (and the built-in
     styles besides the card), for the inspector and the building blocks."""
     from libre_panel.plugins.loader import registry
-    from libre_panel.plugins.render import label_for
+    from libre_panel.plugins.render import editor_specs, label_for
     from libre_panel.render.overlays import BUILT_IN_STYLES
 
-    installed = registry()
-    widgets: dict[str, Any] = {}
-    labels: dict[str, str] = {}
-    presets: list[dict[str, Any]] = []
-    for name in installed.names("widgets"):
-        cls = installed.get("widgets", name)
-        if cls is None:
-            continue
-        widgets[name] = {k: list(v) for k, v in cls.spec.items()}
-        labels[name] = label_for(cls)
-        defaults = {k: v[1] for k, v in cls.spec.items()}
-        for i, preset in enumerate(cls.presets):
-            widget = {"type": name, "id": "part", "x": 0, "y": 0, **defaults, **preset["widget"]}
-            text = preset.get("label", {})
-            presets.append(
-                {
-                    "id": f"{name}-{i + 1}",
-                    "name": text.get(i18n.language()) or text.get("en") or labels[name],
-                    "size": [widget.get("w", 100), widget.get("h", 100)],
-                    "widgets": [widget],
-                }
-            )
-    screens = {}
-    for name in installed.names("screens"):
-        cls = installed.get("screens", name)
-        if cls is not None:
-            options = {k: list(v) for k, v in cls.options.items()}
-            screens[name] = {"label": label_for(cls), "options": options}
+    told = editor_specs(registry())
     toasts = {}
     for name, cls in BUILT_IN_STYLES.items():  # the card is the editor's own first choice
         if name != "card":
             label = i18n.t("{name} (built in)", name=label_for(cls))
             toasts[name] = {"label": label, "options": {k: list(v) for k, v in cls.options.items()}}
-    for name in installed.names("toasts"):
-        cls = installed.get("toasts", name)
-        if cls is not None:
-            options = {k: list(v) for k, v in cls.options.items()}
-            toasts[name] = {"label": label_for(cls), "options": options}
-    return {
-        "widgets": widgets,
-        "widget_labels": labels,
-        "presets": presets,
-        "screens": screens,
-        "toasts": toasts,
-    }
+    told["toasts"] = {**toasts, **told["toasts"]}
+    return told
 
 
 def _png(frame: Any) -> bytes:

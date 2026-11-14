@@ -294,6 +294,10 @@ def pull_request_text(entry: dict[str, Any], number: int) -> str:
         f"Its commit is by the one who opened #{number}: merge with **Rebase and merge** (or a "
         "merge commit), which keeps it as it is, so they show among the contributors.",
         "",
+        "No test run belongs to this pull request (the check above is its test): it can be "
+        "merged as it is. Where another theme is merged first, this one is made anew on the "
+        "new list by itself, within a few minutes.",
+        "",
         f"Closes #{number}",
     ])  # fmt: skip
 

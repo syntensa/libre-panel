@@ -689,6 +689,66 @@ def test_the_games_graph_is_drawn_as_finely_as_the_cpus_and_the_gpus():
         assert graphs(name)["game.fps"]["line_width"] == 4
 
 
+def _moon_of(name):
+    """The moon's parts in a theme the app brings, and how wide its widest name comes out."""
+    from pathlib import Path
+
+    from libre_panel import i18n
+    from libre_panel.theme.model import load_theme
+    from libre_panel.theme.modules import MOON_PHASES
+
+    folder = Path(__file__).parent.parent / "src" / "libre_panel" / "themes" / name
+    renderer = Renderer(load_theme(folder), preview=True)
+    moon = next(w for w in renderer.widgets if w.get("sensor") == "moon.name")
+    prefix = moon["id"][: -len("name")]
+    parts = {w["id"][len(prefix) :]: w for w in renderer.widgets if w["id"].startswith(prefix)}
+    font = renderer.font(moon["font"], moon["font_size"])
+    return parts, max(font.getlength(i18n.t(phase)) for phase in MOON_PHASES)
+
+
+@pytest.mark.parametrize("language", ["de", "fr", "ru"])
+def test_the_moon_s_phase_is_named_in_full_in_every_language(language):
+    """Beside the moon the phase's name was cut where it is longer than English's ("Abnehmender…"
+    for half the month in German, on the companion's screens): the names are set as small as
+    the longest of the language needs, not smaller than the line under them where the moon can
+    give them the room (a fifth of itself at most), and no line of the moon is cut."""
+    from libre_panel import i18n
+
+    screen = "almanac-companion-1920x720"
+    english, widest = _moon_of(screen)
+    assert widest <= english["name"]["max_width"]  # English's names fit as they are
+    try:
+        i18n.set_language(language)
+        ours, widest = _moon_of(screen)
+        others = [_moon_of(name) for name in ("encore-companion-1920x720", "nimbus", "terra")]
+    finally:
+        i18n.set_language("en")
+    assert all(w["fit"] == "shrink" for key, w in ours.items() if w["type"] == "metric"), ours
+    # (it was 244 px wide in 216 px of room in German, 303 px in Russian)
+    assert widest <= ours["name"]["max_width"] * 1.03  # (a hair over: a pixel smaller, drawn)
+    assert ours["name"]["font_size"] < english["name"]["font_size"]
+    assert ours["name"]["font_size"] >= ours["lit"]["font_size"]  # still the first line
+    most, least = english["moon"]["size"], english["moon"]["size"] * 0.8 - 1
+    if language == "de":  # (the smaller name is all German needs: the moon stays as it is)
+        assert ours["moon"]["size"] == most
+    elif language == "fr":  # ("Gibbeuse décroissante": the moon gives it room)
+        assert least <= ours["moon"]["size"] < most
+    else:
+        # (the themes' fonts have no Cyrillic: its letters are the computer's own font's, as
+        # wide as that makes them, so whether the moon has to give room is the computer's to
+        # say; with Windows' it has not, with DejaVu it has)
+        assert least <= ours["moon"]["size"] <= most
+    for parts, wide in others:
+        assert wide <= parts["name"]["max_width"] * 1.03
+
+
+def test_the_moon_s_phases_are_those_the_sensors_name():
+    from libre_panel.sensors import sky
+    from libre_panel.theme.modules import MOON_PHASES
+
+    assert MOON_PHASES == sky.MOON_PHASES
+
+
 def test_the_night_over_the_suns_arc_needs_the_suns_times():
     """Without a place there are no sun times: the moon alone, no night symbol over it."""
     parts, _ = expand(theme({"module": "sun", "cols": 3, "rows": 2}, model="turing-12.3-usb"))

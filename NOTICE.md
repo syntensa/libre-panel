@@ -130,6 +130,114 @@ px; nothing else is changed but the clouds made grey and the water a mask. The g
 by Libre Panel's own code; the idea came from Earth3D (mitchcamza, MIT,
 <https://github.com/mitchcamza/Earth3D>), none of whose code, shaders or maps are used.
 
+**Pillow** — the Python Imaging Library (PIL) is Copyright © 1997-2011 by Secret Labs AB and
+Copyright © 1995-2011 by Fredrik Lundh and contributors; Pillow, the friendly PIL fork, is
+Copyright © 2010 by Jeffrey 'Alex' Clark and contributors; MIT-CMU.
+<https://python-pillow.github.io>. Libre Panel's Rust crates (`rust/`, docs/RUST.md) make what
+the Python app makes with Pillow, to the same bytes, and carry parts of Pillow's code
+(`PIL/*.py` and libImaging's C) in their own words: its image operations (`rust/pixels`), how it
+decodes pictures (`rust/decode`), and how it lays out and draws letters with FreeType
+(`rust/text`). The panel test's cards (`rust/render`) are drawn in the font Pillow carries as its
+default, Aileron Regular by Sora Sagano (dotcolon.net), dedicated to the public domain (CC0 1.0).
+By obtaining, using, and/or copying this software and/or its associated
+documentation, you agree that you have read, understood, and will comply with the following
+terms and conditions: Permission to use, copy, modify and distribute this software and its
+documentation for any purpose and without fee is hereby granted, provided that the above
+copyright notice appears in all copies, and that both that copyright notice and this permission
+notice appear in supporting documentation, and that the name of Secret Labs AB or the author not
+be used in advertising or publicity pertaining to distribution of the software without specific,
+written prior permission. SECRET LABS AB AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO
+THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT
+SHALL SECRET LABS AB OR THE AUTHOR BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
+CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+**Python** — Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
+2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023 Python Software
+Foundation; All Rights Reserved; the PSF License Agreement for Python, version 2.
+<https://www.python.org>. Libre Panel's Rust crates do what Python 3.12 does where the app's
+files and messages depend on it, and carry parts of CPython's code in their own words
+(`rust/py`): str's repr, white space, digits and cases, rounding and the division of numbers,
+float() and int() of a str, format() and str.format (`Python/formatter_unicode.c`,
+`Python/pystrtod.c`), json (`Modules/_json.c`), math.hypot's vector_norm
+(`Modules/mathmodule.c`), the order of a set (`Objects/setobject.c`), dates and their strftime
+(`Modules/_datetimemodule.c`, `Modules/timemodule.c`), the zones zoneinfo finds, fnmatch's
+patterns (`Lib/fnmatch.py`) and, in `rust/render`, pathlib's glob (`Lib/pathlib.py`). The
+changes made to them, as the licence asks: they are rewritten in Rust, only as far as the app
+needs them. 1. This LICENSE AGREEMENT is between the Python Software Foundation ("PSF"), and the
+Individual or Organization ("Licensee") accessing and otherwise using this software ("Python")
+in source or binary form and its associated documentation. 2. Subject to the terms and
+conditions of this License Agreement, PSF hereby grants Licensee a nonexclusive, royalty-free,
+world-wide license to reproduce, analyze, test, perform and/or display publicly, prepare
+derivative works, distribute, and otherwise use Python alone or in any derivative version,
+provided, however, that PSF's License Agreement and PSF's notice of copyright, i.e., "Copyright
+(c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015,
+2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023 Python Software Foundation; All Rights Reserved"
+are retained in Python alone or in any derivative version prepared by Licensee. 3. In the event
+Licensee prepares a derivative work that is based on or incorporates Python or any part thereof,
+and wants to make the derivative work available to others as provided herein, then Licensee
+hereby agrees to include in any such work a brief summary of the changes made to Python. 4. PSF
+is making Python available to Licensee on an "AS IS" basis. PSF MAKES NO REPRESENTATIONS OR
+WARRANTIES, EXPRESS OR IMPLIED. BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND
+DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR
+PURPOSE OR THAT THE USE OF PYTHON WILL NOT INFRINGE ANY THIRD PARTY RIGHTS. 5. PSF SHALL NOT BE
+LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL
+DAMAGES OR LOSS AS A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON, OR ANY
+DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF. 6. This License Agreement will
+automatically terminate upon a material breach of its terms and conditions. 7. Nothing in this
+License Agreement shall be deemed to create any relationship of agency, partnership, or joint
+venture between PSF and Licensee. This License Agreement does not grant permission to use PSF
+trademarks or trade name in a trademark sense to endorse or promote products or services of
+Licensee, or any third party. 8. By copying, installing or otherwise using Python, Licensee
+agrees to be bound by the terms and conditions of this License Agreement.
+
+**The GNU C Library** — the Free Software Foundation and the GNU C Library's authors,
+LGPL-2.1-or-later. <https://www.gnu.org/software/libc/>. `rust/py`'s strftime writes a date's
+codes in the C locale as glibc's `time/strftime_l.c` does (Python's strftime on Linux is
+glibc's); used under the GNU GPL, as the LGPL allows.
+
+**NumPy** — Copyright (c) 2005-2025, NumPy Developers, BSD-3-Clause.
+<https://numpy.org>. Libre Panel's Rust crates (`rust/`, docs/RUST.md) compute what the Python
+app computes with numpy to the same numbers, and carry parts of numpy's code in their own
+words: its random Generator (`numpy/random`: SeedSequence, the PCG64 bit generator, the
+normal and exponential distributions by the ziggurat with their tables, the power and the
+uniform distribution; `rust/pixels/src/random.rs` and `ziggurat.rs`) and its own float32 exp
+and tanh (`numpy/_core/src/umath`, the tanh's table as numpy converted it from Intel's SVML;
+`rust/render/src/np.rs`). Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met: Redistributions
+of source code must retain the above copyright notice, this list of conditions and the
+following disclaimer. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the documentation and/or other
+materials provided with the distribution. Neither the name of the NumPy Developers nor the
+names of any contributors may be used to endorse or promote products derived from this
+software without specific prior written permission. THIS SOFTWARE IS PROVIDED BY THE
+COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Within it: **PCG64**, PCG Random Number Generation for C — Copyright 2014 Melissa O'Neill
+<oneill@pcg-random.org>, MIT; and **the ziggurat methods**, which numpy derived from
+**Julia** — Copyright (c) 2009-2019: Jeff Bezanson, Stefan Karpinski, Viral B. Shah, and
+other contributors (<https://github.com/JuliaLang/julia/contributors>), MIT. For each:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+and associated documentation files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions: The above copyright
+notice and this permission notice shall be included in all copies or substantial portions of
+the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
 **lian-li-linux** (MIT) — reference for Lian Li LCD protocols (not used yet).
 
 **Pillow**, **psutil**, **pyusb**, **pycryptodome**, **pyserial**,
@@ -231,7 +339,7 @@ SHA-256 and says where each one's source code is; the licence texts are in
   - FFmpeg: <https://github.com/FFmpeg/FFmpeg>, commit
     `29e619e767cde9045a75c29bc9a8278ae7b3a98b` (branch release/8.1).
   - The build recipe, which names every library in the build with its version or
-    commit (folder `scripts.d`): <https://github.com/BtbN/FFmpeg-Builds>, commit
+    commit (folder `scripts.d`): <https://github.com/FFmpeg-Builds/FFmpeg-Builds>, commit
     `6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b` (tag `autobuild-2026-09-30-13-08`).
   - x264, which does the encoding: <https://code.videolan.org/videolan/x264>,
     commit `0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee`.

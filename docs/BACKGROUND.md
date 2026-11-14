@@ -1,9 +1,12 @@
 # Running in the background
 
 For everyday use Libre Panel runs as a small background app: it drives the
-panel, shows an icon in the system tray and opens its own window (start,
-theme editor, settings) when you want it. It can start by itself when you log
-in.
+panel and opens its own window (start, theme editor, settings) when you want
+it: from the Start menu or your list of apps, or from its icon in the system
+tray, which shows where *Settings → Start and system → Icon in the
+notification area* is turned on (Windows 11 puts a new icon among the hidden
+ones first, behind the taskbar's `^`). Closing the window leaves Libre Panel
+running. It can start by itself when you log in.
 
 ```bash
 libre-panel tray                 # start it (opens its window the first time)

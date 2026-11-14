@@ -1,0 +1,1615 @@
+"""rust/py against Python (docs/RUST.md): what Python does that the app's files and messages
+depend on, as the Rust app does it: str's repr, its white space and digits (Python's regular
+expressions and int() go by them), lower() and upper(), the division of ints, over every code
+point where the Unicode database is the release's (Python 3.12: Unicode 15.0)."""
+
+from __future__ import annotations
+
+import base64
+import calendar
+import fnmatch
+import hashlib
+import json
+import math
+import os
+import random
+import re
+import string
+import struct
+import subprocess
+import sys
+import tomllib
+import unicodedata
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, time, timedelta
+from pathlib import Path
+from typing import Any
+
+import pytest
+from rust_check import run
+
+from libre_panel import i18n
+
+RELEASE_UNICODE = "15.0.0"
+
+
+def test_repr_quotes_and_escapes_as_python_does() -> None:
+    rng = random.Random(0x9E9)
+    # characters whose kind has not changed since long before Unicode 15: ASCII and its
+    # controls, Latin-1, the general punctuation, CJK, the private use area, emoji
+    pools = [
+        range(0, 0x80),
+        range(0x80, 0x100),
+        range(0x2000, 0x2070),
+        range(0x4E00, 0x4F00),
+        range(0xE000, 0xE010),
+        range(0x1F600, 0x1F650),
+        [0x27, 0x22, 0x5C, 0x10FFFF],
+    ]
+    texts = ["", "abc", "it's", "'\"", "a\\b\n\t\r"]
+    for _ in range(400):
+        texts.append("".join(chr(rng.choice(rng.choice(pools))) for _ in range(rng.randrange(8))))
+    [ours] = run([{"op": "py", "texts": texts}])
+    assert ours["reprs"] == [repr(text) for text in texts]
+
+
+def test_lower_upper_and_casefold_as_python_s() -> None:
+    rng = random.Random(0x10E)
+    # the capital sigma among cased letters, case-ignorable ones (marks, modifiers, the
+    # apostrophe, the full stop, format characters) and caseless ones; letters that lower()
+    # or upper() make two of (İ, ß, ŉ, ﬃ, ΐ); Greek, Cyrillic, Armenian, Georgian, Cherokee,
+    # Deseret, Adlam, the fullwidth Latin, circled letters, Roman numerals
+    pools = [
+        "ΣΣΣΣσς",
+        "AbΑβДжՁ\u10a0Ᏼꭰǅᾈ\U00010400\U0001e900Ａｚⓐⓩⅰⅷªº",
+        "\u0301\u0345\u20dd'.:\u00b7\u2019ʰ\u00ad\u200d\u02c2",
+        " 1-_中\u05d0\u0627😀\n",
+        "İßŉﬃΐǰẞ",
+    ]
+    texts = ["", "Σ", "ΑΣ", "ΑΣΑ", "Α'Σ", "ΑΣ'", "Α\u0301Σ\u0301", "ΑΣ\u0301Α", "ΣΑΣ ΣΑΣ."]
+    for _ in range(2000):
+        texts.append("".join(rng.choice(rng.choice(pools)) for _ in range(rng.randrange(7))))
+    [ours] = run([{"op": "py", "texts": texts}])
+    assert ours["lowers"] == [text.lower() for text in texts]
+    assert ours["uppers"] == [text.upper() for text in texts]
+    assert ours["casefolds"] == [text.casefold() for text in texts]
+
+
+def test_ints_divide_to_the_nearest_float() -> None:
+    rng = random.Random(0xD1F)
+    pairs = [(0, 5), (0, -5), (1, 3), (-7, 2), (2**53 + 1, 1), (2**127 - 1, 255), (-(2**127), 1)]
+    for _ in range(3000):
+        a = rng.randrange(-(2 ** rng.randrange(1, 128)), 2 ** rng.randrange(1, 128))
+        b = rng.choice([255, 100, 3, -7]) if rng.random() < 0.5 else rng.randrange(1, 2**63)
+        pairs.append((a, b if rng.random() < 0.8 else -b))
+    divisions = [[str(a), str(b)] for a, b in pairs]
+    [ours] = run([{"op": "py", "texts": [], "divisions": divisions}])
+    assert [q.hex() for q in ours["quotients"]] == [(a / b).hex() for a, b in pairs]
+
+
+@pytest.mark.skipif(
+    unicodedata.unidata_version != RELEASE_UNICODE,
+    reason="the tables are Unicode 15.0's, as the release's Python (3.12) has them",
+)
+def test_digits_printable_white_space_and_case_over_every_code_point() -> None:
+    # lower(), upper() and casefold() of each character, and what the final sigma makes of it:
+    # one that is skipped (case-ignorable), a letter of a case, or neither
+    sigma = {("ς", "σ"): "I", ("σ", "σ"): "C", ("ς", "ς"): "N"}
+    lines, cases, folds = [], [], []
+    for code in range(0x110000):
+        if 0xD800 <= code <= 0xDFFF:
+            continue
+        ch = chr(code)
+        digit = unicodedata.decimal(ch, -1) if unicodedata.category(ch) == "Nd" else -1
+        printable, space = ch.isprintable(), ch.isspace()
+        if digit != -1 or not printable or space:
+            lines.append(f"{code:04X} {digit} {int(printable)} {int(space)}\n")
+        low, up = ch.lower(), ch.upper()
+        kind = sigma[("AΣ" + ch).lower()[1], ("AΣ" + ch + "B").lower()[1]]
+        if low != ch or up != ch or kind != "N":
+            low_codes = ".".join(f"{ord(c):X}" for c in low)
+            up_codes = ".".join(f"{ord(c):X}" for c in up)
+            cases.append(f"{code:04X} {low_codes} {up_codes} {kind}\n")
+        if (folded := ch.casefold()) != ch:
+            folds.append(f"{code:04X} {'.'.join(f'{ord(c):X}' for c in folded)}\n")
+    [ours] = run([{"op": "py", "texts": []}])
+    assert ours["sha256"] == hashlib.sha256("".join(lines).encode()).hexdigest()
+    assert ours["case_sha256"] == hashlib.sha256("".join(cases).encode()).hexdigest()
+    assert ours["fold_sha256"] == hashlib.sha256("".join(folds).encode()).hexdigest()
+
+
+# what JSON's strings hold: the escapes, quotes and controls, Latin-1, the line separators
+# Python's splitlines() knows, CJK, an astral emoji, a private use character
+_CHARS = ['a', 'Z', ' ', '"', '\\', '/', '\n', '\t', '\x00', '\x1f', '\x7f', 'é', ' ',
+          '\u0085', '中', '😀', '', '﻿', '퟿', '￿']  # fmt: skip
+
+
+def _json_text(rng: random.Random, depth: int = 0) -> str:
+    """A JSON text as anyone may write one: white space anywhere, escapes of any kind (pairs and
+    halves of surrogates among them), numbers of every form, ints of many digits, NaN and
+    Infinity, a key given twice."""
+
+    def space() -> str:
+        return "".join(rng.choice(" \t\n\r") for _ in range(rng.choice([0, 0, 0, 1, 2])))
+
+    def string() -> str:
+        out = []
+        for _ in range(rng.randrange(6)):
+            ch = rng.choice(_CHARS)
+            kind = rng.randrange(6)
+            if kind == 0:
+                out.append(f"\\u{ord(ch):04x}" if ord(ch) < 0x10000 else "\\ud83d\\ude00")
+            elif kind == 1:
+                out.append(rng.choice(['\\"', "\\\\", "\\/", "\\b", "\\f", "\\n", "\\r", "\\t"]))
+            elif kind == 2 and rng.random() < 0.1:
+                out.append(rng.choice(["\\ud800", "\\udfff", "\\ud83d\\u0041", "\\uDBFF\\uDFFF"]))
+            elif ch in '"\\' or ord(ch) < 0x20:
+                out.append(json.dumps(ch)[1:-1])
+            else:
+                out.append(ch)
+        return '"' + "".join(out) + '"'
+
+    def number() -> str:
+        kind = rng.randrange(6)
+        if kind == 0:
+            return str(rng.randrange(-(10**6), 10**6))
+        if kind == 1:
+            return str(rng.randrange(-(10**40), 10**40))
+        if kind == 2:
+            return rng.choice(["0", "-0", "0.0", "-0.0", "1e16", "1E-5", "2.5e+300", "1e400"])
+        if kind == 3:
+            return rng.choice(["NaN", "Infinity", "-Infinity"])
+        whole = str(rng.randrange(10 ** rng.randrange(1, 20)))
+        fraction = (
+            "." + str(rng.randrange(10 ** rng.randrange(1, 20))) if rng.random() < 0.7 else ""
+        )
+        exponent = rng.choice(["", "e", "E"]) + rng.choice(["", "+", "-"]) + str(rng.randrange(330))
+        return rng.choice(["", "-"]) + whole + fraction + (exponent if exponent[0] in "eE" else "")
+
+    kind = rng.randrange(9 if depth < 4 else 6)
+    if kind == 0:
+        return rng.choice(["null", "true", "false"])
+    if kind in (1, 2):
+        return number()
+    if kind in (3, 4, 5):
+        return string()
+    items = [_json_text(rng, depth + 1) for _ in range(rng.randrange(4))]
+    if kind in (6, 7):
+        keys = [string() for _ in items]
+        if len(keys) > 1 and rng.random() < 0.3:
+            keys[-1] = keys[0]  # given twice: the last value in the first one's place
+        pairs = [
+            space() + k + space() + ":" + space() + v + space()
+            for k, v in zip(keys, items, strict=True)
+        ]
+        return "{" + ",".join(pairs) + space() + "}"
+    return "[" + ",".join(space() + v + space() for v in items) + space() + "]"
+
+
+def _broken(rng: random.Random, text: str) -> str:
+    """The text with a slip or two: a character gone, one too many, cut short."""
+    for _ in range(rng.choice([1, 1, 2])):
+        at = rng.randrange(len(text) + 1)
+        kind = rng.randrange(4)
+        if kind == 0 and text:
+            text = text[:at] + text[at + 1 :]
+        elif kind == 1:
+            text = text[:at] + rng.choice(',:[]{}"\\ 0eE.+-ntfNIu\x01x') + text[at:]
+        elif kind == 2:
+            text = text[:at]
+        else:
+            text = text[:at] + text[at : at + 1] * 2 + text[at + 1 :]
+    return text
+
+
+def _python_json(text: str) -> dict[str, Any]:
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as error:
+        return {"error": str(error), "kind": "decode"}
+    except RecursionError as error:
+        return {"error": str(error), "kind": "recursion"}
+    except ValueError as error:
+        return {"error": str(error), "kind": "value"}
+    try:
+        json.dumps(value, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:  # half a surrogate pair: Rust's str cannot hold it
+        return {"half": True}
+    return {
+        "repr": repr(value),
+        "dumps": [
+            json.dumps(value),
+            json.dumps(value, indent=2, ensure_ascii=False),
+            json.dumps(value, sort_keys=True, ensure_ascii=False),
+            json.dumps(value, separators=(",", ":")),
+        ],
+    }
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12),
+    reason="the release's json is Python 3.12's (3.13 words some refusals differently)",
+)
+def test_json_is_read_and_written_as_python_s() -> None:
+    rng = random.Random(0x15)
+    texts = [_json_text(rng) for _ in range(3000)]
+    texts += [_broken(rng, text) for text in texts[:3000]]
+    texts += ["", " ", "﻿[]", "1" * 4300, "-" + "1" * 4301, '{"a":1,}', "[1,]", "01"]
+    # every theme that comes with the app, as it is on disk
+    themes = sorted(
+        (Path(__file__).resolve().parent.parent / "src/libre_panel/themes").glob("*/theme.json")
+    )
+    texts += [path.read_text(encoding="utf-8") for path in themes]
+    [ours] = run([{"op": "json", "texts": texts}])
+    halves = 0
+    for text, mine in zip(texts, ours["results"], strict=True):
+        want = _python_json(text)
+        if "half" in want:
+            halves += 1
+            assert mine["kind"] == "value" and mine["error"].startswith("half of a surrogate pair")
+            continue
+        assert mine == want, repr(text)
+    assert len(themes) > 20 and 0 < halves < len(texts) // 10
+
+
+def test_floats_are_written_as_python_s_repr() -> None:
+    rng = random.Random(0xF1)
+    specials = [0.0, -0.0, 1e16, 1e15, 9999999999999998.0, 1e-4, 1e-5, 0.1, 5e-324, 2e16 + 8]
+    specials += [1.7976931348623157e308, 123.456, float("inf"), float("-inf"), float("nan")]
+    values = specials + [struct.unpack("<d", rng.randbytes(8))[0] for _ in range(20000)]
+    values += [rng.uniform(-1e6, 1e6) for _ in range(5000)] + [
+        float(rng.randrange(10**18)) for _ in range(2000)
+    ]
+    bits = [struct.pack("<d", v)[::-1].hex() for v in values]
+    [ours] = run([{"op": "json", "texts": [], "floats": bits}])
+    assert ours["floats"] == [repr(v) for v in values]
+
+
+def test_nesting_as_deep_as_python_reads_it() -> None:
+    [ours] = run([{"op": "json", "texts": []}])
+    deepest = ours["max_depth"]
+
+    def reads(depth: int) -> bool:
+        try:
+            json.loads("[" * depth + "]" * depth)
+        except RecursionError:
+            return False
+        return True
+
+    # Python's own limit, less what the test's stack already holds: as deep as here, or a little
+    # less; and never deeper
+    assert not reads(deepest + 1) and reads(deepest - 200)
+    texts = ["[" * n + "]" * n for n in (deepest - 200, deepest, deepest + 1)]
+    texts.append('{"a":' * (deepest + 1) + "1" + "}" * (deepest + 1))
+    [ours] = run([{"op": "json", "texts": texts}])
+    results = ours["results"]
+    assert "repr" in results[0] and "repr" in results[1]
+    too_deep = "maximum recursion depth exceeded while decoding a JSON array from a unicode string"
+    assert results[2] == {"error": too_deep, "kind": "recursion"}
+    assert results[3]["error"].endswith("decoding a JSON object from a unicode string")
+
+
+def test_floats_are_formatted_as_python_s_g() -> None:
+    rng = random.Random(0x6E)
+    values = [0.0, -0.0, 5.0, 12.3, 2.1, 0.125, 2.5, 0.5, 999999.5, 1e-5, 1e-4, 123456789.0]
+    values += [float("inf"), float("-inf"), float("nan")]
+    values += [struct.unpack("<d", rng.randbytes(8))[0] for _ in range(5000)]
+    values += [rng.randrange(-2000, 2000) / rng.choice([2, 4, 8, 1024, 10]) for _ in range(5000)]
+    values += [round(rng.uniform(0, 30), 1) for _ in range(2000)]
+    general = [(v, rng.choice([1, 2, 3, 6, 6, 10, 17])) for v in values]
+    pairs = [[struct.pack("<d", v)[::-1].hex(), p] for v, p in general]
+    [ours] = run([{"op": "json", "texts": [], "general": pairs}])
+    assert ours["general"] == [format(v, f".{p}g") for v, p in general]
+
+
+def test_random_draws_as_python_s_random_draws_them() -> None:
+    """random.Random(seed) of ints small and large, either sign, and its random(), uniform(),
+    randrange() (an empty range too) and getrandbits(), each in turn from the same state."""
+    rng = random.Random(0x7A7D)
+    seeds = [0, 1, -1, 2, 40, 0x5EED, 0xB10C, 2**31, 2**32 - 1, 2**32, 2**40 + 7, -(2**63) + 1]
+    seeds += [2**63 - 1] + [rng.randrange(-(2**63) + 1, 2**63) for _ in range(40)]
+    seeds += [rng.randrange(2**32) for _ in range(40)] + [rng.randrange(1000) for _ in range(40)]
+    hexed = lambda v: struct.pack("<d", v)[::-1].hex()  # noqa: E731
+    stops = [0, -3, 1, 2, 255, 256, 257, 1920, 2**40, 2**62 + 1]
+    programs, want = [], []
+    for seed in seeds:
+        draws: list[list[Any]] = []
+        for _ in range(rng.randrange(1, 6)):
+            kind = rng.choice(["random", "uniform", "randrange", "getrandbits"])
+            n = rng.randrange(1, 800)
+            if kind == "uniform":
+                a, b = rng.uniform(-100, 100), rng.choice([rng.uniform(-100, 100), 1e300, 0.0])
+                draws.append(["uniform", hexed(a), hexed(b), n])
+            elif kind == "randrange":
+                draws.append(["randrange", rng.choice(stops), n])
+            elif kind == "getrandbits":
+                draws.append(["getrandbits", rng.choice([0, 1, 9, 31, 32, 33, 40, 63, 64]), n])
+            else:
+                draws.append(["random", n])
+        programs.append({"seed": seed, "draws": draws})
+        theirs, ours = random.Random(seed), []
+        for draw in draws:
+            for _ in range(draw[-1]):
+                if draw[0] == "uniform":
+                    a, b = (struct.unpack(">d", bytes.fromhex(v))[0] for v in draw[1:3])
+                    ours.append(hexed(theirs.uniform(a, b)))
+                elif draw[0] == "randrange":
+                    try:
+                        ours.append(theirs.randrange(draw[1]))
+                    except ValueError:
+                        ours.append(None)
+                elif draw[0] == "getrandbits":
+                    ours.append(theirs.getrandbits(draw[1]))
+                else:
+                    ours.append(hexed(theirs.random()))
+        want.append(ours)
+    [got] = run([{"op": "py_random", "programs": programs}])
+    assert got["programs"] == want
+
+
+def test_hypot_is_python_s_own() -> None:
+    rng = random.Random(0x4799)
+    specials = [
+        0.0,
+        -0.0,
+        1.0,
+        3.0,
+        4.0,
+        5e-324,
+        2.2250738585072014e-308,
+        1e308,
+        1.7976931348623157e308,
+    ]
+    specials += [float("inf"), float("-inf"), float("nan"), 0.1, 1e-300]
+    pairs = [(a, b) for a in specials for b in specials]
+    for _ in range(20000):
+        kind = rng.randrange(3)
+        if kind == 0:
+            pairs.append((rng.uniform(-1, 1), rng.uniform(-1, 1)))
+        elif kind == 1:
+            draw = lambda: struct.unpack("<d", rng.randbytes(8))[0]  # noqa: E731
+            pairs.append((draw(), draw()))
+        else:
+            scale = 10.0 ** rng.randrange(-320, 300)
+            pairs.append((rng.uniform(-1, 1) * scale, rng.uniform(-1, 1) * scale))
+    bits = [[struct.pack("<d", v)[::-1].hex() for v in pair] for pair in pairs]
+    [ours] = run([{"op": "math", "hypot": bits}])
+    want = [struct.pack("<d", math.hypot(a, b))[::-1].hex() for a, b in pairs]
+    assert ours["hypot"] == want
+
+
+def _number(rng: random.Random) -> Any:
+    """A number as a JSON file may hold one: bools, small and huge ints, floats of every kind."""
+    sign = rng.choice([1, -1])
+    pick = rng.randrange(11)
+    if pick == 0:
+        return rng.choice([True, False])
+    if pick == 1:
+        return rng.randrange(-5, 6)
+    if pick == 2:
+        return rng.randrange(-(10**6), 10**6)
+    if pick == 3:
+        return sign * rng.randrange(2**52, 2**70)
+    if pick == 4:
+        return sign * rng.randrange(1, 10 ** rng.randrange(20, 400))
+    if pick == 5:
+        specials = [0.0, -0.0, 0.5, 2.5, 1e308, 5e-324, math.inf, -math.inf, math.nan, 4.0, 2.0**53]
+        return rng.choice(specials)
+    if pick == 6:
+        return struct.unpack("<d", struct.pack("<Q", rng.getrandbits(64)))[0]
+    if pick == 7:
+        return rng.uniform(-1000, 1000)
+    if pick == 8:
+        # about the largest float: past it ints no longer turn into one
+        return rng.choice(
+            [sign * 2 ** rng.randrange(1000, 1100), 2**1024 - 2**970, 2**1024 - 2**971]
+        )
+    if pick == 9:
+        return float(rng.randrange(-100, 100)) * 2.0 ** rng.randrange(-1100, 1000)
+    return rng.choice([2**53 + 1, 2**63, -(2**63), 3 * 2**60])
+
+
+def _python_number_op(op: str, a: Any, b: Any) -> dict[str, Any]:
+    calls = {
+        "+": lambda: a + b,
+        "-": lambda: a - b,
+        "*": lambda: a * b,
+        "/": lambda: a / b,
+        "//": lambda: a // b,
+        "%": lambda: a % b,
+        "<": lambda: a < b,
+        ">": lambda: a > b,
+        "max": lambda: max(a, b),
+        "min": lambda: min(a, b),
+        "round": lambda: round(a),
+        "log": lambda: math.log(a),
+    }
+    try:
+        return {"value": json.dumps(calls[op]())}
+    except Exception as error:  # noqa: BLE001 (every kind Python raises is compared)
+        return {"error": str(error), "kind": type(error).__name__}
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12),
+    reason="Python 3.12's messages (3.13 words a float modulo by zero otherwise)",
+)
+def test_arithmetic_on_numbers_as_python_s() -> None:
+    rng = random.Random(0x4E0)
+    others = [None, "a", "", [1], [], {"a": 1}, {}, "8"]
+
+    def value() -> Any:
+        return _number(rng) if rng.random() < 0.8 else rng.choice(others)
+
+    cases: list[tuple[str, Any, Any]] = []
+    for _ in range(30000):
+        op = rng.choice(["+", "-", "*", "/", "//", "%", "<", ">", "max", "min", "round", "log"])
+        if op == "log":  # (of a float)
+            a = abs(_number(rng)) if rng.random() < 0.7 else _number(rng)
+            cases.append((op, float(a) if abs(a) < 2**1000 else 1.5, 0))
+        else:
+            cases.append((op, value(), value()))
+    [ours] = run([{"op": "py_num", "cases": [json.dumps(c) for c in cases]}])
+    digits = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)  # (products of ints of 400 digits, written whole)
+    try:
+        for (op, a, b), got in zip(cases, ours["answers"], strict=True):
+            if got.get("kind") == "Unsupported":
+                # what Python counts with sequences (joins, repeats, orders, formats), never a
+                # number with a number
+                assert isinstance(a, (str, list)) or isinstance(b, (str, list)), (op, a, b)
+                continue
+            assert got == _python_number_op(op, a, b), (op, a, b)
+    finally:
+        sys.set_int_max_str_digits(digits)
+
+
+@pytest.mark.skipif(
+    unicodedata.unidata_version != RELEASE_UNICODE,
+    reason=f"needs Python with Unicode {RELEASE_UNICODE} (the release's)",
+)
+def test_names_meet_without_regard_to_case_as_python_s_re() -> None:
+    import _sre
+    import fnmatch
+    import glob
+    import re
+
+    rng = random.Random(0x16C)
+    # characters with case, with more than one lowercase of one uppercase, without case
+    pool = "aAbBkKsSiIeEzZ" + "ſKıİßẞΣσςΙιͅθϑϴβϐвᲀǅǄǆ" + "0123456789-x[]*?._ äÄöÖ"
+    pairs = []
+    for _ in range(6000):
+        stem = "".join(rng.choice(pool) for _ in range(rng.randrange(1, 6)))
+        if rng.random() < 0.5:  # the stem's characters, some in another case
+            name = "".join(
+                rng.choice([c, c.swapcase()[:1], c.lower()[:1], c.upper()[:1], rng.choice(pool)])
+                for c in stem
+            )
+        else:
+            name = "".join(rng.choice(pool) for _ in range(rng.randrange(0, 6)))
+        pairs.append([stem, name + rng.choice(["", "-vertical", "-1920x720"])])
+    [ours] = run([{"op": "theme_adapt", "fonts_dir": "", "builtin": "", "ignorecase": pairs}])
+    for (stem, name), got in zip(pairs, ours["ignorecase"], strict=True):
+        # pathlib's glob on Windows: fnmatch's pattern of the escaped stem, without case
+        pattern = re.compile(fnmatch.translate(glob.escape(stem) + "*"), re.IGNORECASE)
+        assert got == (len(stem) if pattern.match(name) else None), (stem, name)
+    # and the tables it goes by, over every code point
+    [table] = run([{"op": "py_num", "cases": []}])
+    lines = "".join(
+        f"{cp:x} {_sre.unicode_tolower(cp):x} {int(_sre.unicode_iscased(cp))}\n"
+        for cp in range(0x110000)
+    )
+    assert table["re_digest"] == hashlib.sha256(lines.encode()).hexdigest()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="Python 3.12's sum() (Neumaier's)")
+def test_floats_summed_as_python_s_sum() -> None:
+    rng = random.Random(0x5E)
+    lists: list[list[float]] = [[], [-0.0], [0.55] * 7, [0.1] * 10, [1e308, 1e308, -1e308]]
+    lists += [[1e16, 1.0, -1e16], [math.inf, -math.inf], [math.nan, 1.0], [5e-324] * 3]
+    for _ in range(3000):
+        pick = rng.randrange(3)
+        n = rng.randrange(1, 12)
+        if pick == 0:
+            lists.append([rng.uniform(-100, 100) for _ in range(n)])
+        elif pick == 1:
+            lists.append([float(rng.choice([0.55, 1.0, 0.1, 0.3, 2.65])) for _ in range(n)])
+        else:
+            lists.append([struct.unpack("<d", struct.pack("<Q", rng.getrandbits(64)))[0]
+                          for _ in range(n)])  # fmt: skip
+    bits = [[struct.pack(">d", x).hex() for x in items] for items in lists]
+    [ours] = run([{"op": "py_num", "cases": [], "sums": bits}])
+    want = [struct.pack(">d", float(sum(items))).hex() for items in lists]
+    # (NaN's bits as the sums make them: compared as NaN)
+    for got, expected, items in zip(ours["sums"], want, lists, strict=True):
+        if math.isnan(sum(items)):
+            assert math.isnan(struct.unpack(">d", bytes.fromhex(got))[0]), items
+        else:
+            assert got == expected, items
+
+
+def test_lines_split_as_python_s_splitlines() -> None:
+    rng = random.Random(0x11E)
+    ends = ["\n", "\r", "\r\n", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", " ", " "]
+    texts = ["", "\n", "a", "a\n", "\r\n\r\n", "a\r\rb", "\n\na"]
+    for _ in range(2000):
+        texts.append(
+            "".join(rng.choice(["a", "bc", " ", "é", *ends]) for _ in range(rng.randrange(8)))
+        )
+    [ours] = run([{"op": "py_num", "cases": [], "splitlines": texts}])
+    assert ours["splitlines"] == [text.splitlines() for text in texts]
+
+
+@pytest.mark.skipif(
+    unicodedata.unidata_version != RELEASE_UNICODE,
+    reason=f"needs Python with Unicode {RELEASE_UNICODE} (the release's)",
+)
+def test_wide_characters_as_python_s_east_asian_width() -> None:
+    [ours] = run([{"op": "py_num", "cases": []}])
+    wide = "".join(
+        "1" if unicodedata.east_asian_width(chr(cp)) in "WF" else "0" for cp in range(0x110000)
+    )
+    assert ours["wide_digest"] == hashlib.sha256(wide.encode()).hexdigest()
+
+
+def test_time_zones_found_as_zoneinfo_finds_them() -> None:
+    # (in the search path, else in the tzdata package, on Windows all of them; a key checked
+    # by the system's own paths' rules)
+    from libre_panel import timezones
+
+    keys = ["", "UTC", "Asia/Tokyo", "Europe/Berlin", "America/Argentina/Buenos_Aires", "Nope/Zone"]
+    keys += ["/etc/localtime", "../etc/passwd", "Europe/", "./UTC", "..", ".", "a//b", "zone.tab"]
+    keys += ["tzdata.zi", "posixrules", "Factory", "Etc/GMT+5", "US/Pacific", "europe/berlin"]
+    keys += ["Asia", "Europe/Berlin\0", "Antarctica/Troll", "iso3166.tab", "right/UTC"]
+    keys += ["Europe\\Berlin", "C:UTC", "..\\zoneinfo\\UTC", "America/Argentina", "Etc/UTC"]
+    keys += ["Europe/Berlin/", "America.Argentina/Cordoba", "__init__.py", "America/Indiana/Knox"]
+    [ours] = run([{"op": "py_num", "cases": [], "zones": keys}])
+    assert ours["zones"] == [timezones.zone.__wrapped__(k) is not None for k in keys]
+
+
+# -- time zones -----------------------------------------------------------------------------
+
+# (in a process of its own, TZ as asked: the moments where the computer's clocks change, as the
+# C library finds them, and where named zones' change, as zoneinfo finds them, in the years
+# round now and in a few far ones; naive local times about them in both folds, timestamps about
+# them, and random ones; what datetime makes of each: a time's timestamp, its offset
+# (astimezone().utcoffset()), the time in a named zone (astimezone(zone)), a timestamp's local
+# time and fold (fromtimestamp); None where Python raises)
+_ZONE_PROBE = r"""
+import json, random, sys, time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+ask = json.load(sys.stdin)
+rng = random.Random(ask["seed"])
+EPOCH = datetime(1970, 1, 1)
+FIRST, LAST = -62135596800, 253402300800
+NEAR = (-126230400, 2398291200)  # 1966 to 2046
+FAILS = (OverflowError, ValueError, OSError)
+
+
+def zone(key):  # (timezones.zone)
+    try:
+        return ZoneInfo(key)
+    except (ValueError, KeyError, OSError):
+        return None
+
+
+def fields(d):
+    return [d.year, d.month, d.day, d.hour, d.minute, d.second, d.microsecond]
+
+
+def edges(offset, first, last, step):
+    found, t, o = [], first, offset(first)
+    while t < last:
+        u = min(t + step, last)
+        p = offset(u)
+        if p != o:
+            lo, hi = t, u
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                if offset(mid) == o:
+                    lo = mid
+                else:
+                    hi = mid
+            found.append((hi, o, offset(hi)))
+        t, o = u, p
+    return found
+
+
+def changes(offset, step):
+    spans = [(-2524521600, 4417977600)]  # 1890 to 2110
+    for y in (1, 2, 100, 1000, 1600, 1700, 1800, 2400, 5000, 9998, 9999):
+        a = int((datetime(y, 1, 1) - EPOCH).total_seconds())
+        b = int((datetime(y, 12, 31, 23, 59, 59) - EPOCH).total_seconds())
+        spans.append((a, b))
+    return [e for a, b in spans for e in edges(offset, a, b, step)]
+
+
+def chosen(found, near, far):
+    pick = [e for e in found if NEAR[0] <= e[0] < NEAR[1]]
+    rest = [e for e in found if not NEAR[0] <= e[0] < NEAR[1]]
+    return rng.sample(pick, min(near, len(pick))) + rng.sample(rest, min(far, len(rest)))
+
+
+def naive(t):
+    return EPOCH + timedelta(seconds=t) if FIRST <= t < LAST else None
+
+
+def own_offset(t):  # (None where the C library's localtime fails: Windows' before 1970)
+    try:
+        return time.localtime(t).tm_gmtoff
+    except FAILS:
+        return None
+
+
+def named_offset(z):
+    def offset(t):
+        utc = EPOCH + timedelta(seconds=t)
+        try:
+            there = z.fromutc(utc.replace(tzinfo=z))
+        except FAILS:
+            return None
+        return int((there.replace(tzinfo=None) - utc).total_seconds())
+    return offset
+
+
+cases, stamps = [], []
+keys = ask["keys"]
+
+
+def add(dt, fold, key=None):
+    if key is None and keys:
+        key = keys[len(cases) % len(keys)]
+    cases.append({"now": fields(dt) + [fold], "zone": key})
+
+
+for t_, o1, o2 in chosen(changes(own_offset, 86400), 400, 20):
+    for base in sorted({t_ + (o1 or 0), t_ + (o2 or 0)}):
+        for d in (-3600, -1, 0, 1, 1800, 3600):
+            dt = naive(base + d)
+            if dt is not None:
+                us = rng.choice((0, 0, 0, 1, 500000, 999999))
+                for fold in (0, 1):
+                    add(dt.replace(microsecond=us), fold)
+    for d in (-86400, -3601, -1, -0.5, -1e-7, 0, 1e-7, 0.4999995, 0.5, 1, 3599.9999995, 3600):
+        stamps.append(t_ + d)
+for key in ask["edges_for"]:
+    z = zone(key)
+    if z is None:
+        continue
+    for t_, o1, o2 in chosen(changes(named_offset(z), 2 * 86400), 60, 20):
+        for d in (-3601, -1, 0, 1, 3600):
+            dt = naive(t_ + d)
+            if dt is not None:
+                add(dt, 0, key)
+for y in (1970, 2026, 2038, 2050):  # (new year's, where the local year is not UTC's yet)
+    for at in ((y, 1, 1, 0, 30), (y, 1, 1, 5, 30), (y, 1, 1, 13, 30), (y - 1, 12, 31, 10, 30),
+               (y - 1, 12, 31, 20, 30), (y - 1, 12, 31, 23, 30)):
+        for key in keys or [None]:
+            add(datetime(*at), 0, key)
+for _ in range(200):
+    y = rng.randint(1890, 2110) if rng.random() < 0.7 else rng.randint(1, 9999)
+    dt = datetime(y, rng.randint(1, 12), rng.randint(1, 28), rng.randrange(24),
+                  rng.randrange(60), rng.randrange(60), rng.choice((0, rng.randrange(10**6))))
+    add(dt, rng.randrange(2))
+for dt in (datetime(1, 1, 1), datetime(1, 1, 1, 23, 59, 59), datetime(1, 1, 2),
+           datetime(1, 1, 2, 12), datetime(9999, 12, 31, 23, 59, 59, 999999),
+           datetime(9999, 12, 31), datetime(9999, 12, 30, 12),
+           datetime(1969, 12, 31, 23, 59, 59, 999999), datetime(1970, 1, 1),
+           datetime(2038, 1, 19, 3, 14, 7), datetime(2038, 1, 19, 3, 14, 8),
+           datetime(1901, 12, 13, 20, 45, 52), datetime(1901, 12, 13, 20, 45, 51)):
+    for fold in (0, 1):
+        add(dt, fold)
+for _ in range(200):
+    if rng.random() < 0.3:
+        t = rng.uniform(FIRST - 2 * 86400, LAST + 2 * 86400)
+    else:
+        t = rng.uniform(-2524521600, 4417977600)
+    stamps.append(rng.choice((t, float(int(t)), int(t) + 0.5, int(t) + 0.9999995)))
+for t in (FIRST, FIRST + 1, FIRST + 86399, FIRST + 86400, FIRST + 86401, LAST - 1,
+          LAST - 0.5, LAST - 1e-7, LAST - 86400, LAST - 86401, 0, -1, -0.5, 1e-7,
+          5e-7, -5e-7, 1.5e-6, -1.5e-6, 2.5e-6, -2.5e-6, 3.5e-6):  # (ties of a microsecond)
+    stamps.append(float(t))
+
+answers = []
+for case in cases:
+    *at, fold = case["now"]
+    d = datetime(*at, fold=fold)
+    out = {}
+    try:
+        out["timestamp"] = d.timestamp()
+    except FAILS:
+        out["timestamp"] = None
+    try:
+        out["offset"] = int(d.astimezone().utcoffset().total_seconds())
+    except FAILS:
+        out["offset"] = None
+    if case["zone"] is not None:
+        z = zone(case["zone"])
+        try:
+            out["there"] = None if z is None else fields(d.astimezone(z).replace(tzinfo=None))
+        except FAILS:
+            out["there"] = None
+    answers.append(out)
+local = []
+for t in stamps:
+    try:
+        d = datetime.fromtimestamp(t)
+    except FAILS:
+        local.append(None)
+    else:
+        local.append(fields(d) + [d.fold])
+json.dump({"cases": cases, "answers": answers, "stamps": stamps, "local": local}, sys.stdout)
+"""
+
+
+def _zone_probe(tz: str | None, ask: dict[str, Any], env: dict[str, str]) -> dict[str, Any]:
+    """What Python makes of the probe's moments with TZ `tz` (None: unset)."""
+    env = dict(env)
+    env.pop("TZ", None)
+    if tz is not None:
+        env["TZ"] = tz
+    done = subprocess.run(
+        [sys.executable, "-P", "-c", _ZONE_PROBE],
+        input=json.dumps(ask),
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+        timeout=600,
+    )
+    return json.loads(done.stdout)
+
+
+def _zones_as_python_takes_them(
+    zones: list[str | None], unknown: list[str], keys: list[str], edges: dict[str, list[str]]
+) -> None:
+    """Rust's answers to the probe's moments the same as Python's for each TZ of `zones`, and
+    Rust saying it does not know each of `unknown`."""
+    env = dict(os.environ)
+    asks = [{"seed": i, "keys": keys, "edges_for": edges.get(tz or "", [])}
+            for i, tz in enumerate(zones)]  # fmt: skip
+    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 2)) as pool:
+        probes = list(pool.map(lambda tz, ask: _zone_probe(tz, ask, env), zones, asks))
+    cases = [{"op": "zones", "tz": tz, "cases": p["cases"], "stamps": p["stamps"]}
+             for tz, p in zip(zones, probes, strict=True)]  # fmt: skip
+    cases += [{"op": "zones", "tz": tz, "cases": [], "stamps": []} for tz in unknown]
+    answers = run(cases)
+    for tz, probe, ours in zip(zones, probes, answers[: len(zones)], strict=True):
+        _the_same_answers(tz, probe, ours)
+    for tz, ours in zip(unknown, answers[len(zones) :], strict=True):
+        assert ours == {"unknown": True}, f"TZ={tz!r}"
+
+
+def _the_same_answers(tz: str | None, probe: dict[str, Any], ours: dict[str, Any]) -> None:
+    """Rust's answers to the probe's moments with TZ `tz` the same as Python's."""
+    assert "unknown" not in ours, f"TZ={tz!r}"
+    assert len(ours["answers"]) == len(probe["cases"]), f"TZ={tz!r}"
+    apart = [(c["now"], c["zone"], theirs, mine)
+             for c, theirs, mine in zip(probe["cases"], probe["answers"], ours["answers"],
+                                        strict=True)
+             if theirs != mine]  # fmt: skip
+    assert not apart, f"TZ={tz!r}: {len(apart)} of {len(probe['cases'])} apart: {apart[:4]}"
+    apart = [(t, theirs, mine)
+             for t, theirs, mine in zip(probe["stamps"], probe["local"], ours["local"],
+                                        strict=True)
+             if theirs != mine]  # fmt: skip
+    assert not apart, f"TZ={tz!r}: {len(apart)} timestamps apart: {apart[:4]}"
+
+
+_NAMED_KEYS = ["Europe/Berlin", "America/New_York", "Australia/Lord_Howe", "Asia/Kolkata",
+               "Pacific/Chatham", "America/Sao_Paulo", "Africa/Casablanca", "Europe/Dublin",
+               "UTC", "Antarctica/Troll", "America/Nuuk", "Pacific/Apia", "Asia/Gaza",
+               "Europe/Moscow", "America/Santiago", "Nope/Zone"]  # fmt: skip
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the computer's zone as glibc finds it")
+def test_the_computer_s_zone_and_named_zones_as_python_takes_them() -> None:
+    # (files of the system's zones, by name, path and colon; TZ strings, northern and southern,
+    # of every kind of day and time, offsets to a day; what glibc reads as UTC; and as named
+    # zones, with the computer's zone UTC, the moments where they change)
+    zones: list[str | None] = [
+        None, "", ":", "UTC", "Etc/UTC", "Universal", "GMT", "Europe/Berlin", ":Europe/Berlin",
+        "/usr/share/zoneinfo/Europe/Berlin", "America/New_York", "Australia/Lord_Howe",
+        "Asia/Kolkata", "Pacific/Chatham", "America/Sao_Paulo", "Africa/Casablanca",
+        "Europe/Dublin", "America/St_Johns", "Antarctica/Troll", "Pacific/Apia",
+        "Pacific/Kiritimati", "Asia/Tehran", "America/Nuuk", "Asia/Gaza", "Europe/Moscow",
+        "EST5EDT", "WET", "Etc/GMT-14", "Etc/GMT+12", "America/Santiago", "Pacific/Easter",
+        "Asia/Jerusalem", "America/Adak", "Europe/London", "Africa/Cairo", "posixrules",
+        "CET-1CEST,M3.5.0,M10.5.0/3", "EST5EDT,M3.2.0,M11.1.0", "<+0330>-3:30",
+        "AEST-10AEDT,M10.1.0,M4.1.0/3", "NZST-12NZDT,M9.5.0,M4.1.0/3", "XXX3YYY,J60/2,J300/2",
+        "XXX3YYY,J59/2,J300/2",
+        "XXX3YYY,59/2,300/2", "EST5EDT,0/0,J365/25", "<-02>2<-01>,M3.5.0/-1,M10.5.0/0",
+        "IST-1GMT0,M10.5.0,M3.5.0/1", "GMT0BST,M3.5.0/1,M10.5.0", "AAA-14", "AAA+12",
+        "AAA24", "AAA-24", "AAA-23:59:59", "<+00>0<+01>-1,M3.5.0/1,M3.5.0/2",
+        "XXX-1YYY-2:30,M3.5.0/2:30:15,M10.5.0/3:45:59", "XXX3YYY,M2.5.0,M2.1.6",
+        "XXX3YYY,M12.5.6/167,M1.1.0/-167", "UTC0",
+        "Nowhere/Else", "zone.tab", "Europe", "AB-1", "<AB>-1", "CET", "CET-", "<CET>", "123",
+        "CET-x",
+    ]  # fmt: skip
+    # (glibc reads these by rules or leniencies of its own: Rust says it does not know them)
+    unknown = ["CET-1CEST", "CET- 1", "CET-1:75", "CET-+1", "CET-1CEST,M3.5.0,M10.5.0/3,junk",
+               "CET-1,M3.5.0,M10.5.0/3", "CET-1 x", "CET-001", "XXX3YYY,J0060/2,J300/2",
+               "XXX3YYY,M3.05.0,M10.5.0", "XXX3YYY,J+60,J300/2", "XXX3YYY,J0,J300"]  # fmt: skip
+    # (a zone of leap seconds, where there is one: glibc counts them)
+    (unknown if Path("/usr/share/zoneinfo/right/UTC").exists() else zones).append("right/UTC")
+    _zones_as_python_takes_them(zones, unknown, _NAMED_KEYS, {"UTC": _NAMED_KEYS})
+
+
+# (TZ as the C runtime (the UCRT) reads it on Windows: unset or empty, the system's zone; a name
+# and its offset, of summer time by the runtime's own rules, half an hour's, to a day either
+# way; a POSIX rule it takes no rules of; what it makes of nonsense)
+WINDOWS_TZ: list[str | None] = [None, "", "PST8PDT", "CET-1CEST", "EST5EDT", "IST-5:30", "GMT0",
+                                "UTC", "XYZ-14", "ABC+12DEF", "AAA-23:59:59", "NZST-12NZDT",
+                                "CET-1CEST,M3.5.0,M10.5.0/3", "X", "nonsense"]  # fmt: skip
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the computer's zone as the C runtime has it")
+def test_the_computer_s_zone_as_the_c_runtime_takes_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    # (Python on Windows asks the C runtime's localtime_s of each moment, and so does Rust, each
+    # with TZ as it began: every timestamp, offset and time in another zone the same, the
+    # moments before 1970 and after 3000 it fails at, the folds looked for from a day after
+    # 1970 on)
+    env = dict(os.environ)
+    for n, tz in enumerate(WINDOWS_TZ):
+        probe = _zone_probe(tz, {"seed": n, "keys": _NAMED_KEYS, "edges_for": []}, env)
+        with monkeypatch.context() as m:
+            if tz is None:
+                m.delenv("TZ", raising=False)
+            else:
+                m.setenv("TZ", tz)
+            [ours] = run([{"op": "zones", "tz": tz, "cases": probe["cases"],
+                           "stamps": probe["stamps"]}])  # fmt: skip
+        _the_same_answers(tz, probe, ours)
+
+
+def _tzif(transitions: list[int], kinds: list[int], types: list[tuple[int, int, int]],
+          footer: bytes = b"", *, version: bytes = b"2", leaps: tuple[tuple[int, int], ...] = (),
+          names: bytes = b"AAA\0BBB\0CCC\0",
+          wide_types: list[tuple[int, int, int]] | None = None) -> bytes:  # fmt: skip
+    """A TZif file: its transitions (UTC seconds) and the type after each, its types (offset,
+    summer flag, name's index; the 64-bit data's its own where given), its names, its leap
+    seconds (moment, correction), and from version 2 on the footer."""
+
+    def block(wide: bool) -> bytes:
+        time = "q" if wide else "l"
+        kinds_of = wide_types if wide and wide_types is not None else types
+        counts = (0, 0, len(leaps), len(transitions), len(kinds_of), len(names))
+        data = b"TZif" + version + bytes(15) + struct.pack(">6l", *counts)
+        data += b"".join(struct.pack(">" + time, t) for t in transitions) + bytes(kinds)
+        data += b"".join(struct.pack(">lBB", *t) for t in kinds_of) + names
+        return data + b"".join(struct.pack(">" + time + "l", *leap) for leap in leaps)
+
+    if version == b"\0":
+        return block(False)
+    return block(False) + block(True) + b"\n" + footer + b"\n"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the computer's zone as glibc finds it")
+def test_zone_files_as_glibc_and_zoneinfo_read_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # (files where zoneinfo and glibc part: types of summer time alone, a footer that is not
+    # the last type, no transitions with and without a rule, version 1 alone, the rules of the
+    # southern half, of times below zero, of days zero-based (zoneinfo's a day early), of J59
+    # (zoneinfo's a day late in a leap year), of summer time all year and of none, of a change
+    # at new year's (seen from 14 hours east, where the year is not UTC's yet), an offset past
+    # a day; and those glibc reads otherwise than zoneinfo: leap seconds, names that are no
+    # UTF-8, the versions 0 and 1 (its two blocks apart), more after the footer, a summer flag
+    # of 2)
+    t0, t1 = 1_000_000_000, 1_100_000_000
+    files = {
+        "OnlySummer": _tzif([t0], [1], [(7200, 1, 0), (10800, 1, 4)]),
+        "StdAfter": _tzif([t0, t1], [1, 0], [(3600, 0, 0), (10800, 0, 4)], b"<+05>-5"),
+        "NoTrans": _tzif([], [], [(3600, 1, 0), (-3600, 0, 4), (7200, 0, 8)]),
+        "NoTransRule": _tzif([], [], [(0, 0, 0)], b"CET-1CEST,M3.5.0,M10.5.0/3"),
+        "V1": _tzif([t0, t1], [1, 0], [(3600, 0, 0), (7200, 1, 4)], version=b"\0"),
+        "V3": _tzif([t0], [0], [(3600, 0, 0), (7200, 1, 4)], b"<+01>-1<+02>,M3.5.0,M10.5.0/3",
+                    version=b"3"),
+        "Southern": _tzif([t0, t1], [1, 0], [(39600, 0, 0), (43200, 1, 4)],
+                          b"<+11>-11<+12>,M10.1.0,M4.1.0/3"),
+        "NegTimes": _tzif([t0], [0], [(-7200, 0, 0), (-3600, 1, 4)],
+                          b"<-02>2<-01>,M3.5.0/-1,M10.5.0/0"),
+        "Julian": _tzif([t0], [0], [(10800, 0, 0), (14400, 1, 4)], b"<+03>-3<+04>,J60/0,J300/24"),
+        "Zero": _tzif([t0], [0], [(10800, 0, 0), (14400, 1, 4)], b"<+03>-3<+04>,59/0,300/24"),
+        "Julian59": _tzif([t0], [0], [(10800, 0, 0), (14400, 1, 4)],
+                          b"<+03>-3<+04>,J59/0,J300/24"),
+        "NewYear": _tzif([t0], [0], [(3600, 0, 0), (7200, 1, 4)], b"<+01>-1<+02>,J1/0,J365/23"),
+        "AllYear": _tzif([t0], [1], [(-18000, 0, 0), (-14400, 1, 4)], b"EST5EDT,0/0,J365/25"),
+        "Equal": _tzif([t0], [0], [(0, 0, 0), (3600, 1, 4)], b"<+00>0<+01>-1,M3.5.0/1,M3.5.0/2"),
+        "Big": _tzif([t0], [1], [(3600, 0, 0), (90000, 0, 4)]),
+        "DstFirst": _tzif([t0], [0], [(7200, 1, 0), (3600, 0, 4)]),
+    }  # fmt: skip
+    odd = {
+        "Leap": _tzif([t0], [0], [(3600, 0, 0)], b"<+01>-1", leaps=((78796800, 1),)),
+        "BadName": _tzif([t0], [0], [(3600, 0, 0)], b"<+01>-1", names=b"\xff\xfe\0"),
+        "Version0": _tzif([t0], [1], [(3600, 0, 0), (7200, 0, 4)], b"<+05>-5", version=b"0"),
+        "Version1": _tzif([t0], [1], [(3600, 0, 0), (7200, 0, 4)], b"<+05>-5", version=b"1",
+                          wide_types=[(3600, 0, 0), (10800, 0, 4)]),
+        "FooterMore": _tzif([t0], [0], [(3600, 0, 0)], b"<+01>-1\nMORE"),
+        "SummerTwo": _tzif([t0], [0], [(3600, 2, 0)]),
+    }  # fmt: skip
+    root = tmp_path / "zones"
+    (root / "lp").mkdir(parents=True)
+    for name, data in {**files, **odd}.items():
+        (root / "lp" / name).write_bytes(data)
+    monkeypatch.setenv("PYTHONTZPATH", str(root))
+    monkeypatch.setenv("TZDIR", str(root))
+    keys = [f"lp/{name}" for name in {**files, **odd}]
+    zones: list[str | None] = [str(root / "lp" / name) for name in files]
+    zones += ["lp/Southern", "UTC", "/usr/share/zoneinfo/Pacific/Kiritimati"]
+    unknown = [str(root / "lp" / name) for name in odd]
+    _zones_as_python_takes_them(zones, unknown, keys, {"UTC": keys})
+
+
+def _float_bits(text: str) -> str | None:
+    try:
+        return struct.pack(">d", float(text)).hex()
+    except ValueError:
+        return None
+
+
+def test_floats_read_as_python_reads_them() -> None:
+    texts = ["", " ", "5", "-5", "+5", "5.", ".5", ".", "-.", "1e5", "1E5", "1e", "1e+", "1e-5",
+             "1.e5", ".e5", "e5", "1_0", "1__0", "_10", "10_", "1_.0", "1._0", "1.0_1", "1e1_0",
+             "1_e10", "0x10", "inf", "-inf", "+Inf", "INFINITY", "infinity", "infin", "nan",
+             "-nan", "NaN", "+nAn", "nana", "  7  ", "\t7\n", "7\x0b", "7\x0c", "\r7", "7\x1c",
+             "\x1f7", "7\x00", "\x00", "1" * 400, "0." + "0" * 400 + "1", "1e400", "-1e400",
+             "1e-400", "2.2250738585072011e-308", "4.9406564584124654e-324", "9007199254740993",
+             "0.1", "00012", "-0", "-0.0", "+.5e-3", "1e999999999999", "1e-999999999999",
+             "12abc", "abc", "1,5", "١٢", "۱۲.۵", "1 2", " 5　", " " "6",
+             "5\u0085", "7 ", "8\x85", "٥_٥", "5é", "١e٢", "𝟓", "Ⅻ", "½",
+             "\U0001d7ce\U0001d7cf", "\x7f", "5\x7f", "1e٢"]  # fmt: skip
+    rng = random.Random(0xF10A7)
+    parts = ["", "-", "+", "1", "23", "0", ".", "e", "E", "_", " ", "5", "9", "inf", "nan", "\t"]
+    for _ in range(3000):
+        texts.append("".join(rng.choice(parts) for _ in range(rng.randrange(1, 7))))
+    for _ in range(500):
+        x = struct.unpack(">d", rng.getrandbits(64).to_bytes(8, "big"))[0]
+        texts.append(repr(x) if rng.random() < 0.7 else f"{x:.{rng.randrange(1, 25)}e}")
+    if unicodedata.unidata_version != RELEASE_UNICODE:  # (digits and spaces of every script)
+        texts = [t for t in texts if t.isascii()]
+    [ours] = run([{"op": "py_float", "texts": texts}])
+    assert ours["floats"] == [_float_bits(t) for t in texts]
+
+
+class _Echo(string.Formatter):
+    """A Formatter whose fields are their own names: what str.format reads of a format string
+    (its fields, conversions, nested specs and numbering), not what a field holds."""
+
+    def get_field(self, field_name: str, args: Any, kwargs: Any) -> tuple[str, str]:
+        return field_name, field_name
+
+
+_FORMAT_PIECES = ["{", "}", "{{", "}}", "!", ":", "[", "]", "0", "1", "²", "١", "①", "a", "x",
+                  "s", "r", "\0", "<", ">5", "^7", ".2", "=", " ", "é", "{}", "{0}", "{1}",
+                  "{a}", "{²}", "{١}", "!r", "!s", "!a", "!\0", "!x", ":{}", "{a:{b}}"]  # fmt: skip
+
+
+def _echo_outcome(text: str) -> dict[str, Any]:
+    kinds = {ValueError: "Value", TypeError: "Type", OverflowError: "Overflow"}
+    try:
+        return {"text": _Echo().format(text)}
+    except (ValueError, TypeError, OverflowError) as error:
+        return {"error": kinds[type(error)]}
+
+
+def test_format_strings_read_as_python_s_str_format() -> None:
+    rng = random.Random(0x5F0)
+    texts = ["", "a", "{a:{b:{c}}}", "{a:{b}}", "{:{:{}}}", "{}{}", "{0}{}", "{}{0}", "{²}{}",
+             "{}{²}", "{①}{}", "{a!\0}", "{a!\0:>5}", "{a[}]}", "{a[b}", "{a!r:^9}", "{!r}",
+             "{a!}", "{a!}}", "{a!r", "{a:", "{a:{", "}", "{", "{{}}", "x{a!a}y", "{é!a}",
+             "{a:{b!r}}", "{a:{}}{}", "{0:{1}}{}", "{0:{}}", "{x:{<:{}}}", "{x:{<:{<}}}",
+             "{x:{<}}"]  # fmt: skip
+    for _ in range(6000):
+        texts.append("".join(rng.choice(_FORMAT_PIECES) for _ in range(rng.randrange(9))))
+    [ours] = run([{"op": "py_vformat", "texts": texts}])
+    assert ours["texts"] == [_echo_outcome(t) for t in texts]
+    # (texts, not only refusals alike)
+    assert sum("text" in o for o in ours["texts"]) > 1500
+
+
+STRFTIME_TOKENS = [f"%{flag}{code}" for flag in ("", "-", "#", "_", "0", "^")
+                   for code in string.ascii_letters + "%"]  # fmt: skip
+
+
+def _moments(rng: random.Random, small_years: bool = True) -> list[datetime]:
+    """Edge days (the years from 1 to 9999, the turns of the ISO weeks, midnight and noon) and
+    random ones."""
+    years = (1, 9, 99, 999, 1000, 1899, 1900, 1999, 2000, 2026, 9999)
+    moments = [datetime(year, month, day, hour, 5, 9, 250)
+               for year in (years if small_years else years[4:])
+               for month, day in ((1, 1), (1, 3), (1, 4), (2, 28), (12, 28), (12, 29), (12, 31))
+               for hour in (0, 12, 13, 23)]  # fmt: skip
+    for _ in range(200):
+        year = rng.choice([rng.randrange(1 if small_years else 1000, 10000),
+                           rng.randrange(1990, 2060)])  # fmt: skip
+        month = rng.randrange(1, 13)
+        day = rng.randrange(1, calendar.monthrange(year, month)[1] + 1)
+        moments.append(datetime(year, month, day, rng.randrange(24), rng.randrange(60),
+                                rng.randrange(60), rng.randrange(10**6)))  # fmt: skip
+    return moments
+
+
+def _at(moment: datetime) -> list[int]:
+    return [moment.year, moment.month, moment.day, moment.hour, moment.minute, moment.second,
+            moment.microsecond]  # fmt: skip
+
+
+def _strftime_unported(token: str, at: datetime) -> bool:
+    """What lp_py::strftime does not write yet: the years before 1000 (Python's own answer for
+    them differs between its releases), %s on Linux (the computer's zone), %#z and %#Z on
+    Windows (the same)."""
+    flag, code = (token[1], token[2]) if len(token) == 3 else ("", token[1])
+    small, iso_small = at.year < 1000, at.isocalendar()[0] < 1000
+    if sys.platform == "win32":
+        if flag not in ("", "#"):
+            return False  # (Python's ValueError)
+        if code in "zZ":
+            return flag == "#"
+        if code == "G":
+            return iso_small
+        return small and (code in "CFYc" or (code == "x" and flag == "#"))
+    if code == "s":
+        return True
+    if code == "G":
+        return iso_small
+    return small and code in "CFYc"
+
+
+def test_dates_written_as_python_s_strftime_writes_them() -> None:
+    # (each code as datetime.strftime writes it: %f, %z and %Z its own, the rest the C
+    # library's, glibc's on Linux, the Universal CRT's on Windows, where Python refuses what
+    # the CRT does not know; what Rust does not write yet, it says, and nothing else)
+    rng = random.Random(0x57F)
+    cases, expected = [], []
+    for at in _moments(rng):
+        for token in STRFTIME_TOKENS:
+            try:
+                want: Any = at.strftime(token)
+            except ValueError as error:
+                want = {"error": str(error)}
+            if _strftime_unported(token, at):
+                want = "unported"
+            cases.append({"token": token, "at": _at(at)})
+            expected.append(want)
+    [ours] = run([{"op": "strftime", "cases": cases}])
+    wrong = [(case, got, want) for case, got, want in zip(cases, ours, expected, strict=True)
+             if (not (isinstance(got, dict) and "unported" in got) if want == "unported"
+                 else got != want)]  # fmt: skip
+    assert not wrong, f"{len(wrong)} differ: {wrong[:40]}"
+    # (Windows refuses every flag but #: a third of the codes written there)
+    written = sum(isinstance(w, str) and w != "unported" for w in expected)
+    assert written > (30_000 if sys.platform == "win32" else 50_000)
+
+
+_DATE_PIECES = ["%d", "%-d", "%B", "%b", "%a", "%A", "%H:%M", "%Y", "%y", "%e", "%j", "%p", "%I",
+                " ", ". ", ", ", "Uhr", "年", "日", "%", "%%", "%:", "%d %B", "%d. %B", "%-d. %b",
+                "%B %d", "%b %-d", "%d %b", "%-d %B", "%A, %d %B %Y", "%a %d %b", "%x", "%X",
+                "%c", "%#d", "%-m/%-d", "%d  %B", " %d %B", "%B%d", "%d %B %d %b"]  # fmt: skip
+
+
+def test_dates_on_the_panel_as_format_date_writes_them() -> None:
+    # (strftime's codes one at a time, with the days' and the months' names of the language, a
+    # day's number before a month's name joined as the language joins them, the month and the
+    # day as numbers in Chinese and Japanese)
+    rng = random.Random(0xDA7E)
+    tokens = [t for t in STRFTIME_TOKENS if t[-1] != "s" and t not in ("%#z", "%#Z")]
+    moments = _moments(rng, small_years=False)
+    cases, expected = [], []
+    try:
+        for n in range(6000):
+            pieces = [rng.choice(_DATE_PIECES if rng.random() < 0.7 else tokens)
+                      for _ in range(rng.randrange(1, 6))]  # fmt: skip
+            fmt, at, language = "".join(pieces), rng.choice(moments), list(i18n.LANGUAGES)[n % 10]
+            i18n.set_language(language)
+            try:
+                want: Any = i18n.format_date(at, fmt)
+            except ValueError as error:
+                want = {"error": str(error)}
+            cases.append({"fmt": fmt, "at": _at(at), "language": language})
+            expected.append(want)
+    finally:
+        i18n.set_language("en")
+    [ours] = run([{"op": "format_date", "locale": str(i18n.LOCALE_DIR), "cases": cases}])
+    wrong = [(case, got, want) for case, got, want in zip(cases, ours, expected, strict=True)
+             if got != want]  # fmt: skip
+    assert not wrong, f"{len(wrong)} differ: {wrong[:40]}"
+    assert sum(isinstance(w, str) for w in expected) > 2000
+
+
+def test_fnmatch_as_python_matches() -> None:
+    # (fnmatchcase as translate() makes a pattern a regular expression: sets and their ranges, a
+    # range running backwards left out, a set's first ] or !, hyphens at its ends, escapes,
+    # stars; each pattern against every name. And filter, which on Windows takes the names and
+    # the pattern as normcase has them: slashes turned, letters small as the system makes them)
+    rng = random.Random(0xF4A7)
+    patterns = ["".join(rng.choice("ab-]![\\^*?&~|z.0") for _ in range(rng.randrange(0, 9)))
+                for _ in range(400)]  # fmt: skip
+    patterns += [rng.choice(["", "a", "*", "?"]) + "["
+                 + "".join(rng.choice("!]-abz0^\\[") for _ in range(rng.randrange(0, 6))) + "]"
+                 + rng.choice(["", "*", "a", "]", "-]"]) for _ in range(200)]  # fmt: skip
+    names = sorted({"".join(rng.choice("ab-]![\\^&~|z.0A") for _ in range(rng.randrange(0, 5)))
+                    for _ in range(300)})  # fmt: skip
+    pairs = [(pattern, name) for pattern in patterns for name in names]
+    # (sets made of ranges both ways, hyphens alone and doubled, a first ! or ], escapes: each
+    # against every printable letter)
+    parts = ["a-z", "z-a", "0-9", "-", "a", "b", "z", "0", "\\", "^", "[", "a-", "-z", "!", "]",
+             "--", "b-a", "a-b-c", "-a-", "c-b", "c-b-a"]  # fmt: skip
+    for _ in range(2000):
+        body = ("!" if rng.random() < 0.4 else "") + ("]" if rng.random() < 0.15 else "")
+        body += "".join(rng.choice(parts) for _ in range(rng.randrange(1, 5)))
+        pairs += [(f"[{body}]", chr(c)) for c in range(32, 127)]
+    cases, wanted = [], []
+    for pattern, name in pairs:
+        cases.append([name, pattern])
+        try:
+            wanted.append(fnmatch.fnmatchcase(name, pattern))
+        except re.error:
+            wanted.append("error")
+    files = ["temp.cpu", "temp.gpu", "fan.1", "fan.10", "fan.2", "Fan.3", "disk.a-b", "x[1]",
+             "C:/x", "ÄÖ.ü", "İ", "ß", "ΣΑΣ"]  # fmt: skip
+    globs = ["temp.*", "fan.?", "fan.*", "*[0-9]", "F*", "x[[]*", "*", "[!t]*", "disk.a[-]b",
+             "c:\\*", "äö.*", "i̇", "SS", "σας"]  # fmt: skip
+    [got] = run([{"op": "fnmatch", "cases": cases, "names": files, "patterns": globs}])
+    assert ["error" if isinstance(g, dict) else g for g in got["matched"]] == wanted
+    assert got["filtered"] == [fnmatch.filter(files, p) for p in globs]
+    assert sum(w is True for w in wanted) > 20000
+
+
+_TOML_KEYS = ["a", "a", "b", "b", "c", "a1", "-", "_", "1", "true", "inf", "1979-05-27", "é",
+              '"a"', "'b'", '"a b"', '""', "''", '"\\u00e9"', '"a.b"', "'c'"]  # fmt: skip
+_TOML_NUMBERS = ["0", "+0", "-0", "1", "42", "-17", "1_000", "0x1F", "0xdead_beef", "0o17",
+                 "0b1011", "1.5", "-0.0", "+1.0e10", "1e5", "1E-2", "6.02_3e2_3", "inf", "-inf",
+                 "+inf", "nan", "+nan", "-nan", "01", "1__2", "_1", "1_", "0x", "0X1F", "+0x1",
+                 "1.", ".5", "1.e5", "1e", "0b2", "0o8", "1e400", "-1e400", "1e-400", "9" * 30,
+                 "0x_1", "0xg", "0b", "0o", "1_.5", "1._5", "1e_5", "1e+_5", "00", "-01", "0e0",
+                 "0.0e-0", "1.5.5", "1e5e5", "infinity", "NaN", "Inf", "1e+05", "-0x1", "0_0",
+                 "true", "false", "True", "truefalse", "tru"]  # fmt: skip
+_TOML_PIECES = ["a", "b", " ", "\t", "é", "😀", "#", "'", "=", "[", "]", "{", ",", "\\b", "\\t",
+                "\\n", "\\f", "\\r", '\\"', "\\\\", "\\u00e9", "\\U0001F600", "\\u0000",
+                "\\uFFFF", "\\U0010FFFF"]  # fmt: skip
+_TOML_BAD_PIECES = ["\\x", "\\uD800", "\\uDFFF", "\\U00110000", "\\u12", "\\U0001F60", "\\ ",
+                    "\\e", "\x01", "\x7f", "\\", "\\u", "\\uGGGG", "\x00", "\x1f"]  # fmt: skip
+
+
+_TOML_PLAIN = ["1", '"s"', "true", "1.5", "[]", "{}", "1979-05-27", "07:32:00", "0001-01-01",
+               "9999-12-31T23:59:59.999999Z", "1979-05-27 07:32:00.5-08:00", "2024-02-29t00:00:00",
+               "1979-05-27T00:32:00.1234567+23:59", "2100-12-31 23:59:59z", "23:59:59.000001",
+               "2000-01-01T12:00:00-00:00", "1979-05-27T07:32:00+05:30", "'s'", "-inf"]  # fmt: skip
+
+
+def _toml_string(rng: random.Random) -> str:
+    kind = rng.randrange(4)
+    pieces = [rng.choice(_TOML_PIECES) for _ in range(rng.randrange(0, 7))]
+    if rng.random() < 0.08:
+        pieces.insert(rng.randrange(len(pieces) + 1), rng.choice(_TOML_BAD_PIECES))
+    if kind == 0:
+        return '"' + "".join(pieces) + '"'
+    if kind == 1:
+        return "'" + "".join(p for p in pieces if p != "'") + "'"
+    for _ in range(rng.randrange(0, 4)):
+        more = ["\n", "\n", "\r\n", '"', '""', "'", "''", "\\\n", "\\  \n  \n\t", "\\ \t x", "\r",
+                "\\\t\n", "\\\t \n \t", "\\\tx", "\\\t"]  # fmt: skip
+        pieces.insert(rng.randrange(len(pieces) + 1), rng.choice(more))
+    quotes = '"""' if kind == 2 else "'''"
+    start = rng.choice(["", "", "\n", "\r\n"])
+    end = rng.choice(["", "", "", quotes[0], quotes[0] * 2, quotes[0] * 3])
+    return quotes + start + "".join(pieces) + end + quotes
+
+
+def _toml_moment(rng: random.Random) -> str:
+    def clock() -> str:
+        hour, minute = rng.choice([0, 7, 23, 23, 24]), rng.choice([0, 32, 59, 59, 60])
+        text = f"{hour:02d}:{minute:02d}:{rng.choice([0, 1, 59, 59, 60]):02d}"
+        return text + rng.choice(["", "", ".5", ".123456", ".1234567891", ".", ".999999999"])
+
+    if rng.random() < 0.2:
+        return clock()
+    year, month = rng.choice([0, 1, 1979, 2024, 2100, 9999]), rng.choice([0, 1, 2, 2, 12, 13])
+    text = f"{year:04d}-{month:02d}-{rng.choice([0, 1, 28, 29, 30, 31, 32]):02d}"
+    if rng.random() < 0.25:
+        return text
+    text += rng.choice(["T", "T", "t", " ", "  ", "", "\t"]) + clock()
+    offsets = ["", "", "Z", "z", "+00:00", "-00:00", "-08:00", "+23:59", "+24:00", "+05:60",
+               "+0530", "+5:30", " Z", "-12:34"]  # fmt: skip
+    return text + rng.choice(offsets)
+
+
+def _toml_key(rng: random.Random) -> str:
+    parts = [rng.choice(_TOML_KEYS) for _ in range(rng.choice([1, 1, 1, 2, 2, 3]))]
+    return rng.choice([".", ".", ".", " . ", ". ", "\t."]).join(parts)
+
+
+def _toml_space(rng: random.Random, lines: bool) -> str:
+    plain = ["", "", "", " ", "\t", "  "]
+    more = ["\n", "\n  ", "# c\n", " # é\n\n", "\r\n", "#\n#\n"]
+    return rng.choice(plain + more if lines else plain)
+
+
+def _toml_value(rng: random.Random, depth: int = 0) -> str:
+    kind = rng.randrange(12 if depth < 4 else 8)
+    if kind < 3:
+        return _toml_string(rng)
+    if kind < 5:
+        if rng.random() < 0.5:
+            return rng.choice(_TOML_NUMBERS)
+        digits = "".join(rng.choice("0123456789_") for _ in range(rng.randrange(1, 8)))
+        text = rng.choice(["", "", "+", "-"]) + digits
+        if rng.random() < 0.5:
+            text += "." + "".join(rng.choice("0123456789_") for _ in range(rng.randrange(0, 5)))
+        if rng.random() < 0.3:
+            text += rng.choice("eE") + rng.choice(["", "+", "-"]) + str(rng.randrange(0, 400))
+        return text
+    if kind < 7:
+        return _toml_moment(rng)
+    if kind == 7:
+        return rng.choice(["true", "false", "", "x", "[", "{", "]", "}", '"', "'", "null"])
+    if kind < 10:
+        text = "[" + _toml_space(rng, True)
+        count = rng.randrange(0, 4)
+        for n in range(count):
+            text += _toml_value(rng, depth + 1) + _toml_space(rng, True)
+            if n + 1 < count or rng.random() < 0.3:
+                text += rng.choice([",", ",", ",", ",", ",,", ""]) + _toml_space(rng, True)
+        return text + "]"
+    text = "{" + _toml_space(rng, False)
+    count = rng.randrange(0, 4)
+    for n in range(count):
+        text += _toml_key(rng) + _toml_space(rng, False) + "=" + _toml_space(rng, False)
+        text += _toml_value(rng, depth + 1) + _toml_space(rng, False)
+        if n + 1 < count or rng.random() < 0.06:
+            text += rng.choice([",", ",", ",", ",", "\n", ""]) + _toml_space(rng, False)
+    return text + "}"
+
+
+def _toml_text(rng: random.Random) -> str:
+    text = ""
+    for _ in range(rng.randrange(0, 9)):
+        kind = rng.randrange(10)
+        line = _toml_space(rng, False)
+        if kind < 5:
+            line += _toml_key(rng) + _toml_space(rng, False) + "=" + _toml_space(rng, False)
+            line += _toml_value(rng)
+        elif kind < 7:
+            line += "[" + _toml_space(rng, False) + _toml_key(rng) + _toml_space(rng, False) + "]"
+        elif kind == 7:
+            line += "[[" + _toml_space(rng, False) + _toml_key(rng) + "]" + rng.choice("]]]] ")
+        elif kind == 8:
+            line += rng.choice(["", "# a comment", "#", "# \x01", "#\té", "# \x7f"])
+        else:
+            line += rng.choice(["x", "=", "= 1", "a", "a =", "[", "[[", "[a", "[[a]", "[]", "[[]]",
+                                "a.=1", ".a=1", "a..b=1", "a b=1", "[a]]", "[[a]] x",
+                                "a=1 b=2"])  # fmt: skip
+        line += rng.choice(["", "", "", " ", "\t", " # c", "# c", " x"])
+        text += line + rng.choice(["\n", "\n", "\n", "\n", "\r\n", "\r\n", "\n\n", "\r", ""])
+    return text
+
+
+def _toml_tables(rng: random.Random) -> str:
+    """A document of little else than tables: few names, so that they meet."""
+
+    def key() -> str:
+        return ".".join(rng.choice("abc") for _ in range(rng.choice([1, 1, 2, 2, 3])))
+
+    def value(depth: int = 0) -> str:
+        kind = rng.randrange(9 if depth < 3 else 4)
+        if kind < 4:
+            return rng.choice(_TOML_PLAIN)
+        if kind < 6:
+            return "[" + ", ".join(value(depth + 1) for _ in range(rng.randrange(1, 3))) + "]"
+        pairs = [f"{key()} = {value(depth + 1)}" for _ in range(rng.randrange(1, 4))]
+        return "{" + ", ".join(pairs) + "}"
+
+    lines = []
+    for _ in range(rng.randrange(1, 9)):
+        kind = rng.randrange(8)
+        if kind < 4:
+            lines.append(f"{key()} = {value()}")
+        elif kind < 6:
+            lines.append(f"[{key()}]")
+        else:
+            lines.append(f"[[{key()}]]")
+    return "\n".join(lines) + "\n"
+
+
+def _toml_broken(rng: random.Random, text: str) -> str:
+    for _ in range(rng.randrange(1, 3)):
+        at, kind = rng.randrange(len(text) + 1), rng.randrange(4)
+        if kind == 0:
+            text = text[:at] + text[at + 1 :]
+        elif kind == 1:
+            text = text[:at] + rng.choice("\"'[]{}=.,#\\\n\r \t0_-+:eTZxa\x01é") + text[at:]
+        elif kind == 2:
+            text = text[:at]
+        else:
+            text = text[:at] + text[at : at + 1] * 2 + text[at + 1 :]
+    return text
+
+
+def _digits(value: int) -> str:
+    """str(value), however long it is."""
+    sign, value, parts = "-" if value < 0 else "", abs(value), []
+    while value >= 10**4000:
+        value, low = divmod(value, 10**4000)
+        parts.append(f"{low:04000d}")
+    return sign + "".join(reversed([*parts, str(value)]))
+
+
+def _toml_plain(value: object) -> list[Any]:
+    """A value of tomllib's as lp-check writes its own: nothing lost."""
+    if isinstance(value, bool):
+        return ["bool", value]
+    if isinstance(value, int):
+        return ["int", _digits(value)]
+    if isinstance(value, float):
+        return ["float", struct.pack(">d", value).hex()]
+    if isinstance(value, str):
+        return ["str", value]
+    if isinstance(value, list):
+        return ["list", [_toml_plain(item) for item in value]]
+    if isinstance(value, dict):
+        return ["dict", [[key, _toml_plain(item)] for key, item in value.items()]]
+    if isinstance(value, datetime):
+        offset = value.utcoffset()
+        minutes = None if offset is None else offset // timedelta(minutes=1)
+        return ["datetime", value.year, value.month, value.day, value.hour, value.minute,
+                value.second, value.microsecond, minutes]  # fmt: skip
+    if isinstance(value, date):
+        return ["date", value.year, value.month, value.day]
+    assert isinstance(value, time) and value.tzinfo is None, value
+    return ["time", value.hour, value.minute, value.second, value.microsecond]
+
+
+def _python_toml(text: str, deeper: int = 0) -> tuple[dict[str, Any], int]:
+    """What tomllib makes of a text, and how deep its loads() was called."""
+    if deeper:
+        return _python_toml(text, deeper - 1)
+    frame, depth = sys._getframe(), 1
+    while (frame := frame.f_back) is not None:  # type: ignore[assignment]
+        depth += 1
+    try:
+        return {"ok": _toml_plain(tomllib.loads(text))}, depth + 1
+    except tomllib.TOMLDecodeError as error:
+        return {"error": str(error), "kind": "decode"}, depth + 1
+    except RecursionError as error:
+        return {"error": str(error), "kind": "recursion"}, depth + 1
+    except ValueError as error:
+        return {"error": str(error), "kind": "value"}, depth + 1
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12), reason="the release's tomllib is Python 3.12's"
+)
+def test_toml_is_read_as_python_s_tomllib_reads_it() -> None:
+    rng = random.Random(0x7031)
+    texts = [_toml_text(rng) for _ in range(6000)]
+    texts += [_toml_broken(rng, text) for text in texts[:6000]]
+    texts += [f"a = {_toml_value(rng)}" for _ in range(6000)]
+    texts += [_toml_tables(rng) for _ in range(12000)]
+    texts += [f"a = {number}{end}" for number in _TOML_NUMBERS for end in ("", "\n", " # c", "x")]
+    # white space of every kind, where TOML allows a blank or a tab
+    places = ["a{s}=1", "a={s}1", "a=1{s}", "{s}a=1", "[{s}a]", "[a{s}]", "a=[{s}1]", "a=[1{s},2]",
+              "a=[1,{s}2]", "a={{s}b=1}", "a={b=1{s}}", "a={b{s}=1,c=2}", "a.{s}b=1", "a{s}.b=1",
+              "a=1{s}#c", "a=1#c{s}", '"a"{s}=1', "[[a{s}]]", "[a]{s}", "a=1979-05-27{s}07:32:00",
+              'a="""\\{s}\n b"""', 'a="""\\\n{s}b"""', "a=1\n{s}\nb=2",
+              "a=[1 #c{s}\n]"]  # fmt: skip
+    spaces = [" ", "\t", "\u00a0", "\x0b", "\x0c", "\u3000", "\u2028", "\u0085", "\r", "\ufeff",
+              "\u2003", "\x1f", "\x00"]  # fmt: skip
+    texts += [place.replace("{s}", space) for place in places for space in spaces]
+    texts += ["", " ", "\n", "﻿a=1", "a=1\r", "a=1\rb=2", "a=" + "1" * 4300, "a=-" + "1" * 4301,
+              "a=" + "1_" * 4300 + "1", "a=" + "1_" * 4299 + "1", "a=+" + "1" * 5000,
+              "a=0x" + "f" * 5000, "a=0b" + "1" * 9000, "a=" + "1" * 5000 + ".0",
+              "a=" + "1" * 5000 + "e1", "a=0o" + "7" * 6000]  # fmt: skip
+    # the files the app's own tests and docs hold
+    root = Path(__file__).resolve().parent.parent
+    files = sorted(p for p in root.rglob("*.toml") if "target" not in p.parts)
+    texts += [path.read_text(encoding="utf-8") for path in files]
+    wanted, frames = zip(*(_python_toml(text) for text in texts), strict=True)
+    assert len(set(frames)) == 1
+    [ours] = run([{"op": "toml", "texts": texts, "frame": frames[0]}])
+    for text, mine, want in zip(texts, ours["results"], wanted, strict=True):
+        assert mine == want, repr(text)
+    kinds = [want.get("kind", "ok") for want in wanted]
+    assert kinds.count("ok") > 8000 and kinds.count("decode") > 12000 and kinds.count("value") == 3
+    assert len({want["error"].split(" (at ")[0] for want in wanted if "error" in want}) > 40
+    assert files
+
+
+@pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12), reason="the release's tomllib is Python 3.12's"
+)
+def test_toml_nests_as_deep_as_python_s_tomllib_reads_it() -> None:
+    # (Python reads a nested value by calling itself, and gives up where its own stack is full:
+    # how deep depends on how deep the call of loads() is. A level of arrays costs two calls,
+    # of tables in a line three, of both five: so from six depths of the call, that every
+    # count of calls left comes up. Every depth around the end, with what needs most calls at
+    # the bottom: nothing, a text with an escape, a comment, a zone, a mistake to report)
+    def nested(open_: str, close: str, inside: str) -> Callable[[int], str]:
+        return lambda n: "a=" + open_ * n + inside + close * n
+
+    insides = ["", "1", "true", '"\\u0041"', '"""\\\n \\u0041"""', "'a'", "1979-05-27T07:32:00",
+               "1979-05-27T07:32:00+01:00", "1979-05-27T07:32:00Z", "1979-05-27", "07:32:00", "x",
+               "1979-02-30", "#c\n", "1#c\n", "{}", "{a=1}"]  # fmt: skip
+    arrays = [nested("[", "]", inside) for inside in insides]
+    arrays += [lambda n: "a=" + "[" * n, lambda n: "a=" + "[" * n + "1" + "]" * (n - 1) + "x"]
+    tables = [nested("{a=", "}", inside) for inside in ("1", "{}", "1,a=2", "[]", "x", "07:32:00")]
+    tables += [nested("{a.b.c=", "}", "1"), nested('{"a"=', "}", "1")]
+    both = [nested("[{a=", "}]", inside) for inside in ("1", '"\\U00000041"', "[]", "#c\n")]
+    zones = sys.modules["tomllib._re"].cached_tz  # (Python keeps the zones it once made)
+    texts: dict[int, list[str]] = {}
+    wanted: dict[int, list[dict[str, Any]]] = {}
+    for deeper in range(6):
+        frame = _python_toml("", deeper)[1]
+        room = 1000 - frame
+        texts[frame], wanted[frame] = [], []
+        for step, before, families in ((2, 12, arrays), (3, 8, tables), (5, 6, both)):
+            for family in families:
+                kinds = set()
+                for n in range(room // step - before, room // step + 3):
+                    zones.cache_clear()
+                    want, at = _python_toml(family(n), deeper)
+                    assert at == frame
+                    texts[frame].append(family(n))
+                    wanted[frame].append(want)
+                    kinds.add(want.get("kind") == "recursion")
+                assert kinds == {False, True}, family(1)  # both sides of the end
+        for text in ("[" * 3000, "a=" + "[" * 3000, "a={a=" * 3000):
+            texts[frame].append(text)
+            wanted[frame].append(_python_toml(text, deeper)[0])
+    assert len(texts) == 6
+    ours = run([{"op": "toml", "texts": texts[frame], "frame": frame} for frame in texts])
+    for frame, mine in zip(texts, ours, strict=True):
+        for text, got, want in zip(texts[frame], mine["results"], wanted[frame], strict=True):
+            assert got == want, (frame, len(text), text[:8], text[len(text) // 2 - 20 :][:40])
+    kinds = [want.get("kind", "ok") for wants in wanted.values() for want in wants]
+    assert kinds.count("ok") > 1000 and kinds.count("decode") > 150
+    assert kinds.count("recursion") > 400
+
+
+def test_a_file_s_text_as_python_reads_it(tmp_path: Path) -> None:
+    # (read_text(encoding="utf-8"): what is not UTF-8 refused with the place it starts at, the
+    # ends of lines made one kind, a byte order mark left in)
+    rng = random.Random(0xF11E)
+    pieces = [b"a", b"=", b"1", b"\n", b"\r\n", b"\r", b" ", "é".encode(), "😀".encode(),
+              b"\xef\xbb\xbf", b'"', b"#"]  # fmt: skip
+    bad = [b"\xff", b"\xc0\x80", b"\xe2\x82", b"\xed\xa0\x80", b"\xf4\x90\x80\x80", b"\x80",
+           b"\xf0\x9f", b"\xc3", b"\xe9", b"\xf8\x88\x80\x80\x80", b"\xe0\x80\x80",
+           b"\xf0\x9f\x98"]  # fmt: skip
+    files = [b"", b"\xef\xbb\xbfa=1\n", b"a=1\r\nb=2\rc=3\n", b"a='\r'\n", b'a="""\r\n"""']
+    for _ in range(1500):
+        body = [rng.choice(pieces) for _ in range(rng.randrange(0, 12))]
+        for _ in range(rng.choice([0, 0, 1, 1, 2])):
+            body.insert(rng.randrange(len(body) + 1), rng.choice(bad))
+        files.append(b"".join(body))
+    files += [rng.randbytes(rng.randrange(1, 9)) for _ in range(1500)]
+    wanted: list[dict[str, Any]] = []
+    frames = set()
+    path = tmp_path / "config.toml"
+    for content in files:
+        path.write_bytes(content)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            wanted.append({"error": str(error), "kind": "unicode", "start": error.start,
+                           "end": error.end, "reason": error.reason})  # fmt: skip
+            continue
+        want, frame = _python_toml(text)
+        wanted.append(want)
+        frames.add(frame)
+    assert len(frames) == 1
+    encoded = [base64.b64encode(content).decode("ascii") for content in files]
+    [ours] = run([{"op": "toml", "files": encoded, "frame": frames.pop()}])
+    if sys.version_info[:2] != (3, 12):  # another tomllib: what is not text is refused alike
+        pairs = zip(ours["files"], wanted, strict=True)
+        assert all(mine == want for mine, want in pairs if want.get("kind") == "unicode")
+        return
+    for content, mine, want in zip(files, ours["files"], wanted, strict=True):
+        assert mine == want, content
+    kinds = [want.get("kind", "ok") for want in wanted]
+    assert kinds.count("unicode") > 1500 and kinds.count("ok") > 100 and kinds.count("decode") > 300
+
+
+def test_patterns_match_as_python_s_re() -> None:
+    # (lp_py::regex, the part of re the app's own patterns are written in: the app's patterns
+    # and ones made up of the same pieces, each searched, matched, matched whole, replaced and
+    # split in texts; a pattern re refuses is refused)
+    from libre_panel.sensors import hwnames
+    from libre_panel.sensors import librehardwaremonitor as lhm
+
+    rng = random.Random(0x5E)
+    real = [lhm._NUMBER, lhm._CORE_CLOCK, hwnames._MARKS, *hwnames._CPU_CUTS, hwnames._VENDOR,
+            hwnames._GENUINE, hwnames._COMPANY]  # fmt: skip
+    patterns = [(p.pattern, bool(p.flags & re.IGNORECASE)) for p in real]
+    patterns += [
+        (r"[^a-z0-9]+", False),
+        (r"[*?\[]", False),
+        (r"/[!-~]{1,199}", False),
+        (r"(?:0x)?[0-9a-f]{4}", True),
+        (r"\s*\([^)]*\)$", False),
+        (r"[^a-z0-9]", False),
+    ]
+    atoms = ["a", "b", "K", "s", ".", r"\d", r"\s", r"\w", r"\W", r"\b", r"\B", "[ab]", "[^a]",
+             "[a-c0-9]", r"[\d.,]", "^", "$", " ", "-", r"\.", r"\(", "é", "ſ", "(?:ab|a)",
+             "(a|b)", "(a*)", "(?=b)", "(?!a)", "x{2}", "a{1,2}", "{", "}", "(b?)",
+             "(?:)", "(?>a|ab)"]  # fmt: skip
+    signs = [
+        "",
+        "",
+        "",
+        "*",
+        "+",
+        "?",
+        "*?",
+        "+?",
+        "??",
+        "{2}",
+        "{0,2}",
+        "{1,}",
+        "{,2}?",
+        "*+",
+        "?+",
+        "{1,2}+",
+    ]
+
+    def made(depth: int = 0) -> str:
+        parts = []
+        for _ in range(rng.randrange(1, 5)):
+            atom = rng.choice(atoms)
+            if depth < 2 and rng.random() < 0.2:
+                atom = rng.choice(["(", "(?:"]) + made(depth + 1) + ")"
+            plain = atom in ("^", "$", r"\b", r"\B") or atom.endswith("}")  # (mostly refused)
+            parts.append(atom + ("" if plain and rng.random() < 0.9 else rng.choice(signs)))
+        text = "".join(parts)
+        return text + "|" + made(depth + 1) if depth < 2 and rng.random() < 0.15 else text
+
+    own = len(patterns)  # (the app's: against every text; the made up ones against short ones,
+    # where going back and back again stays short in re too)
+    patterns += [(made(), rng.random() < 0.4) for _ in range(3000)]
+    names = ["12th Gen Intel(R) Core(TM) i7-12700K CPU @ 3.60GHz",
+             "AMD Ryzen 5 7600 6-Core Processor",
+             "AMD Ryzen 7 5700G with Radeon Graphics", "Genuine Intel(R) CPU 0000 @ 2.40GHz",
+             "Intel(R) Core(TM)2 Quad-Core Processor Q6600", "NVIDIA GeForce RTX 4070",
+             "Advanced Micro Devices, Inc. Radeon RX 7800 XT", "Kingston Technology Company, Inc.",
+             "Patriot Memory (PDP)", " 45,0 °C", "-1234.5 RPM", "NaN", "-", "CPU Core #12",
+             "Core #1", "/amdcpu/0", "/nic/%7B12%7D", "0x859B", "Core (Tctl/Tdie)", "net.*",
+             "", "a", "ab", "aab ba\n", "K ſS s.k", "xx a-b (a) 1,5 é٣ b_", "abab\n"]  # fmt: skip
+    pool = "abKsſS x-.,()é1٣_\n"
+    texts = names + ["".join(rng.choice(pool) for _ in range(rng.randrange(0, 9)))
+                     for _ in range(40)]  # fmt: skip
+    cases, wanted = [], []
+    short = [text for text in texts if len(text) < 10]
+    for n, (pattern, ignore) in enumerate(patterns):
+        try:
+            compiled = re.compile(pattern, re.IGNORECASE if ignore else 0)
+        except re.error:
+            compiled = None
+        for text in (texts if n < own else short) if compiled else texts[:1]:
+            cases.append([pattern, ignore, text])
+            if compiled is None:
+                wanted.append("error")
+                continue
+
+            def spans(m: re.Match[str] | None) -> list[list[int] | None] | None:
+                if m is None:
+                    return None
+                return [None if m.start(n) < 0 else list(m.span(n))
+                        for n in range(m.re.groups + 1)]  # fmt: skip
+
+            wanted.append({
+                "search": spans(compiled.search(text)), "match": spans(compiled.match(text)),
+                "full": compiled.fullmatch(text) is not None, "sub": compiled.sub("<>", text),
+                "split": compiled.split(text),
+            })  # fmt: skip
+    [ours] = run([{"op": "regex", "cases": cases}])
+    assert len(ours) == len(wanted) > 90_000
+    refused = 0
+    for case, got, want in zip(cases, ours, wanted, strict=True):
+        if want == "error":
+            assert "error" in got, case
+            refused += 1
+        else:
+            assert got == want, case
+    assert 0 < refused < len(patterns) // 4

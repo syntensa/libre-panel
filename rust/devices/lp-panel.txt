@@ -1,0 +1,26 @@
+lp-panel: a panel tried with Libre Panel's driver in Rust
+
+Close the panel's own program first (for the MAJESTY 9.16": MAJESTY AIO MONITOR), as it
+holds the panel's port. Then, in a terminal in this folder:
+
+  lp-panel list
+      the serial ports and what is on them; 33c3:7792 is the MAJESTY 9.16"
+
+  lp-panel test
+      the panel found by its USB ids, opened, and tried:
+      1. a card for 5 s: top left red, top right green, bottom left blue, bottom right
+         white, a white arrow pointing up, a grey going from black to white
+      2. the brightness at 100, 60, 20 and 100 %, 2 s each
+      3. pictures as fast as the panel takes them, for 10 s
+      then let go: the panel shows its own animation again
+
+  lp-panel test --port COM5 --kind majesty
+      a port and a kind of your choosing (majesty or hongtai)
+
+  lp-panel test --seconds 30
+      a longer run of pictures
+
+What it prints, and what the panel showed at each step, tells whether the driver is right.
+
+jpeg62.dll is libjpeg-turbo (LICENSE-libjpeg-turbo.md, README-libjpeg.ijg); lp-panel is
+Libre Panel's, under the GPL (LICENSE-libre-panel.txt).

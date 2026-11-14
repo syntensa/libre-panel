@@ -3,10 +3,33 @@ name: CI
 on:
   push:
     branches-ignore: ["handoff/**"]  # mailbox branches carry only notes
+    paths-ignore: ["community/themes/**"]  # (a shared theme merged: see below)
   pull_request:
+    # A shared theme's pull request (community-theme.yml opens it once the theme passed its
+    # check) adds the theme beside the list and nothing else. No test here looks at that
+    # folder, and a run for it would first wait for someone's approval (a bot opened the pull
+    # request) and then take half an hour: such a pull request, and its merge, run nothing.
+    paths-ignore: ["community/themes/**"]
+  # (release.yml: the downloads of a release are those this workflow builds and tries)
+  workflow_call:
+  # by hand: "quick" builds and packages the downloads and tries them, without the test suites
+  # and the Rust comparisons (an hour on Windows): to see a change of the packaging in minutes
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: "Only build, package and try the downloads (no test suites)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+# A newer push to a branch makes an older run on it moot: that run is cancelled and the
+# runners go to the newer one (on main every run finishes). Pull requests and a release's
+# run (workflow_call) are each a group of their own.
+concurrency:
+  group: ${{ github.event_name == 'push' && format('ci-{0}', github.ref) || format('ci-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
 
 jobs:
   lint:
@@ -23,6 +46,7 @@ jobs:
 
   test:
     # Windows takes about 20 minutes for the suite, and a slow runner more
+    if: ${{ !inputs.quick }}
     timeout-minutes: 50
     strategy:
       fail-fast: false
@@ -36,6 +60,15 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev,usb,tray]"
+      # (what fetch_tools.py downloaded in a run before: it takes a file kept there only where
+      # it is the one it pins, else downloads it again; GitHub's release files answered 504
+      # for longer than it asks again, and failed every job that downloads them)
+      - name: The downloads a run before kept
+        id: tools-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - name: ffmpeg for the video mode tests
         # The FFmpeg build the downloads carry (packaging/fetch_tools.py: pinned, from its
         # project's releases on GitHub, checked, asked again when a server fails), on Windows
@@ -43,7 +76,7 @@ jobs:
         # half an hour to install ffmpeg, both before a test had run.
         shell: bash
         run: |
-          python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
           if [ "$RUNNER_OS" = "Windows" ]; then
             cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
           else
@@ -51,6 +84,12 @@ jobs:
           fi
           export PATH="$RUNNER_TEMP/tools:$PATH"
           ffmpeg -hide_banner -encoders | grep libx264
+      - name: Kept for the runs after
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - run: pytest -q -rs --durations=20
       - name: The stacks of a test that hung
         if: failure()
@@ -119,15 +158,27 @@ jobs:
             echo "LIBRE_PANEL_ENGINE=$PWD/$built" >> "$GITHUB_ENV"
           fi
       - run: pip install -e ".[dev,usb]"
+      - name: The downloads a run before kept
+        id: tools-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - name: ffmpeg (decodes what the engine made)
         shell: bash
         run: |
-          python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
           if [ "$RUNNER_OS" = "Windows" ]; then
             cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
           else
             echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
           fi
+      - name: Kept for the runs after
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
       - name: The version of MSYS2's libx264
         if: runner.os == 'Windows'
         shell: msys2 {0}
@@ -157,6 +208,16 @@ jobs:
           check_tools.check_engine(tools / engine)
           CHECK
           cat "$RUNNER_TEMP/tools/SOURCES.txt"
+      # (the engine with its notes, for the build of Rust to try a panel with: the job `try`)
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: engine-windows
+          path: |
+            ${{ runner.temp }}/tools/libre-panel-engine.exe
+            ${{ runner.temp }}/tools/SOURCES.txt
+            ${{ runner.temp }}/tools/licenses
+          retention-days: 7
       - name: The app's tests of the engine
         shell: bash
         run: |
@@ -165,6 +226,510 @@ jobs:
           from libre_panel.devices.h264 import find_engine; assert find_engine(), 'no engine'"
           pytest -q -rs tests/test_native_engine.py tests/test_engine_panel.py tests/test_yuv.py \
             tests/test_scene.py
+
+  rust:
+    # Libre Panel in Rust (docs/RUST.md): the workspace's crates, then their comparisons with
+    # the Python app they replace (tests/test_rust_*.py, through lp-check); the comparisons on
+    # Windows took 25 minutes and more by now, and grow with each piece in Rust
+    timeout-minutes: 75  # (Windows: some 35 minutes of comparisons after the builds)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # (the app's window is WebKitGTK's on Linux, tao and wry build against GTK 3 and it; the
+      # tray icon loads AppIndicator as it runs; Xvfb and stalonetray for the tests that show
+      # them)
+      - name: GTK, WebKitGTK and AppIndicator for the window and the tray icon (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-1 xvfb stalonetray
+      - name: Build and test the crates
+        shell: bash
+        working-directory: rust
+        run: |
+          rustup component add rustfmt clippy
+          cargo fmt --all --check
+          cargo clippy --release --all-targets -- -D warnings
+          cargo test --release
+          cargo build --release
+      # (the Pillow they are compared with: docs/RUST.md; a new one changes nothing unseen)
+      # (pyusb for the simulated TURZX panel of tests/test_rust_app.py, which speaks its errors)
+      - run: pip install -e ".[dev,usb]" pillow==13.0.0
+      # Libre Panel's engine, which has the TURZX panels: with it the program in Rust is run
+      # against the simulated panel (tests/test_rust_app.py: video, its bit rate, single
+      # pictures, a hung decoder); without it those are skipped, as they are on Windows here,
+      # where the engine job builds it
+      - name: The engine for the program's panels (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libx264-dev
+          cargo build --release --manifest-path engine/Cargo.toml
+          echo "LIBRE_PANEL_ENGINE=$PWD/engine/target/release/libre-panel-engine" >> "$GITHUB_ENV"
+      # (the FFmpeg the downloads carry, as the other jobs fetch it, for the videos' comparisons:
+      # both read the same video with the same ffmpeg)
+      - name: The downloads a run before kept
+        id: tools-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
+      - name: ffmpeg for the video comparisons
+        shell: bash
+        run: |
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+          else
+            echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+          fi
+      - name: Kept for the runs after
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
+      # FriBiDi, which Pillow's libraqm and lp-check load from the system, and fonts of every
+      # kind the text comparisons draw with (tests/test_rust_text.py: OpenType, a collection,
+      # Type 1, CJK, Thai, Devanagari, colour emoji), so that none of them is skipped here
+      - name: FriBiDi and fonts for the text comparisons (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libfribidi0 fonts-dejavu-core \
+            fonts-freefont-ttf fonts-tlwg-loma-otf fonts-unifont fonts-noto-color-emoji \
+            fonts-wqy-zenhei fonts-inter fonts-ipafont-gothic xfonts-scalable
+          python -c "from PIL import features as f; print('Pillow has libraqm', f.version('raqm'), 'HarfBuzz', f.version('harfbuzz'), 'FriBiDi', f.version('fribidi'))"
+      # Windows' Pillow has libjpeg-turbo and libwebp built in, where Linux's has them as files
+      # for lp-check to load: here they are built as Pillow's wheel has them (the same
+      # versions, MSVC, libjpeg-turbo's SIMD), so the JPEG and WebP comparisons run here too
+      # (their sources as a run before kept them, each taken only where it is the pinned one,
+      # else downloaded again; the key names the versions, so new ones are kept anew)
+      - name: The libraries' sources a run before kept (Windows)
+        if: runner.os == 'Windows'
+        id: libs-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/libs-cache
+          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0-freetype-2.14.3
+      - name: The sources of libjpeg-turbo 3.2.0, libwebp 1.6.0 and FreeType 2.14.3 (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/libs" "$RUNNER_TEMP/libs-cache" && cd "$RUNNER_TEMP/libs"
+          get() {  # (file, its SHA-256, where it is)
+            if ! (cd ../libs-cache && echo "$2  $1" | sha256sum -c --status 2> /dev/null); then
+              curl -sSfL --retry 6 --retry-delay 20 -o "../libs-cache/$1" "$3"
+            else
+              echo "kept from a run before: $1"
+            fi
+            cp "../libs-cache/$1" "$1"
+            echo "$2  $1" | sha256sum -c
+          }
+          get jpeg.tar.gz 6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e \
+            https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz
+          get webp.tar.gz e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564 \
+            https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz
+          get freetype.tar.gz e61b31ab26358b946e767ed7eb7f4bb2e507da1cfefeb7a8861ace7fd5c899a1 \
+            https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.gz
+      - name: Kept for the runs after (Windows)
+        if: runner.os == 'Windows' && steps.libs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/libs-cache
+          key: libs-${{ runner.os }}-libjpeg-turbo-3.2.0-libwebp-1.6.0-freetype-2.14.3
+      - name: libjpeg-turbo 3.2.0 and libwebp 1.6.0 for the comparisons (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python -c "from PIL import features as f; print('Pillow has libjpeg-turbo', f.version_feature('libjpeg_turbo'), 'and libwebp', f.version_module('webp'))"
+          choco install nasm -y --no-progress > /dev/null
+          export PATH="$PATH:/c/Program Files/NASM"
+          cd "$RUNNER_TEMP/libs"
+          tar -xzf jpeg.tar.gz && tar -xzf webp.tar.gz
+          # (CMake builds with the newest Visual Studio the runner has, and says which)
+          cmake -S libjpeg-turbo-3.2.0 -B jpeg -A x64 \
+            -DENABLE_STATIC=OFF -DWITH_TURBOJPEG=OFF -DREQUIRE_SIMD=ON > jpeg.log
+          grep -h -E "^-- (Building for|SIMD extensions)" jpeg.log || true
+          cmake --build jpeg --config Release --parallel > /dev/null
+          cmake -S libwebp-1.6.0 -B webp -A x64 -DBUILD_SHARED_LIBS=ON \
+            -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
+            -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF \
+            -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF > /dev/null
+          cmake --build webp --config Release --parallel > /dev/null
+          ls jpeg/Release/*.dll webp/Release/*.dll
+          # (libwebp's DLLs find each other, and libsharpyuv, on the PATH)
+          cygpath -w "$PWD/webp/Release" >> "$GITHUB_PATH"
+          echo "LP_LIBJPEG=$(cygpath -w "$PWD/jpeg/Release/jpeg62.dll")" >> "$GITHUB_ENV"
+          echo "LP_LIBWEBP=$(cygpath -w "$PWD/webp/Release/libwebp.dll")" >> "$GITHUB_ENV"
+          echo "LP_LIBWEBPDEMUX=$(cygpath -w "$PWD/webp/Release/libwebpdemux.dll")" >> "$GITHUB_ENV"
+          echo "LP_LIBWEBPMUX=$(cygpath -w "$PWD/webp/Release/libwebpmux.dll")" >> "$GITHUB_ENV"
+      # Windows has no FreeType of its own and Pillow's is built into it: libre-panel.exe draws
+      # its letters with this one, the version Pillow 13.0 has (the letters' comparisons with
+      # Pillow do not run with it yet: docs/RUST.md, R2)
+      - name: FreeType 2.14.3 for libre-panel.exe (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/libs"
+          tar -xzf freetype.tar.gz
+          cmake -S freetype-2.14.3 -B freetype -A x64 -DBUILD_SHARED_LIBS=ON \
+            -DFT_DISABLE_ZLIB=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
+            -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON > /dev/null
+          cmake --build freetype --config Release --parallel > /dev/null
+          ls freetype/Release/*.dll
+      # the engine the job `engine` built (on Windows; Linux's is built above), for the cost of
+      # a frame through it below: there by then, else that measurement is left out
+      - uses: actions/download-artifact@v4
+        if: ${{ runner.os == 'Windows' && !inputs.quick }}
+        continue-on-error: true
+        with:
+          name: engine-windows
+          path: ${{ runner.temp }}/engine
+      # what drawing a frame costs here (no panel: the frames go nowhere), before the long
+      # comparisons, so that a failing one does not hide it: with this computer's readings,
+      # then with the app's demo readings (the weather and its symbol, readings that jump);
+      # then the whole way to a panel: the demo readings' frames through the engine into the
+      # simulated 12.3" (fake_panel.py), the app's process and the engine's measured
+      - name: What drawing a frame costs (Lumen on a virtual 12.3", 25 fps)
+        if: ${{ !inputs.quick }}
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            export LP_LIBFREETYPE="$(cygpath -w "$RUNNER_TEMP/libs/freetype/Release/freetype.dll")"
+            app=rust/target/release/libre-panel.exe
+            # (in "tools" beside the app, as the downloads have it: the app takes an engine
+            # LIBRE_PANEL_ENGINE names only from a folder others cannot change, which the
+            # runner's temporary one is not)
+            engine=rust/target/release/tools/libre-panel-engine.exe
+            if [ -f "$RUNNER_TEMP/engine/libre-panel-engine.exe" ]; then
+              mkdir -p rust/target/release/tools
+              cp "$RUNNER_TEMP/engine/libre-panel-engine.exe" "$engine"
+            fi
+          else
+            app=rust/target/release/libre-panel
+            engine="$LIBRE_PANEL_ENGINE"
+          fi
+          python tests/frame_load.py --app "$app" --seconds 30
+          python tests/frame_load.py --app "$app" --seconds 30 --demo
+          if [ -f "$engine" ]; then
+            pip install -q pyusb pycryptodome
+            python tests/frame_load.py --app "$app" --engine "$engine" --seconds 30 --demo
+          else
+            echo "no engine here: the frames through it are not measured"
+          fi
+          # (the comparisons after this find no engine beside the app, as before)
+          if [ "$RUNNER_OS" = Windows ]; then rm -rf rust/target/release/tools; fi
+      - name: The crates against the Python app
+        if: ${{ !inputs.quick }}
+        run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_serial_drivers.py tests/test_rust_usb_drivers.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_rust_app.py tests/test_rust_plugins.py
+      - name: The stacks of a comparison that hung
+        if: failure()
+        shell: bash
+        run: cat "$RUNNER_TEMP/hang-traceback.txt" 2>/dev/null || true
+      # the app's server answering as Python's, request by request, and the running app with a
+      # simulated panel (on Windows not yet: its paths and programs are told apart there)
+      - name: The app's server against the Python app's (Linux)
+        if: runner.os == 'Linux' && !inputs.quick
+        run: python -m pytest -q --durations=20 tests/test_rust_server.py tests/test_rust_wayland.py
+      # lp-panel, for a panel's owner to try the panel with the driver in Rust (the MAJESTY
+      # 9.16"'s first): with the libjpeg it saves its pictures with, and their licences
+      - name: lp-panel to try a panel with (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir lp-panel
+          cp rust/target/release/lp-panel.exe rust/devices/lp-panel.txt lp-panel/
+          cp "$RUNNER_TEMP/libs/jpeg/Release/jpeg62.dll" lp-panel/
+          cp "$RUNNER_TEMP/libs/libjpeg-turbo-3.2.0/LICENSE.md" lp-panel/LICENSE-libjpeg-turbo.md
+          cp "$RUNNER_TEMP/libs/libjpeg-turbo-3.2.0/README.ijg" lp-panel/README-libjpeg.ijg
+          cp LICENSE lp-panel/LICENSE-libre-panel.txt
+          ./lp-panel/lp-panel.exe list
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: lp-panel-windows
+          path: lp-panel
+          retention-days: 30
+      # libre-panel.exe with what it loads and the app's themes, fonts and languages, as a
+      # folder that runs by itself: it draws a frame from there, with none of this job's
+      # libraries named to it
+      - name: libre-panel to try on a PC (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          libs="$RUNNER_TEMP/libs"
+          mkdir -p libre-panel-rust/share/libre-panel libre-panel-rust/licenses
+          cp rust/target/release/libre-panel.exe rust/target/release/LibrePanel.exe \
+            rust/target/release/libre-panel-window.exe rust/target/release/libre-panel-tray.exe \
+            libre-panel-rust/
+          cp rust/app/try-windows.txt libre-panel-rust/README.txt
+          cp "$libs/freetype/Release/freetype.dll" "$libs/jpeg/Release/jpeg62.dll" libre-panel-rust/
+          cp "$libs"/webp/Release/*.dll libre-panel-rust/
+          # (the app's pages, the old editor's files and those of the built-in pages too)
+          for part in themes fonts locale assets editor/app editor/static pages/web; do
+            mkdir -p "libre-panel-rust/share/libre-panel/$(dirname "$part")"
+            cp -r "src/libre_panel/$part" "libre-panel-rust/share/libre-panel/$part"
+          done
+          find libre-panel-rust/share -name __pycache__ -prune -exec rm -rf {} +
+          find libre-panel-rust/share -name "*.py" -delete
+          cp LICENSE libre-panel-rust/licenses/LICENSE-libre-panel.txt
+          # (ffmpeg, PresentMon and PawnIO's installer, as the downloads carry them: pinned and
+          # checked by fetch_tools.py above, with their licences and SOURCES.txt)
+          mkdir -p libre-panel-rust/tools
+          cp -r "$RUNNER_TEMP/tools/." libre-panel-rust/tools/
+          test -f libre-panel-rust/tools/ffmpeg.exe && test -f libre-panel-rust/tools/PawnIO_setup.exe
+          cp NOTICE.md libre-panel-rust/licenses/
+          cp "$libs/freetype-2.14.3/LICENSE.TXT" libre-panel-rust/licenses/LICENSE-freetype.txt
+          cp "$libs/freetype-2.14.3/docs/FTL.TXT" libre-panel-rust/licenses/FTL-freetype.txt
+          cp "$libs/libjpeg-turbo-3.2.0/LICENSE.md" libre-panel-rust/licenses/LICENSE-libjpeg-turbo.md
+          cp "$libs/libjpeg-turbo-3.2.0/README.ijg" libre-panel-rust/licenses/README-libjpeg.ijg
+          cp "$libs/libwebp-1.6.0/COPYING" libre-panel-rust/licenses/COPYING-libwebp.txt
+          # (the Rust crates the programs are built from, with their licences)
+          python packaging/rust_licenses.py --target x86_64-pc-windows-msvc \
+            -o libre-panel-rust/licenses/THIRD-PARTY-RUST.txt
+          cd libre-panel-rust
+          export LIBRE_PANEL_HOME="$RUNNER_TEMP/try-home"
+          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX -u LP_LIBWEBPMUX ./libre-panel.exe render --demo \
+            --theme lumen --output "$RUNNER_TEMP/try-lumen.png"
+          env -u LP_LIBJPEG -u LP_LIBWEBP -u LP_LIBWEBPDEMUX -u LP_LIBWEBPMUX ./libre-panel.exe render \
+            --theme terra --output "$RUNNER_TEMP/try-terra.png"
+          python -c "import sys; from PIL import Image
+          for name in sys.argv[1:]:
+              frame = Image.open(name); frame.load()
+              assert frame.mode == 'RGB' and len(frame.getcolors(1 << 24)) > 500, name
+              print(name, frame.size)" "$RUNNER_TEMP/try-lumen.png" "$RUNNER_TEMP/try-terra.png"
+      # (what Explorer, Windows Security and an antivirus program read of each program: its
+      # version resource, rust/winres.rs, as the downloads' programs have theirs)
+      - name: The programs say who made them (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path src/libre_panel/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          foreach ($exe in "libre-panel.exe", "LibrePanel.exe", "libre-panel-window.exe", "libre-panel-tray.exe") {
+            $info = (Get-Item "libre-panel-rust/$exe").VersionInfo
+            if ($info.CompanyName -ne "Libre Panel contributors" -or $info.ProductVersion -ne $version) {
+              throw "$exe says nothing of itself: $($info | Format-List | Out-String)"
+            }
+            "{0}: {1}, {2}, {3}" -f $exe, $info.FileDescription, $info.CompanyName, $info.ProductVersion
+          }
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: libre-panel-rust-app
+          path: libre-panel-rust
+          retention-days: 7
+
+  try:
+    # Libre Panel in Rust to try on a PC with a panel: libre-panel.exe and what it loads (the
+    # job `rust`), with the engine that sends a TURZX panel its video (the job `engine`) and
+    # the sensor service (the job `sensor-host`) in "sensors", as the downloads carry it; and
+    # its setup, made with the downloads' Inno Setup script and tried as release.yml tries
+    # theirs (install for all users with every box, run, uninstall)
+    needs: [engine, rust, sensor-host, plugin-host]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # (the setup's test checks the installed tools with the app's own commands for them:
+      # packaging/check_tools.py imports libre_panel)
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: libre-panel-rust-app
+          path: libre-panel-rust
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-windows
+          path: libre-panel-rust/tools
+      - uses: actions/download-artifact@v4
+        with:
+          name: sensors-windows
+          path: libre-panel-rust/sensors
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-host-windows
+          path: libre-panel-rust/plugin-host
+      - name: What the folder holds
+        shell: bash
+        run: |
+          find libre-panel-rust -maxdepth 2 | sort | head -80
+          test -f libre-panel-rust/LibrePanel.exe
+          test -f libre-panel-rust/tools/libre-panel-engine.exe
+          test -f libre-panel-rust/tools/ffmpeg.exe
+          test -f libre-panel-rust/sensors/libre-panel-sensors.exe
+          test -d libre-panel-rust/sensors/lhm
+          test -f libre-panel-rust/plugin-host/libre-panel-plugins.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libre-panel-rust-windows
+          path: libre-panel-rust
+          retention-days: 30
+      - name: What a frame costs on Windows (Lumen on a simulated 12.3", 25 fps; large blocks kept, then not)
+        shell: bash
+        run: |
+          # (the simulated panel reads the TURZX packets as the drivers write them: pycryptodome)
+          pip install pyusb pycryptodome
+          python tests/frame_load.py --app libre-panel-rust/libre-panel.exe \
+            --engine libre-panel-rust/tools/libre-panel-engine.exe --env LP_HEAP_KEEP=0
+          # LibrePanel.exe, the program the start menu and the start at login run, as the
+          # background app: the same frames at the same cost (it keeps its large blocks too),
+          # then with light mode at once (the app's own gone after four seconds, the heaps'
+          # free memory back every two): what giving memory back costs the frames
+          python tests/frame_load.py --app libre-panel-rust/LibrePanel.exe --background \
+            --engine libre-panel-rust/tools/libre-panel-engine.exe --seconds 30 \
+            --env LP_LIGHT_S=4,2
+      - name: Its setup
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path src/libre_panel/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          $numeric = python -c "import re, sys; v = sys.argv[1]; n = re.findall(r'\d+', v)[:4 if re.fullmatch(r'[\d.]+', v) else 3]; print('.'.join((n + ['0'] * 4)[:4]))" $version
+          "VERSION=$version" >> $env:GITHUB_ENV
+          Copy-Item LICENSE, README.md, NOTICE.md libre-panel-rust/
+          Remove-Item libre-panel-rust/README.txt  # (the try folder's: not for the setup)
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=$version" "/DNumericVersion=$numeric" "/DSourceDir=..\..\libre-panel-rust" "/DOutputDir=..\..\dist" packaging\windows\libre-panel.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: The app runs plugins through its plugin host
+        shell: bash
+        run: python packaging/check_plugin_host.py --app libre-panel-rust/libre-panel.exe
+      - name: Test the setup (install, run, uninstall)
+        shell: pwsh
+        run: python packaging/windows/test_installer.py --rust "dist/libre-panel-$env:VERSION-windows-x64-setup.exe"
+      - name: Its portable zip
+        # as release.yml makes the downloads' (the settings in "data" beside the program:
+        # config.portable_dir), from the folder the setup was made of
+        shell: pwsh
+        run: |
+          Copy-Item packaging/windows/portable.txt libre-panel-rust/
+          7z a "dist/libre-panel-$env:VERSION-windows-x64-portable.zip" ./libre-panel-rust/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libre-panel-rust-setup
+          path: |
+            dist/*-setup.exe
+            dist/*-portable.zip
+          retention-days: 30
+
+  appimage:
+    # Libre Panel in Rust as the Linux download: an AppImage of the programs (built on the
+    # oldest Ubuntu offered, as release.yml builds its AppImage: it takes glibc from the system
+    # it runs on), with the libraries of C that draw as Pillow draws (Pillow's own, from its
+    # wheel), ffmpeg and the engine in "tools", and the app's files; tried as release.yml tries
+    # its AppImage (packaging/linux/test_appimage.sh, RUST=1: started as autostart starts it,
+    # with and without a tray, its programs, glibc, autostart, the udev rule, system-setup)
+    needs: [plugin-host]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: GTK, WebKitGTK, AppIndicator, libx264, Xvfb and a tray
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-1 libx264-dev xvfb stalonetray
+      - run: pip install -e .
+      - name: The programs and the engine
+        run: |
+          cargo build --release --manifest-path rust/Cargo.toml -p libre-panel -p libre-panel-desktop
+          (cd engine && X264_STATIC=1 cargo build --release)
+      - name: The downloads a run before kept
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: tools-${{ runner.os }}-${{ hashFiles('packaging/fetch_tools.py') }}
+      - name: ffmpeg and the engine, as the release puts them into "tools"
+        run: |
+          python packaging/fetch_tools.py "$RUNNER_TEMP/tools" --cache "$RUNNER_TEMP/tools-cache"
+          package="libx264-dev $(dpkg-query -W -f='${Version}' libx264-dev)"
+          python packaging/add_engine.py "$RUNNER_TEMP/tools" engine/target/release/libre-panel-engine \
+            --x264 "from $package" \
+            --x264-source "x264: https://code.videolan.org/videolan/x264 (the commit its version names)" \
+            --x264-source "Ubuntu's source package: https://launchpad.net/ubuntu/+source/x264 (apt-get source x264)"
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-host-linux
+          path: dist/libre-panel-rust/plugin-host
+      - name: The folder of the AppImage
+        run: |
+          app=dist/libre-panel-rust
+          mkdir -p "$app/share/libre-panel" "$app/licenses" "$app/lib"
+          cp rust/target/release/libre-panel rust/target/release/libre-panel-window \
+            rust/target/release/libre-panel-tray "$app/"
+          for part in themes fonts locale assets editor/app editor/static pages/web; do
+            mkdir -p "$app/share/libre-panel/$(dirname "$part")"
+            cp -r "src/libre_panel/$part" "$app/share/libre-panel/$part"
+          done
+          find "$app/share" -name __pycache__ -prune -exec rm -rf {} +
+          find "$app/share" -name "*.py" -delete
+          cp -r "$RUNNER_TEMP/tools" "$app/tools"
+          chmod +x "$app/plugin-host/libre-panel-plugins"
+          # (Pillow's own FreeType, HarfBuzz, libjpeg and libwebp with what they need, as its
+          # wheel carries them, and its licence, which names theirs)
+          python - "$app" <<'PILLOW'
+          import shutil, sys
+          from importlib.metadata import distribution
+          from pathlib import Path
+          app = Path(sys.argv[1])
+          pillow = distribution("pillow")
+          libs = Path(pillow.locate_file("pillow.libs"))
+          for library in sorted(libs.iterdir()):
+              shutil.copy2(library, app / "lib" / library.name)
+          licence = next(f for f in pillow.files if f.name.startswith("LICENSE"))
+          shutil.copyfile(pillow.locate_file(licence), app / "licenses" / "LICENSE-Pillow.txt")
+          print(sorted(p.name for p in (app / "lib").iterdir()))
+          PILLOW
+          test -n "$(ls "$app"/lib/libfreetype*)" && test -n "$(ls "$app"/lib/libjpeg*)"
+          cp LICENSE "$app/licenses/LICENSE-libre-panel.txt"
+          cp NOTICE.md "$app/licenses/"
+          python packaging/rust_licenses.py --target x86_64-unknown-linux-gnu \
+            -o "$app/licenses/THIRD-PARTY-RUST.txt"
+          version=$(python -c "import libre_panel; print(libre_panel.__version__)")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: The AppImage
+        run: |
+          SOURCE="$PWD/dist/libre-panel-rust" APPRUN="$PWD/packaging/linux/AppRun-rust" \
+            packaging/linux/build_appimage.sh "$VERSION" "dist/Libre_Panel-$VERSION-rust-x86_64.AppImage"
+      - name: Test the AppImage (headless and on an X11 tray)
+        run: RUST=1 packaging/linux/test_appimage.sh "dist/Libre_Panel-$VERSION-rust-x86_64.AppImage"
+      - name: The Linux archive
+        # the AppImage's folder as it is, started by the AppImage's own script (libre-panel.sh:
+        # it names Pillow's libraries in lib to the program); tried from where it is unpacked
+        run: |
+          mv dist/libre-panel-rust dist/libre-panel
+          cp packaging/linux/AppRun-rust dist/libre-panel/libre-panel.sh
+          chmod +x dist/libre-panel/libre-panel.sh
+          cp LICENSE README.md NOTICE.md dist/libre-panel/
+          tar -C dist -czf "dist/libre-panel-$VERSION-linux-x64.tar.gz" libre-panel
+          tried="$RUNNER_TEMP/archive"
+          mkdir -p "$tried" && tar -C "$tried" -xzf "dist/libre-panel-$VERSION-linux-x64.tar.gz"
+          LIBRE_PANEL_HOME="$tried/home" "$tried/libre-panel/libre-panel.sh" render --demo \
+            --theme lumen --output "$tried/frame.png"
+          python -c "from PIL import Image; f = Image.open('$tried/frame.png'); assert f.size == (1920, 480), f.size"
+          "$tried/libre-panel/libre-panel.sh" version
+          python packaging/check_plugin_host.py --app "$tried/libre-panel/libre-panel.sh"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libre-panel-rust-appimage
+          path: |
+            dist/*.AppImage
+            dist/*.tar.gz
+          retention-days: 30
 
   sensor-host:
     # The sensor service as a .NET program of its own (sensorhost/, C#; docs/ROADMAP.md): built
@@ -211,10 +776,70 @@ jobs:
         if: always()
         shell: bash
         run: cat sensorhost/bin/Release/logs/service.log 2>/dev/null || true
+      # (for the job `try`: the folder the downloads carry as "sensors", without its log)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sensors-windows
+          path: |
+            sensorhost/bin/Release
+            !sensorhost/bin/Release/logs/**
+          retention-days: 7
+
+  plugin-host:
+    # The plugin host (src/libre_panel/plugin_host.py): the Python process the Rust app starts
+    # when plugins are installed, which loads them and runs their sensors, services and themes
+    # for it. Built as the downloads carry it in "plugin-host" beside the app (on Windows with
+    # PyInstaller's loader compiled here, as release.yml did for the Python programs), and tried
+    # on a plugin of its own (packaging/check_plugin_host.py).
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: ubuntu-22.04
+            name: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: PyInstaller, on Windows its loader compiled here
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            PYINSTALLER_COMPILE_BOOTLOADER=1 pip install --no-binary pyinstaller pyinstaller
+            version=$(python -c "from importlib.metadata import version; print(version('pyinstaller'))")
+            pip download "pyinstaller==$version" --only-binary :all: --no-deps -d shipped-pyinstaller
+            python packaging/windows/own_loader.py shipped-pyinstaller/*.whl
+          else
+            pip install pyinstaller
+          fi
+      - name: The plugin host
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel-plugins.spec
+          ls dist/plugin-host | head -20
+      - name: It runs a plugin
+        shell: bash
+        run: |
+          exe=dist/plugin-host/libre-panel-plugins
+          [ "$RUNNER_OS" = Windows ] && exe="$exe.exe"
+          # (from elsewhere, so that the checkout's sources are not what it imports)
+          cd "$RUNNER_TEMP" && python "$GITHUB_WORKSPACE/packaging/check_plugin_host.py" "$GITHUB_WORKSPACE/$exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-host-${{ matrix.name }}
+          path: dist/plugin-host
+          retention-days: 7
 
   desktop:
     # The app in a real browser (every test that needs one: the others skip them), the tray
     # icon on a real X11 tray, and keyboard shortcuts pressed on an X server.
+    if: ${{ !inputs.quick }}
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:

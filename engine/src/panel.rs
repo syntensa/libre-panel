@@ -645,6 +645,7 @@ pub fn run(options: Options) -> Result<(), String> {
                 planned,
             } => {
                 let read = Instant::now();
+                crate::heap::tick();
                 let Some(s) = stream.as_mut() else {
                     break Err("a frame before its stream".into());
                 };
@@ -669,6 +670,7 @@ pub fn run(options: Options) -> Result<(), String> {
                 order,
             } => {
                 let read = Instant::now();
+                crate::heap::tick();
                 let Some(s) = stream.as_mut() else {
                     break Err("a frame before its stream".into());
                 };

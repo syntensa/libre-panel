@@ -22,7 +22,9 @@ made for the sizes the entry names, and then as it checks any shared theme
    you gave into its `theme.json` (a theme made from someone else's keeps them as whom it is
    after), and opens a pull request with the zip, the picture and the entry. It answers on your issue, with what to change where something is
    wrong; edit the issue and it runs again.
-4. Someone has a look and merges it. Within the hour it shows in everyone's app.
+4. Someone has a look and merges it. Within the hour it shows in everyone's app. (Each pull
+   request adds its entry at the list's end: when one is merged, the workflow makes those of
+   the themes that still wait anew on the new list.)
 
 ### By hand
 

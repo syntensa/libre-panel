@@ -19,14 +19,15 @@ const titleOf = (view) => (typeof view.title === "function" ? view.title() : vie
 
 // What gives way where the header has too little room for all it shows, in this order, each after
 // the one before (app.css: data-fit): the search field's hint of its keys, the tabs closer
-// together, the search field to its glass, the unsaved mark to its dot, the panel chip to its
-// name, the brand to its icon, "Panel 1 | Panel 2" to the numbers, the way to the settings to its
-// gear. The window's width alone does not say when (a second panel adds its switch, German its
-// longer words, the theme its name), so each step is measured: the first with which nothing
-// reaches beyond the header, the theme's name is whole and the search field shows some of its
-// words (or none: its glass) is kept. The name gives way only after all of them.
-const GIVE_WAY = ["keys", "tabs", "search", "unsaved", "chip", "brand", "panels", "settings"];
-const SEARCH_WORDS = 60; // px of the search field's words, at least ("Search or…"): not a letter
+// together, the search field's phrase to its first word, the search field to its glass, the
+// unsaved mark to its dot, the panel chip to its name, the brand to its icon, "Panel 1 |
+// Panel 2" to the numbers, the way to the settings to its gear. The window's width alone does
+// not say when (a second panel adds its switch, German its longer words, the theme its name),
+// so each step is measured: the first with which nothing reaches beyond the header, the theme's
+// name is whole and the search field shows whole words (its phrase, its first word, or none:
+// its glass), never a word cut ("Search or…"), is kept. The name gives way only after all of
+// them.
+const GIVE_WAY = ["keys", "tabs", "phrase", "search", "unsaved", "chip", "brand", "panels", "settings"];
 
 /** How much of its text an element's box hides, in pixels (0 where it shows all of it). */
 function hidden(element) {
@@ -40,11 +41,10 @@ function fits(bar) {
   const end = bar.getBoundingClientRect().right - parseFloat(getComputedStyle(bar).paddingRight);
   const last = bar.lastElementChild;
   const words = bar.querySelector(".search-trigger.wide .search-trigger-text");
-  const wordsWidth = words?.getClientRects().length ? words.getBoundingClientRect().width : Infinity; // (none shown: its glass)
   return (
     (!last || last.getBoundingClientRect().right <= end + 0.5) &&
     hidden(bar.querySelector(".theme-name span")) <= 0.1 &&
-    wordsWidth >= SEARCH_WORDS
+    (!words?.getClientRects().length || hidden(words) <= 0.5) // (none shown: its glass)
   );
 }
 
@@ -98,7 +98,12 @@ export function SearchTrigger({ wide = false }) {
     onClick=${() => openPalette()}
   >
     <${Icon} name="search" size=${wide ? 15 : 14} />
-    ${wide ? html`<span class="search-trigger-text">${t("Search or command …")}</span>` : null}
+    ${wide
+      ? html`<span class="search-trigger-text">
+          <span class="search-phrase">${t("Search or command …")}</span>
+          <span class="search-word">${t("Search")}</span>
+        </span>`
+      : null}
     <kbd class="kbd">${keyLabel("mod+k")}</kbd>
   </button>`;
 }

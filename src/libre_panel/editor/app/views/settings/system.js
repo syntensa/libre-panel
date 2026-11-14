@@ -6,7 +6,7 @@
 import { endpoints } from "../../core/api.js";
 import { inNativeWindow } from "../../core/app.js";
 import { languageSetting, languages, setLanguage, t } from "../../core/i18n.js";
-import { loadSettings, loadSystem, saveSystem } from "../../core/settings.js";
+import { loadSettings, loadSystem, saveSettings, saveSystem, useConfig } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
 import { Select, Toggle } from "../../ui/controls.js";
@@ -101,6 +101,23 @@ async function startWithRights(info, on) {
   if (sure) await saveSystem({ elevated: true });
 }
 
+/** The icon in the notification area (the tray) with its menu: off unless turned on. */
+function TrayRow({ windows }) {
+  const config = useConfig();
+  const title = windows ? t("Icon in the notification area") : t("Icon in the tray");
+  return html`<${SettingRow}
+    title=${title}
+    hint=${t("Its menu shows how the panel is doing, switches themes and quits Libre Panel. Off: Libre Panel opens from the Start menu or your list of apps.")}
+  >
+    <${Toggle}
+      label=${title}
+      checked=${Boolean(config?.tray_icon)}
+      disabled=${!config}
+      onChange=${(on) => saveSettings({ tray_icon: on }).catch(toastError)}
+    />
+  <//>`;
+}
+
 function StartCard() {
   const info = useStore((s) => s.systemInfo);
   if (!info) return null;
@@ -111,9 +128,7 @@ function StartCard() {
       title=${windows ? t("Start with Windows") : t("Start when you log in")}
       hint=${unsupported
         ? t("Not supported on this system.")
-        : windows
-          ? t("Libre Panel runs in the background, its icon sits in the notification area.")
-          : t("Libre Panel runs in the background, its icon sits in the tray.")}
+        : t("Libre Panel runs in the background.")}
       status=${info.enabled && info.location ? html`<span class="settings-row-where mono">${info.location}</span>` : null}
     >
       <${Toggle}
@@ -124,6 +139,7 @@ function StartCard() {
       />
     <//>
     ${info.task_hint ? html`<div class="settings-row"><${Note} tone="warn">${info.task_hint}<//></div>` : null}
+    <${TrayRow} windows=${windows} />
     ${windows
       ? html`<${SettingRow}
           title=${t("With administrator rights")}

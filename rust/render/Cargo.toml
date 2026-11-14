@@ -1,0 +1,22 @@
+[package]
+name = "lp-render"
+description = "Libre Panel's renderer: the frames of a theme, widget by widget, as render/ draws them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }
+lp-pixels = { path = "../pixels" }
+lp-decode = { path = "../decode" }
+lp-theme = { path = "../theme" }
+lp-text = { path = "../text" }
+lp-i18n = { path = "../i18n" }
+lp-devices = { path = "../devices" }
+indexmap = "2"
+unicode-general-category = "=0.6.0"
+num-bigint = "0.4"
+num-integer = "0.1"
+num-traits = "0.2"

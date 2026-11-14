@@ -305,7 +305,9 @@ impl Yuv {
 
 /// A block's colours as Pillow's YCbCr makes them: its light, and the blue and red of each two
 /// by two of its pixels (their average), in the panel's range. `src` holds the pixels three
-/// bytes each, the block's first at `first`, its rows `line` bytes apart.
+/// bytes each, the block's first at `first`, its rows `line` bytes apart. Eight pixels at a
+/// time where the processor has AVX2 ([`colours_avx2`], the tables as the formulas they are),
+/// else a pixel at a time through the tables: the same bytes.
 fn colours(
     src: &[u8],
     first: usize,
@@ -313,7 +315,23 @@ fn colours(
     n: usize,
     full: bool,
 ) -> ([u8; 256], [u8; 64], [u8; 64]) {
-    let half = n / 2;
+    #[cfg(target_arch = "x86_64")]
+    if n.is_multiple_of(8) && std::arch::is_x86_feature_detected!("avx2") {
+        // SAFETY: the processor has AVX2 (asked just now); colours_avx2 reads the rows
+        // colours_by_table reads, through slices of them
+        return unsafe { colours_avx2(src, first, line, n, full) };
+    }
+    colours_by_table(src, first, line, n, full)
+}
+
+/// [`colours`] a pixel at a time, through Pillow's tables.
+fn colours_by_table(
+    src: &[u8],
+    first: usize,
+    line: usize,
+    n: usize,
+    full: bool,
+) -> ([u8; 256], [u8; 64], [u8; 64]) {
     let mut light = [0u8; 256];
     let mut blue = [0i32; 256];
     let mut red = [0i32; 256];
@@ -329,6 +347,14 @@ fn colours(
             *rd = (((CR_R[pr] + CR_G[pg] + CR_B[pb]) >> 6) + 128) & 255;
         }
     }
+    let (cb, cr) = averaged(&blue, &red, n, full);
+    (light, cb, cr)
+}
+
+/// The blue and red of each two by two pixels of a block (`blue`, `red`: each pixel's), their
+/// average in the panel's range.
+fn averaged(blue: &[i32; 256], red: &[i32; 256], n: usize, full: bool) -> ([u8; 64], [u8; 64]) {
+    let half = n / 2;
     let mut cb = [0u8; 64];
     let mut cr = [0u8; 64];
     for i in 0..half {
@@ -348,6 +374,105 @@ fn colours(
             or[j] = if full { r as u8 } else { LIMITED_C[r] };
         }
     }
+    (cb, cr)
+}
+
+/// Pillow's tables as the integer formulas they are, each `(value * M + B) >> S`: the same
+/// number for every one of the 256 values (`the_formulas_are_the_tables`). Those whose entries
+/// are below 0 are the formula's negative, and 0 for 0 (`max(.., 0)`).
+const Y_R_F: (i32, i32, i32) = (39191, 962, 11);
+const Y_G_F: (i32, i32, i32) = (153879, 1983, 12);
+const Y_B_F: (i32, i32, i32) = (59769, 4055, 13);
+const CB_R_F: (i32, i32, i32) = (5529, -216, 9); // (negative)
+const CB_G_F: (i32, i32, i32) = (10855, -299, 9); // (negative)
+const CR_G_F: (i32, i32, i32) = (109757, -2042, 12); // (negative)
+const CR_B_F: (i32, i32, i32) = (21315, -2065, 12); // (negative)
+const LIMITED_Y_F: (i32, i32, i32) = (1759, 33774, 11);
+const CB_B_TIMES: i32 = 32; // CB_B and CR_R: the value times 32
+
+/// [`colours`] eight pixels at a time (AVX2): each pixel's three bytes apart into lanes, the
+/// tables' formulas in them, the light packed back into bytes; the two by two average as
+/// [`colours_by_table`] takes it.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn colours_avx2(
+    src: &[u8],
+    first: usize,
+    line: usize,
+    n: usize,
+    full: bool,
+) -> ([u8; 256], [u8; 64], [u8; 64]) {
+    use std::arch::x86_64::*;
+    let mut light = [0u8; 256];
+    let mut blue = [0i32; 256];
+    let mut red = [0i32; 256];
+    // (eight pixels' bytes: the first sixteen and the eight after them, each band's apart)
+    let r_lo = _mm_setr_epi8(0, 3, 6, 9, 12, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+    let r_hi = _mm_setr_epi8(-1, -1, -1, -1, -1, -1, 2, 5, -1, -1, -1, -1, -1, -1, -1, -1);
+    let g_lo = _mm_setr_epi8(1, 4, 7, 10, 13, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+    let g_hi = _mm_setr_epi8(-1, -1, -1, -1, -1, 0, 3, 6, -1, -1, -1, -1, -1, -1, -1, -1);
+    let b_lo = _mm_setr_epi8(2, 5, 8, 11, 14, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1);
+    let b_hi = _mm_setr_epi8(-1, -1, -1, -1, -1, 1, 4, 7, -1, -1, -1, -1, -1, -1, -1, -1);
+    let zero = _mm256_setzero_si256();
+    let byte = _mm256_set1_epi32(255);
+    let middle = _mm256_set1_epi32(128);
+    let formula = |v: __m256i, (m, b, s): (i32, i32, i32)| {
+        let t = _mm256_add_epi32(
+            _mm256_mullo_epi32(v, _mm256_set1_epi32(m)),
+            _mm256_set1_epi32(b),
+        );
+        _mm256_sra_epi32(t, _mm_cvtsi32_si128(s))
+    };
+    for i in 0..n {
+        let row = &src[first + i * line..first + i * line + n * 3];
+        for j in 0..n / 8 {
+            let px = &row[j * 24..j * 24 + 24];
+            let lo = _mm_loadu_si128(px.as_ptr().cast());
+            let hi = _mm_loadl_epi64(px[16..].as_ptr().cast());
+            let band = |l: __m128i, h: __m128i| {
+                let bytes = _mm_or_si128(_mm_shuffle_epi8(lo, l), _mm_shuffle_epi8(hi, h));
+                _mm256_cvtepu8_epi32(bytes)
+            };
+            let (r, g, b) = (band(r_lo, r_hi), band(g_lo, g_hi), band(b_lo, b_hi));
+            let sum = _mm256_add_epi32(
+                _mm256_add_epi32(formula(r, Y_R_F), formula(g, Y_G_F)),
+                formula(b, Y_B_F),
+            );
+            let mut y = _mm256_and_si256(_mm256_srai_epi32(sum, 6), byte);
+            if !full {
+                y = formula(y, LIMITED_Y_F);
+            }
+            let times = _mm256_set1_epi32(CB_B_TIMES);
+            let cb = _mm256_sub_epi32(
+                _mm256_sub_epi32(
+                    _mm256_mullo_epi32(b, times),
+                    _mm256_max_epi32(formula(r, CB_R_F), zero),
+                ),
+                _mm256_max_epi32(formula(g, CB_G_F), zero),
+            );
+            let cr = _mm256_sub_epi32(
+                _mm256_sub_epi32(
+                    _mm256_mullo_epi32(r, times),
+                    _mm256_max_epi32(formula(g, CR_G_F), zero),
+                ),
+                _mm256_max_epi32(formula(b, CR_B_F), zero),
+            );
+            let cb = _mm256_and_si256(_mm256_add_epi32(_mm256_srai_epi32(cb, 6), middle), byte);
+            let cr = _mm256_and_si256(_mm256_add_epi32(_mm256_srai_epi32(cr, 6), middle), byte);
+            let at = i * n + j * 8;
+            _mm256_storeu_si256(blue[at..at + 8].as_mut_ptr().cast(), cb);
+            _mm256_storeu_si256(red[at..at + 8].as_mut_ptr().cast(), cr);
+            // (the light, 0 to 255 in each lane, into eight bytes)
+            let words = _mm256_packus_epi32(y, y);
+            let bytes = _mm256_packus_epi16(words, words);
+            let both = _mm_unpacklo_epi32(
+                _mm256_castsi256_si128(bytes),
+                _mm256_extracti128_si256::<1>(bytes),
+            );
+            _mm_storel_epi64(light[at..at + 8].as_mut_ptr().cast(), both);
+        }
+    }
+    let (cb, cr) = averaged(&blue, &red, n, full);
     (light, cb, cr)
 }
 
@@ -500,6 +625,62 @@ mod tests {
                         assert_eq!(mb_hashed, mb_kept, "{turn:?} {full} {step}");
                         assert!(hashed.y == kept.y && hashed.u == kept.u && hashed.v == kept.v);
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_formulas_are_the_tables() {
+        let f = |v: i32, (m, b, s): (i32, i32, i32)| (v * m + b) >> s;
+        for v in 0..256usize {
+            let x = v as i32;
+            assert_eq!(f(x, Y_R_F), Y_R[v], "Y_R {v}");
+            assert_eq!(f(x, Y_G_F), Y_G[v], "Y_G {v}");
+            assert_eq!(f(x, Y_B_F), Y_B[v], "Y_B {v}");
+            assert_eq!(-f(x, CB_R_F).max(0), CB_R[v], "CB_R {v}");
+            assert_eq!(-f(x, CB_G_F).max(0), CB_G[v], "CB_G {v}");
+            assert_eq!(x * CB_B_TIMES, CB_B[v], "CB_B {v}");
+            assert_eq!(x * CB_B_TIMES, CR_R[v], "CR_R {v}");
+            assert_eq!(-f(x, CR_G_F).max(0), CR_G[v], "CR_G {v}");
+            assert_eq!(-f(x, CR_B_F).max(0), CR_B[v], "CR_B {v}");
+            assert_eq!(f(x, LIMITED_Y_F), i32::from(LIMITED_Y[v]), "LIMITED_Y {v}");
+        }
+    }
+
+    #[test]
+    fn every_colour_eight_at_a_time_is_as_the_tables_make_it() {
+        // (all 2^24 colours, 256 to a block, in both ranges; then blocks of 16 and of 8 cut
+        // anywhere from a larger picture of random pixels)
+        #[cfg(target_arch = "x86_64")]
+        if std::arch::is_x86_feature_detected!("avx2") {
+            let mut block = vec![0u8; 256 * 3];
+            for start in (0..1u32 << 24).step_by(256) {
+                for (k, px) in block.chunks_exact_mut(3).enumerate() {
+                    let c = start + k as u32;
+                    px.copy_from_slice(&[(c >> 16) as u8, (c >> 8) as u8, c as u8]);
+                }
+                for full in [false, true] {
+                    // SAFETY: the processor has AVX2 (asked above)
+                    let fast = unsafe { colours_avx2(&block, 0, 48, 16, full) };
+                    assert!(
+                        fast == colours_by_table(&block, 0, 48, 16, full),
+                        "{start} {full}"
+                    );
+                }
+            }
+            let mut numbers = Numbers(0x0DDB_A11C_0FFE_E123);
+            let (w, h) = (57usize, 41usize);
+            let picture: Vec<u8> = (0..w * h * 3).map(|_| numbers.next() as u8).collect();
+            for _ in 0..4000 {
+                let n = if numbers.below(2) == 0 { 8 } else { 16 };
+                let (x, y) = (numbers.below(w - n + 1), numbers.below(h - n + 1));
+                let first = (y * w + x) * 3;
+                for full in [false, true] {
+                    // SAFETY: the processor has AVX2 (asked above)
+                    let fast = unsafe { colours_avx2(&picture, first, w * 3, n, full) };
+                    let slow = colours_by_table(&picture, first, w * 3, n, full);
+                    assert!(fast == slow, "{n} at {x},{y} {full}");
                 }
             }
         }

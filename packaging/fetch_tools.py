@@ -1,6 +1,7 @@
 """Fetch the programs that the downloads carry next to Libre Panel, for the build.
 
     python packaging/fetch_tools.py [FOLDER] [--platform windows|linux] [--archive-dir DIR]
+                                    [--cache DIR]
 
 The programs are not part of the repository. This downloads the pinned files over HTTPS,
 checks every download against the SHA-256 recorded below, takes out only the program Libre
@@ -24,7 +25,10 @@ alone, when anything does not match.
     (NOTICE.md).
 
 ``--archive-dir`` reads the files (named like the end of their address) from a folder instead
-of the internet, for builds without a network; they are checked all the same.
+of the internet, for builds without a network; they are checked all the same. ``--cache`` keeps
+what was downloaded in a folder (named so too) and takes a file from there the next time where
+it is the one the table pins (its SHA-256), else downloads it again: CI keeps the folder
+between runs, so a server that fails for an hour does not fail them.
 
 The licences were read before these were pinned; see NOTICE.md. To move to other versions,
 read their licences again, change the table and run ``--print-pins``: it prints the SHA-256 of
@@ -95,12 +99,15 @@ class Tool:
 
 FFMPEG_TAG = "autobuild-2026-09-30-13-08"  # FFmpeg-Builds' last build of September 2026
 FFMPEG_BUILD = "ffmpeg-n8.1.3-9-g29e619e767"  # FFmpeg release 8.1.3 and nine more commits
-FFMPEG_URL = f"https://github.com/BtbN/FFmpeg-Builds/releases/download/{FFMPEG_TAG}/{FFMPEG_BUILD}"
+# (the project moved from BtbN/FFmpeg-Builds; GitHub's way there from the old name failed)
+FFMPEG_URL = (
+    f"https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/{FFMPEG_TAG}/{FFMPEG_BUILD}"
+)
 FFMPEG_SOURCE = (
     "FFmpeg: https://github.com/FFmpeg/FFmpeg/tree/29e619e767cde9045a75c29bc9a8278ae7b3a98b "
     "(release/8.1: tag n8.1.3 and nine more commits)",
     "The build recipe, with every library in it and its version (scripts.d): "
-    "https://github.com/BtbN/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b "
+    "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b "
     f"(tag {FFMPEG_TAG})",
     "x264, the GPL library that does the encoding: https://code.videolan.org/videolan/x264 "
     "(commit 0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee)",
@@ -186,9 +193,11 @@ class FetchError(Exception):
     """Something is not as pinned; the message says what."""
 
 
-def download(url: str, attempts: int = 3) -> bytes:
+def download(url: str, attempts: int = 6) -> bytes:
     """The bytes at an https address (a redirect to anything else is refused). A server error
-    or a broken connection is tried again, a few times; a missing file is not."""
+    or a broken connection is tried again, waiting longer each time, for two minutes and more
+    (GitHub's release files once answered 504 for longer than half a minute); a missing file
+    is not."""
     if not url.startswith("https://"):
         raise FetchError(f"{url} is not an https address")
     request = urllib.request.Request(url, headers={"User-Agent": "libre-panel-build"})
@@ -206,7 +215,7 @@ def download(url: str, attempts: int = 3) -> bytes:
         except (OSError, http.client.HTTPException) as exc:
             if attempt == attempts:
                 raise FetchError(f"{url} cannot be read: {exc}") from exc
-        time.sleep(5.0 * attempt)
+        time.sleep(min(60.0, 5.0 * 2 ** (attempt - 1)))  # 5, 10, 20, 40, 60 s
     raise AssertionError("unreachable")  # the loop returns or raises
 
 
@@ -416,6 +425,35 @@ def _from_net(tool: Tool) -> bytes:
     return download(tool.url)
 
 
+def _cached(cache: Path, get: Callable[[Tool], bytes]) -> Callable[[Tool], bytes]:
+    """``get`` with what it gives kept in ``cache`` (named like the end of the address): a file
+    there that is the one the table pins is read instead; only such a file is kept."""
+
+    def read(tool: Tool) -> bytes:
+        path = cache / tool.filename
+        try:
+            kept = path.read_bytes()
+        except OSError:
+            kept = b""
+        if kept and sha256(kept) == tool.sha256:
+            print(f"kept from a run before: {tool.filename}", flush=True)
+            return kept
+        if kept:
+            print(f"{path} is not the pinned file: taken again", flush=True)
+        data = get(tool)
+        if sha256(data) == tool.sha256:  # (a wrong one fails in _take, and is not kept)
+            part = path.with_name(path.name + ".part")
+            try:
+                cache.mkdir(parents=True, exist_ok=True)
+                part.write_bytes(data)
+                part.replace(path)
+            except OSError as exc:  # (a cache that cannot be written fails nothing)
+                print(f"{path} cannot be kept: {exc}", flush=True)
+        return data
+
+    return read
+
+
 def _from_folder(archive_dir: Path) -> Callable[[Tool], bytes]:
     def read(tool: Tool) -> bytes:
         path = archive_dir / tool.filename
@@ -440,6 +478,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("folder", nargs="?", type=Path, default=DEFAULT_FOLDER)
     parser.add_argument("--platform", choices=PLATFORMS, help="of the download (default: this)")
     parser.add_argument("--archive-dir", type=Path, help="read the files from here, not the net")
+    parser.add_argument("--cache", type=Path, help="keep the downloads here, and take them again")
     parser.add_argument(
         "--print-pins", action="store_true", help="print the hashes of the downloads, nothing else"
     )
@@ -450,6 +489,8 @@ def main(argv: list[str] | None = None) -> int:
             print("\n".join(pins(source, TOOLS)))
             return 0
         platform = args.platform or default_platform()
+        if args.cache:  # (not for --print-pins: that asks what the addresses give now)
+            source = _cached(args.cache, source)
         lines = fetch(args.folder, platform, source, TOOLS, LICENSES)
     except (FetchError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

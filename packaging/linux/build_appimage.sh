@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Build the AppImage from the PyInstaller folder dist/libre-panel.
 #   packaging/linux/build_appimage.sh 0.1.0 dist/Libre_Panel-0.1.0-x86_64.AppImage
+# SOURCE names another program folder and APPRUN another entry point (the Rust app's: CI's
+# job `appimage`, packaging/linux/AppRun-rust).
 set -euo pipefail
 version="$1"
 out="$2"
@@ -12,8 +14,8 @@ tool="$root/build/appimagetool-x86_64.AppImage"
 rm -rf "$appdir"
 mkdir -p "$appdir/usr/lib" "$appdir/usr/share/applications" \
          "$appdir/usr/share/icons/hicolor/256x256/apps"
-cp -a "$root/dist/libre-panel" "$appdir/usr/lib/libre-panel"
-install -m 755 "$here/AppRun" "$appdir/AppRun"
+cp -a "${SOURCE:-$root/dist/libre-panel}" "$appdir/usr/lib/libre-panel"
+install -m 755 "${APPRUN:-$here/AppRun}" "$appdir/AppRun"
 install -m 644 "$here/libre-panel.desktop" "$appdir/libre-panel.desktop"
 install -m 644 "$here/libre-panel.desktop" "$appdir/usr/share/applications/libre-panel.desktop"
 install -m 644 "$root/src/libre_panel/assets/libre-panel.png" "$appdir/libre-panel.png"

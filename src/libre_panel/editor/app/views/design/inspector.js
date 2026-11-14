@@ -18,22 +18,23 @@ import {
   activeLook,
   align,
   applyLook,
+  copySelection,
   deleteSelection,
   detachModule,
-  reassembleModule,
-  selectGroup,
   duplicateSelection,
-  copySelection,
   finerBy,
   kindName,
   lookName,
   looks,
   moduleKinds,
+  reassembleModule,
   refineGrid,
   renameWidget,
   resizeModuleBy,
+  selectGroup,
   setFlag,
   setModuleKind,
+  showSensor,
   sourceLabels,
   specOf,
 } from "./ops.js";
@@ -282,7 +283,8 @@ function widgetChange(widget, key) {
   return (value) => {
     if (key === "id") return renameWidget(widget, value);
     edit(`prop:${widget.id}:${key}`, () => {
-      widget[key] = value;
+      if (key === "sensor") showSensor(widget, value);
+      else widget[key] = value;
     });
   };
 }
@@ -721,7 +723,7 @@ function SharedSensor({ chosen }) {
     edit("multi:sensor", (current) => {
       for (const widget of current.widgets) {
         if (!ids.has(widget.id)) continue;
-        widget.sensor = value;
+        showSensor(widget, value);
         if (widget.needs === old) widget.needs = value;
       }
     });
@@ -846,8 +848,11 @@ function LookTiles({ theme }) {
 
 /** The way to Look, where the theme's look is set in full. */
 function ToLook({ text }) {
+  // (the last word and the chevron break together; a text without spaces breaks where it does)
+  const at = text.lastIndexOf(" ");
+  const chevron = html`<${Icon} name="chevron-right" size=${13} />`;
   return html`<button type="button" class="link-btn inspector-link" onClick=${() => navigate("look")}>
-    ${text} <${Icon} name="chevron-right" size=${13} />
+    ${at < 0 ? html`${text} ${chevron}` : html`${text.slice(0, at + 1)}<span class="link-end">${text.slice(at + 1)} ${chevron}</span>`}
   </button>`;
 }
 
@@ -1019,6 +1024,23 @@ export function Background({ theme }) {
   <//>`;
 }
 
+
+/** What a theme's version is for, said where it is the open theme: a panel on end
+ * ("lumen-vertical"), a panel of a size ("lumen-1920x720", the 12.3"), or the time a companion
+ * shows beside it ("lumen-pair"). ``base``: the theme it is a version of. */
+function versionNote(id, base) {
+  const name = themeName(base);
+  const sized = /-(\d{2,5})x(\d{2,5})$/.exec(id);
+  if (sized) {
+    const text = t("The version of {name} for a panel of {width} × {height}. A panel of another size shows {name} in the version made for it: what you change here stays in this version.", { name, width: sized[1], height: sized[2] });
+    return { icon: "monitor", text };
+  }
+  if (id.endsWith("-pair")) {
+    return { icon: "monitor", text: t("The version of {name} for while a companion shows beside it on a second panel. Alone, the panel shows {name}: what you change here stays in this version.", { name }) };
+  }
+  return { icon: "portrait", text: t("The version of {name} for a panel mounted vertically. Mounted horizontally, the panel shows {name}, a design of its own: what you change here stays in this version.", { name }) };
+}
+
 /** Nothing selected: the whole theme. What is changed most (its name, colour world, background
  * and font) is here; the rest under Fine-tuning. */
 function ThemeInspector({ theme }) {
@@ -1039,8 +1061,8 @@ function ThemeInspector({ theme }) {
         ${t("The whole theme. Click something on the panel to change just that.")}
         ${versionOf
           ? html`<span class="inspector-version">
-              <${Icon} name="portrait" size=${14} />
-              <span>${t("The version of {name} for a panel mounted vertically. Mounted horizontally, the panel shows {name}, a design of its own: what you change here stays in this version.", { name: themeName(versionOf) })}</span>
+              <${Icon} name=${versionNote(store.get().doc.id, versionOf).icon} size=${14} />
+              <span>${versionNote(store.get().doc.id, versionOf).text}</span>
             </span>`
           : null}
         ${builtin ? html`<span class="inspector-builtin">${t("Built in: your changes are saved as a theme of your own.")}</span>` : null}

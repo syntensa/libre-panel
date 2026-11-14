@@ -42,17 +42,21 @@ Without git: on github.com, *Releases → Draft a new release*, tag `v0.1.0`
 workflow fills that release in.
 
 The tag starts `release.yml`: it checks that the tag matches the version and
-that CHANGELOG.md has its section, runs the tests, builds the PyInstaller
-bundles and tests each download. Only when all of that passed, it publishes
+that CHANGELOG.md has its section, then runs CI (`ci.yml`) whole: every test, every
+comparison of the Rust app with the Python app, and the Rust app's downloads built and
+tried as on every push (the Windows setup installed, run and uninstalled, the portable
+zip, the AppImage started with and without a tray, the Linux archive unpacked and drawn
+from). The downloads are the Rust app's; the Python package is built beside them for
+PyPI. Only when all of that passed, it publishes
 the GitHub Release with all files and `SHA256SUMS`, the SHA-256 of each (the
 app's *Update to* checks its download against it), its notes taken from the
 CHANGELOG section, and GitHub's signed attestation for each file that this
 workflow built it from this commit (`gh attestation verify FILE --repo
 syntensa/libre-panel`). Then the PyPI upload, after approval, if it is set up.
-The Windows programs carry a version resource (who made them, which version)
-and start with a PyInstaller loader compiled on the runner, not the ready-made
-one that malware shares (`packaging/windows/own_loader.py` checks it): both
-make an antivirus program's guess less likely to take them for malware.
+The Windows programs carry a version resource (who made them, which version), an
+icon and a manifest (rust/winres.rs; CI reads them back): an antivirus program's
+guess is less likely to take them for malware. (The sections below on PyInstaller
+are the Python app's, which builds no download any more.)
 
 After a release, submit its Windows setup and the programs of its portable zip
 to Microsoft as a software developer
@@ -161,6 +165,9 @@ program out of ffmpeg's archive (it holds ffprobe, ffplay and documentation too)
 ffmpeg is the GPL build with libx264 and without the non-free parts, with its licence text. The
 spec copies the result next to the program as `tools`; `libre_panel/bundled.py` is where the
 app looks, before the `PATH` (`video.ffmpeg` and `[sensors.presentmon] path` still win).
+CI's jobs run it with `--cache`, in a folder GitHub keeps between runs: a file a run before
+downloaded is taken again where it is the one the table pins (its SHA-256), else downloaded
+anew, so a release page that fails for a while fails no tests. The release downloads them all.
 
 `packaging/check_tools.py` proves it on the PyInstaller folder, on what the Windows setup
 installed and on the files of the AppImage: every file listed in `tools/SOURCES.txt` is the one

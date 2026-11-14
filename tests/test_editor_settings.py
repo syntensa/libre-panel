@@ -1251,7 +1251,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
         "video.profile", "video.encoder", "video.pixels", "video.direct", "video.rest",
         "video.engine_sends", "video.engine_layers", "video.engine_encoder",
-        "check_updates", "allow_notify", "symbols", "cards", "card_order",
+        "check_updates", "allow_notify", "tray_icon", "symbols", "cards", "card_order",
         "card_transition", "accent", "card_opacity", "light_colours", "graph_steps", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",

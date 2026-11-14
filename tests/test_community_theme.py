@@ -189,9 +189,23 @@ def test_the_form_and_the_workflow_fit_the_tool(tool):
     assert labels == list(tool.FORM_FIELDS)  # the headings the tool reads
     flow = (ROOT / ".github/workflows/community-theme.yml").read_text(encoding="utf-8")
     check, add = flow.split("\n  add:\n")
+    again, check = check.split("\n  check:\n")
     # what comes from the issue is looked into without rights; the job that writes adds data
-    assert "permissions:\n      contents: read\n    steps:" in check
+    assert "permissions:\n      contents: read\n      issues: read\n    steps:" in check
+    assert ": write" not in check
     assert "community_theme.py check" in check and "community_theme.py check" not in add
+    # a theme merged into the list leaves the others' pull requests in conflict: when the list
+    # changes on main they are made anew, each by a run of this workflow for its issue, which
+    # reads the issue as it is then (and says nothing on it again)
+    assert 'paths: ["community/themes/index.json"]' in again
+    assert (
+        "permissions:\n      actions: write\n      issues: read\n      pull-requests: read\n"
+        in again
+    )
+    assert 'gh workflow run community-theme.yml --ref main -f issue="$number"' in again
+    assert "checkout" not in again.split("\njobs:\n")[1]  # (it reads no file of the repository)
+    assert "NUMBER: ${{ inputs.issue }}" in check
+    assert "NUMBER: ${{ github.event.issue.number || inputs.issue }}" in add
     assert "needs: check" in add and "contents: write" in add
     # the issue's text reaches the steps only through the environment, never the script itself
     runs = re.findall(r"run: \|\n((?:          .*\n?)+)", flow)

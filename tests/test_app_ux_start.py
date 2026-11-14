@@ -183,84 +183,73 @@ def test_the_cards_take_turns_each_for_its_minutes_and_change_as_chosen(
 def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there(
     app_url,  # noqa: F811
     isolated_home,
-    monkeypatch,
 ):
-    from libre_panel.devices import h264
-
-    monkeypatch.setattr(h264, "auto_engine", lambda: "/the/download/libre-panel-engine")
     choose_theme(isolated_home, "lumen")
     updated(isolated_home)
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
         card = page.locator(".news-card")
-        expect(card.locator("h2")).to_have_text("What's new in 0.8")
+        expect(card.locator("h2")).to_have_text("What's new in 0.9")
         expect(page.locator(".first-steps")).to_have_count(0)  # who updated knows the rest
         rows = card.locator(".first-step")
-        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == [
-            "engine",
-            "sizes",
-            "terra",
-        ]
-        # every panel size: the theme on the panel on each size, in a dialog right here
-        card.locator("[data-step='sizes']").get_by_role("button", name="Show me").click()
-        dialog = page.get_by_role("dialog", name="Every panel size")
-        expect(dialog.locator(".theme-size").first).to_be_visible()
-        expect(card.locator("[data-step='sizes']")).to_have_class(re.compile(r"\bdone\b"))
-        page.keyboard.press("Escape")
-        expect(dialog).to_have_count(0)
-        # Terra: its card among all themes, brought into view and marked
-        card.locator("[data-step='terra']").get_by_role("button", name="Show me").click()
-        page.wait_for_function("location.hash === '#/home/themes'")
-        terra = page.locator(".theme-card[data-theme='terra']")
-        expect(terra).to_have_class(re.compile(r"\bpointed\b"))
-        expect(terra).to_be_in_viewport()
+        # (no panel at hand whose start screen could be written: the news of it are left out)
+        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == ["lighter", "tray"]
+        # lighter: what Libre Panel costs the PC, in Diagnose
+        lighter = card.locator("[data-step='lighter']")
+        expect(lighter).not_to_have_class(re.compile(r"\bdone\b"))
+        lighter.get_by_role("button", name="Show me").click()
+        page.wait_for_function("location.hash === '#/live/diagnose'")
         page.goto(f"{app_url}#/home")
-        # the engine: the panel's encoder now ("auto" with the download's), shown where chosen
-        engine = card.locator("[data-step='engine']")
-        expect(engine).to_have_class(re.compile(r"\bdone\b"))
-        engine.get_by_role("button", name="Show me").click()
-        page.wait_for_function("location.hash === '#/settings/panel/panel-video-experiment'")
+        expect(card.locator("[data-step='lighter']")).to_have_class(re.compile(r"\bdone\b"))
+        # the icon in the notification area: off at first, its switch in Settings
+        tray = card.locator("[data-step='tray']")
+        expect(tray).not_to_have_class(re.compile(r"\bdone\b"))
+        tray.get_by_role("button", name="Show me").click()
+        page.wait_for_function("location.hash === '#/settings/system'")
+        page.get_by_role("switch", name=re.compile("^Icon in the (tray|notification area)")).click()
+        waits_for(page, lambda: "tray_icon = true" in (isolated_home / "config.toml").read_text())
         page.goto(f"{app_url}#/home")
+        expect(card.locator("[data-step='tray']")).to_have_class(re.compile(r"\bdone\b"))
         # closed: kept by the server, for the window and any browser alike
         card.get_by_role("button", name="Got it").click()
         expect(card).to_have_count(0)
-        waits_for(page, lambda: news_file(isolated_home)["seen"] == "0.8")
+        waits_for(page, lambda: news_file(isolated_home)["seen"] == "0.9")
         page.reload()
         page.wait_for_selector(".pages-card")
-        page.wait_for_function("window.libre.store.get().news?.seen === '0.8'")
+        page.wait_for_function("window.libre.store.get().news?.seen === '0.9'")
         expect(page.locator(".news-card")).to_have_count(0)
         expect(page.locator(".first-steps")).to_have_count(0)
 
 
-def test_the_news_leave_the_engine_out_where_the_download_carries_none(
+def test_the_news_tell_of_the_start_screen_where_the_panel_is_mounted_upside_down(
     app_url,  # noqa: F811
     isolated_home,
 ):
-    """Without the downloads (pip) "auto" encodes through ffmpeg: no engine to tell of."""
+    """A panel at hand whose start screen can be written, mounted upside down: its logo and
+    clip can be written upright now, and the news say so; not where it is mounted upright."""
     choose_theme(isolated_home, "lumen")
     updated(isolated_home)
-    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+
+    def start_screen(route, request):
+        told = {"model": "turing-8.8-usb", "panel": 0}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(told))
+
+    routes = {"**/api/app": a_panel_app(), "**/api/start-screen?*": start_screen}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         rows = page.locator(".news-card .first-step")
         expect(rows).to_have_count(2)
-        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == ["sizes", "terra"]
-
-
-def test_the_news_leave_the_engine_out_where_the_panel_has_no_video_mode(
-    app_url,  # noqa: F811
-    isolated_home,
-    monkeypatch,
-):
-    """Libre Panel's engine drives the video mode: a 3.5" has none, so it is not told of,
-    though the download carries it."""
-    from libre_panel.devices import h264
-
-    monkeypatch.setattr(h264, "auto_engine", lambda: "/the/download/libre-panel-engine")
-    choose_theme(isolated_home, "libre-default")
-    updated(isolated_home)
-    small = {"**/api/app": a_panel_app(target='Turing 3.5"')}
-    with browser_page(app_url, "home", routes=small, allow=PICTURE) as page:
+        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == ["lighter", "tray"]
+    config = isolated_home / "config.toml"
+    config.write_text(config.read_text("utf-8") + "\n[device]\nrotate = 180\n", "utf-8")
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         rows = page.locator(".news-card .first-step")
-        expect(rows).to_have_count(2)
-        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == ["sizes", "terra"]
+        expect(rows).to_have_count(3)
+        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == [
+            "lighter",
+            "tray",
+            "start-screen",
+        ]
+        rows.nth(2).get_by_role("button", name="Show me").click()
+        page.wait_for_function("location.hash === '#/settings/panel/start-screen'")
 
 
 def test_who_began_with_this_version_gets_the_first_steps_and_no_news(
@@ -613,6 +602,111 @@ def test_a_theme_goes_out_as_a_file_and_comes_back_in_from_one(
             "almanac-2",
             "almanac-3",
         ]
+
+
+def test_the_list_names_the_panel_of_the_version_this_panel_shows(app_url, isolated_home):  # noqa: F811
+    """On the 12.3″ the list said "Turing 9.2″ · 1920 × 720" of Almanac and Arena: the panel
+    their first version is made for beside the size of the version this panel shows. It names
+    the panel of that version."""
+    from test_app_browser import app_answer
+
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-12.3-usb")
+    answer = app_answer()
+    answer["panel"] = {**answer["panel"], "theme": "lumen", "model": "turing-12.3-usb",
+                       "size": [1920, 720]}  # fmt: skip
+
+    def app(route, request):
+        if request.method != "GET":
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    with browser_page(app_url, "home", routes={"**/api/app": app}, allow=PICTURE) as page:
+        note = page.locator(".quick-theme[data-theme='almanac'] .quick-theme-note")
+        expect(note).to_have_text("Turing 12.3″ · 1920 × 720")
+        # one with no version for this panel says what it is made for
+        column = page.locator(".quick-theme[data-theme='column'] .quick-theme-note")
+        if column.count():
+            expect(column).to_have_text("Turing 3.5″ · 320 × 480")
+
+
+def test_the_card_names_the_theme_as_the_list_beside_it_does(app_url, isolated_home):  # noqa: F811
+    """The 12.3″ shows Lumen in its version for that panel, "Lumen 12.3″", and the card's title
+    took that name: „Turing 12.3″ zeigt „Lumen 12.3″“", an inch mark against the quotation
+    mark. It names the theme, as the list beside it does; the panel is in the title already."""
+    from test_app_browser import app_answer
+
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-12.3-usb")
+    answer = app_answer(target='Turing 12.3", video 25 fps')
+    answer["panel"] = {**answer["panel"], "state": "showing", "theme": "lumen-1920x720",
+                       "model": "turing-12.3-usb", "size": [1920, 720]}  # fmt: skip
+
+    def app(route, request):
+        if request.method != "GET":
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    with browser_page(app_url, "home", routes={"**/api/app": app}, allow=PICTURE) as page:
+        expect(page.locator(".panel-card-title h2")).to_have_text("Turing 12.3″ shows “Lumen”")
+        listed = page.locator(".quick-theme[data-theme='lumen'] .quick-theme-name")
+        expect(listed).to_have_text("Lumen")
+
+
+# The words of the last line of each shown text that stands in more than one line.
+LAST_LINES = """(selector) => [...document.querySelectorAll(selector)].filter(
+  (e) => e.offsetParent
+).map((e) => {
+  const tops = [];
+  const walker = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    for (const found of node.textContent.matchAll(/\\S+/g)) {
+      const range = document.createRange();
+      range.setStart(node, found.index);
+      range.setEnd(node, found.index + found[0].length);
+      const boxes = range.getClientRects();
+      if (boxes.length) tops.push([found[0], Math.round(boxes[boxes.length - 1].top)]);
+    }
+  }
+  const lines = [...new Set(tops.map(([, top]) => top))].sort((a, b) => a - b);
+  const last = tops.filter(([, top]) => top === lines[lines.length - 1]).map(([word]) => word);
+  const wrap = getComputedStyle(e).textWrap;
+  return { text: e.innerText.trim(), lines: lines.length, last, wrap };
+}).filter((text) => text.lines > 1)"""
+
+
+def test_a_text_does_not_end_in_a_word_alone(app_url, isolated_home):  # noqa: F811
+    """Beside Start's themes the cards said "Ein Theme für jedes Panel auf einmal, mit einem /
+    Klick" and "Wenn du sie änderst, auf jedem / Screen": a last line of one word, in one text
+    of six across the app's views and languages. The lines break so that it has company, where
+    the browser knows how; what is typed into a field stays where it was typed."""
+    from libre_panel import i18n
+
+    choose_theme(isolated_home, "lumen")
+    i18n.set_language("de")
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        if not page.evaluate("CSS.supports('text-wrap', 'pretty')"):
+            pytest.skip("this browser does not know text-wrap: pretty")
+        page.wait_for_selector(".more-row-text .muted")
+        texts = page.evaluate(LAST_LINES, ".more-row-text .muted")
+        assert texts, "no text in lines to look at"
+        assert all("pretty" in text["wrap"] for text in texts), texts
+        alone = [text["text"] for text in texts if len(text["last"]) < 2]
+        assert alone == []
+        # a field keeps its lines as they were typed, and a line that must not break does not
+        typed = page.evaluate("""(() => {
+            const field = document.body.appendChild(document.createElement('textarea'));
+            const wrap = getComputedStyle(field).textWrapStyle;
+            field.remove();
+            return wrap;
+        })()""")
+        assert typed in ("auto", None)
+        tab = "getComputedStyle(document.querySelector('.topbar .tab')).whiteSpace"
+        assert page.evaluate(tab) == "nowrap"
 
 
 def test_the_community_themes_are_asked_for_once_opened_and_one_installs(

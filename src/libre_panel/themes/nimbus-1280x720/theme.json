@@ -70,7 +70,7 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 782,
+      "x": 802,
       "y": 5,
       "format": "%H:%M",
       "font": "builtin:Barlow-SemiBold",
@@ -82,7 +82,7 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 1013,
+      "x": 1033,
       "y": 21,
       "format": "%S",
       "font": "builtin:Barlow-SemiBold",
@@ -104,7 +104,8 @@
       "uppercase": true,
       "letter_spacing": 3,
       "tabular": false,
-      "align": "right"
+      "align": "right",
+      "max_width": 164
     },
     {
       "type": "clock",
@@ -118,7 +119,8 @@
       "uppercase": true,
       "letter_spacing": 3,
       "tabular": false,
-      "align": "right"
+      "align": "right",
+      "max_width": 207
     },
     {
       "type": "module",

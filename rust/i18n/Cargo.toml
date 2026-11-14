@@ -1,0 +1,11 @@
+[package]
+name = "lp-i18n"
+description = "The app's languages as i18n.py has them: the catalogs in locale/, t(), the system's language"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lp-py = { path = "../py" }

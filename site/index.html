@@ -69,7 +69,7 @@
 <main id="main">
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap hero-copy">
-      <p class="news"><span class="dot"></span><span>New in 0.7: up to four panels at once, companion screens, AI activity and 35 modules</span>
+      <p class="news"><span class="dot"></span><span>New in 0.9: rewritten in Rust, a third less memory, up to 38 % less CPU</span>
         <a href="https://github.com/syntensa/libre-panel/releases/latest">What's new</a></p>
       <h1 id="hero-title">Your PC's vitals as <em>moving light</em>.</h1>
       <p class="lead">Libre Panel drives the small USB system-monitor panels sold as TURZX, Turing
@@ -105,6 +105,37 @@
           <li><span class="dot" style="background: var(--accent)"></span>Up to four panels at once</li>
           <li><span class="dot" style="background: var(--warn)"></span>Ten languages</li>
         </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="rust" aria-labelledby="rust-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">New in 0.9</p>
+        <h2 id="rust-title">“Just rewrite it in Rust!” We did.</h2>
+        <p>The internet's oldest joke, and here it is: Libre Panel, fully rewritten in Rust. The
+          drawing, the drivers of all 54 panel models, the sensors, the services, the app's server,
+          its window and tray: some 200,000 lines of Rust. Your panel shows the same pictures, pixel
+          for pixel; your PC does a lot less for them. Settings and themes carry over as they are.</p>
+      </div>
+      <table class="table">
+        <thead><tr><th scope="col">12.3", 25 fps</th><th scope="col">0.8.0</th><th scope="col">0.9.0</th><th scope="col">Saved</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Lumen</th><td data-label="0.8.0">32–36 % CPU, 145–156 MB</td><td data-label="0.9.0"><strong>21–23 % CPU, 104 MB</strong></td><td data-label="Saved">34 % CPU, 30 % RAM</td></tr>
+          <tr><th scope="row">Arena</th><td data-label="0.8.0">37–38 % CPU, 147–150 MB</td><td data-label="0.9.0"><strong>30–33 % CPU, 99 MB</strong></td><td data-label="Saved">17 % CPU, 34 % RAM</td></tr>
+          <tr><th scope="row">Encore</th><td data-label="0.8.0">12 % CPU, 134 MB</td><td data-label="0.9.0"><strong>7 % CPU, 92–94 MB</strong></td><td data-label="Saved">38 % CPU, 31 % RAM</td></tr>
+        </tbody>
+      </table>
+      <p class="legacy">The 12.3" at 25 fps, Libre Panel's app and engine together, through the engine to the
+        panel: processor in % of one core, private memory; the demo's readings, a minute each, in turn on the same Linux machine.
+        The first picture is on the panel 0.4 to 1.0 s after the start, instead of 0.7 to 2.0 s.</p>
+      <div class="callout">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+        <p><strong>Proven, not promised.</strong> The Python app stays in the repository as the reference:
+          525 comparison tests hold the new program against it with every change, and each of the 99
+          built-in themes, still and moving, matches it pixel for pixel.
+          <a href="https://github.com/syntensa/libre-panel/releases/latest">All of 0.9.0</a></p>
       </div>
     </div>
   </section>
@@ -147,7 +178,7 @@
         <li><b>Companions, nothing shown twice</b>A panel added beside Lumen gets Lumen Companion: every core, the temperatures with the fans turning, the drives and the processes, while Lumen leaves out what its companion shows. Encore, Almanac and Arena have companions too, and a companion follows the first panel into a game.</li>
         <li><b>One picture across all panels</b>Each panel shows the part of it where it stands, under its theme.</li>
         <li><b>Scenes</b>A theme on every panel with one click, on Start, in the tray or with a keyboard shortcut.</li>
-        <li><b>Panel 1 | 2 | 3</b>The app's header picks the panel Live shows and Design edits; a module moves from one panel to another.</li>
+        <li><b>Panel 1 | 2 | 3</b>The app's header picks the panel Start and Status show and Design edits; a module moves from one panel to another.</li>
         <li><b>Each its own</b>Brightness (or the first panel's, with an offset), the way it is mounted, its start screen, and a process of its own, so two panels in video mode wait for nothing.</li>
         <li><b>In their real sizes</b>Settings → Panels places them beside your monitor, and Add a panel asks step by step which panel it is, how it is mounted and what it shows.</li>
       </ul>
@@ -158,7 +189,7 @@
           <p>When a sensor reaches its critical limit, every panel's edge pulses red, and a panel beside the first shows its alarm theme until it has cooled.</p>
           <details class="more">
             <summary>More<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-            <p>Live, the tray and the Overview show each panel, and Picture of all panels saves them where they stand, to share. Everything about it: <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#more-panels-at-once">More panels at once</a> · <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#scenes">Scenes</a></p>
+            <p>Start, the tray and the Overview show each panel, and Picture of all panels saves them where they stand, to share. Everything about it: <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#more-panels-at-once">More panels at once</a> · <a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#scenes">Scenes</a></p>
           </details>
         </div>
         <figure class="media">
@@ -481,7 +512,7 @@
           <li><b>Start</b> the panel and its themes</li>
           <li><b>Design</b> build a theme</li>
           <li><b>Look</b> colours, light, notices</li>
-          <li><b>Live</b> how it runs, and its history</li>
+          <li><b>Status</b> how it runs, and its history</li>
           <li><b>Settings</b> all of config.toml</li>
         </ul>
       </div>
@@ -831,7 +862,7 @@
         <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
         <p><strong>Own one that is unverified?</strong> Its driver follows a protocol proven on real
           panels, but nobody has confirmed the model with Libre Panel yet. The panel test in the app
-          (<em>Live → Diagnose</em>, or <code>libre-panel doctor</code>) checks it end to end and writes
+          (<em>Status → Diagnose</em>, or <code>libre-panel doctor</code>) checks it end to end and writes
           a report without serial numbers; one click opens a
           <a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">panel report</a>
           with it filled in, and the model becomes verified for everyone.
@@ -920,7 +951,7 @@
       </ol>
       <div class="python">
         <p>With Python instead:</p>
-<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.8.0"
+<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.0"
 libre-panel tray               <span class="c"># the background app with its tray icon</span>
 libre-panel doctor             <span class="c"># check your panel, write a report</span></code></pre>
       </div>

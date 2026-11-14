@@ -286,6 +286,9 @@ class RunStatus:
     # A theme config.toml names that cannot be shown (removed, or from a plugin that is not
     # installed): the panel shows default_theme instead until another is chosen.
     missing_theme: str = ""
+    # What is wrong with missing_theme where it is there and cannot be loaded (an error in its
+    # theme.json); empty for one that is not installed.
+    missing_why: str = ""
     # Where the screens in turn stand (None while there are none, or they are off): the step's
     # index and theme, and the seconds left of it
     sequence: dict[str, Any] | None = None
@@ -932,19 +935,19 @@ class MainLoop:
             else named
         )
         self.refused: str | None = None  # a requested theme that failed to load
-        status.missing_theme = ""
+        status.missing_theme = status.missing_why = ""
         try:
             theme = load_theme(find_theme(shown))
-        except ThemeError:
+        except ThemeError as exc:
             if shown == named:
-                theme, shown = self._instead_of(named, status)
+                theme, shown = self._instead_of(named, status, str(exc))
             else:
                 log.warning("theme %r not found; showing %r", shown, named)
                 shown = named
                 try:
                     theme = load_configured_theme(config, self.default)
-                except ThemeError:
-                    theme, shown = self._instead_of(named, status)
+                except ThemeError as again:
+                    theme, shown = self._instead_of(named, status, str(again))
         if not config.theme_given:
             log.info(
                 "no theme in config.toml: %r, the default for %s",
@@ -1285,17 +1288,19 @@ class MainLoop:
 
         return build
 
-    def _instead_of(self, named: str, status: RunStatus) -> tuple[Theme, str]:
+    def _instead_of(self, named: str, status: RunStatus, reason: str = "") -> tuple[Theme, str]:
         """The panel's own theme, shown while the one config.toml names cannot be (a theme
-        that was removed, or came from a plugin that is not installed): the panel stays lit,
-        and the app and the tray say which theme is missing. config.toml is left as it is, so
-        the theme shows again once it is back; choosing another one ends it."""
+        that was removed, or came from a plugin that is not installed, or one with an error in
+        its theme.json: ``reason``): the panel stays lit, and the app and the tray say which
+        theme is missing, and of one that is there what is wrong with it. config.toml is left
+        as it is, so the theme shows again once it is back; choosing another one ends it."""
         try:
             find_theme(named)
         except ThemeError as exc:
-            why = str(exc)
-        else:
-            why = f"theme {named!r} cannot be loaded"
+            why, wrong = str(exc), ""
+        else:  # (it is there: "no longer installed" would be said of it wrongly)
+            wrong = reason
+            why = f"theme {named!r} cannot be loaded" + (f" ({reason})" if reason else "")
         if named == self.default:
             raise ThemeError(why)
         theme = load_theme(find_theme(self.default))
@@ -1304,7 +1309,7 @@ class MainLoop:
             why,
             self.default,
         )
-        status.missing_theme = named
+        status.missing_theme, status.missing_why = named, wrong
         self.refused = named  # tried again when config.toml changes, not on every frame
         return theme, self.default
 
@@ -1521,7 +1526,7 @@ class MainLoop:
                             switches = host.switches  # this was the switch
                             host.emit("theme-changed", theme=wanted)
                     shown, refused, status.theme = wanted, None, wanted
-                    status.missing_theme = ""
+                    status.missing_theme = status.missing_why = ""
                     log.info("showing theme %r", shown)
                     if changed and on_config is not None:
                         on_config(config)

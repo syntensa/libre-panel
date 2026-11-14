@@ -66,6 +66,12 @@ class FakePanel:
         self.restarts = 0
         self.away_until = 0.0
         self.recovers = True  # False: the restart does not clear the hung decoder
+        # the panel's files (40 written, 42 deleted, 98 their size, 99 the folder's listing in
+        # 20 pieces of 512 without a header, as the 9.2" sends it), 113 shown, 125 saved
+        self.files: dict[str, bytes] = {}
+        self.shown: list[str] = []
+        self.saved: list[bytes] = []
+        self._piece = 0
 
     @property
     def present(self) -> bool:
@@ -126,6 +132,26 @@ class FakePanel:
                 wanted = (self.jpeg_width, self.native[1])
                 assert jpeg.size == wanted, f"JPEG {jpeg.size} != the decoder's layer {wanted}"
                 self.jpegs.append(jpeg.copy())
+        if cmd in (40, 42, 98, 99, 113):
+            length, size = struct.unpack(">II", plain[8:16])
+            name = bytes(plain[16 : 16 + length]).decode("ascii")
+            assert name.startswith("usr/data"), name
+        if cmd == 40:
+            assert size == len(payload) and 0 < size <= 1024 * 1024, (size, len(payload))
+            self.files[name] = payload
+        if cmd == 42:
+            self.files.pop(name, None)
+        if cmd == 113:
+            assert name in self.files, f"{name} shown but not there"
+            self.shown.append(name)
+        if cmd == 125:
+            self.saved.append(bytes(plain[8:14]))
+        if cmd == 99:
+            listing = b"\0".join(n.rsplit("/", 1)[1].encode() for n in self.files)
+            start = self._piece * 512
+            self._piece = (self._piece + 1) % 20
+            self.pending.append(listing[start : start + 512].ljust(512, b"\0"))
+            return
         if cmd == 14:
             assert 0 <= plain[8] <= 102
             self.brightness.append(plain[8])
@@ -151,6 +177,9 @@ class FakePanel:
                 self.overwritten += 1
             self.queue.append((self.clock(), payload))
             self.blocks.append(payload)
+        if cmd == 98:
+            found = self.files.get(name)
+            reply[8:12] = struct.pack("<I", 0xFFFFFFFF if found is None else len(found))
         if cmd == 122:
             self._play()
             depth = next(self.hung_depths) if self.hung_depths else len(self.queue)

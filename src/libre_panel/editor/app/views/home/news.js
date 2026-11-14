@@ -4,20 +4,17 @@
 // the server (/api/news, editor/news.py), not by this browser: the window and a browser are told
 // alike, and once.
 
-import { normalTheme } from "../../core/actions.js";
-import { get, post } from "../../core/api.js";
+import { endpoints, get, post } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
-import { loadSettings, useCatalog, useConfig } from "../../core/settings.js";
+import { loadSettings, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { toastError } from "../../ui/toast.js";
-import { sizesDialog } from "../../shell/theme-menu.js";
 import { navigate } from "../../shell/views.js";
 import { StepList } from "./overview.js";
-import { usePanelModel } from "./panel.js";
 
 /** The release these news are of. */
-export const RELEASE = "0.8";
+export const RELEASE = "0.9";
 
 const numbers = (version) => String(version).split(/[^0-9]+/).filter(Boolean).map(Number);
 
@@ -74,64 +71,50 @@ async function close() {
   }
 }
 
-/** A part of Start (by its class), brought into view and marked. */
-function pointAt(selector) {
-  const card = document.querySelector(selector);
-  if (!card) return;
-  card.scrollIntoView({ behavior: "smooth", block: "center" });
-  card.classList.remove("pointed");
-  void card.offsetWidth; // the mark plays again on a second click
-  card.classList.add("pointed");
-}
+// what "Show me" has shown since the page loaded: it leads away from Start, and is kept for
+// the way back
+let seen = {};
 
-/** A theme's card among all themes (Start → All themes), brought into view and marked once it
- * is drawn: the list comes a moment after the view. */
-function showTheme(id) {
-  navigate("home", "themes");
-  const until = Date.now() + 3000;
-  const look = () => {
-    const card = document.querySelector(`.theme-card[data-theme="${id}"]`);
-    if (card) pointAt(`.theme-card[data-theme="${id}"]`);
-    else if (Date.now() < until) setTimeout(look, 50);
-  };
-  look();
-}
-
-/** The news of 0.8: Libre Panel's own engine (where the panel has the video mode and the
- * download carries it, or it was chosen), every panel size, and Terra. */
+/** The news of 0.9: Libre Panel written anew as one small program (half the load), the icon in
+ * the notification area (a switch now, off at first), and, where the panel is mounted upside
+ * down and has a start screen, that it can be written upright. */
 export function WhatsNew() {
   const config = useConfig();
-  const catalog = useCatalog();
-  const { model } = usePanelModel();
-  const [looked, setLooked] = useState({});
+  const [looked, setLooked] = useState(seen);
+  const [startScreen, setStartScreen] = useState(false);
   useEffect(() => {
     if (!store.get().settings) loadSettings();
+    endpoints
+      .startScreen()
+      .then((data) => setStartScreen(Boolean(data.model)))
+      .catch(() => setStartScreen(false));
   }, []);
   if (!config) return null;
-  const look = (id) => setLooked((now) => ({ ...now, [id]: true }));
-  const encoder = config.video?.encoder;
-  const engine = encoder === "native" || (encoder === "auto" && Boolean(catalog?.engine));
+  const look = (id) => {
+    seen = { ...seen, [id]: true };
+    setLooked(seen);
+  };
   const items = [
-    model?.video && config.video?.mode !== "off" && (engine || catalog?.engine) && {
-      id: "engine",
-      title: t("Libre Panel's own engine"),
-      text: t("It now encodes the panel's video and sends each picture on its time, lighter on the PC, unless you chose another encoder."),
-      done: engine,
-      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panel/panel-video-experiment")}>${t("Show me")}</button>`,
+    {
+      id: "lighter",
+      title: t("Lighter on your PC"),
+      text: t("Libre Panel is written anew as one small program: a third less memory than 0.8, less load on the processor and a quicker start, with the same picture on the panel."),
+      done: Boolean(looked.lighter),
+      action: html`<button type="button" class="btn" onClick=${() => (look("lighter"), navigate("live", "diagnose"))}>${t("Show me")}</button>`,
     },
     {
-      id: "sizes",
-      title: t("Every panel size"),
-      text: t("Libre Panel's screens are laid out for every panel size, and your own themes can have a version for each."),
-      done: Boolean(looked.sizes),
-      action: html`<button type="button" class="btn" onClick=${() => (look("sizes"), normalTheme() ? sizesDialog(normalTheme()) : navigate("design"))}>${t("Show me")}</button>`,
+      id: "tray",
+      title: t("The icon in the notification area is a switch"),
+      text: t("It is off at first: Libre Panel runs on when you close its window, with or without it. Turn it on to open the window and switch themes from there."),
+      done: Boolean(config.tray_icon),
+      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "system")}>${t("Show me")}</button>`,
     },
-    {
-      id: "terra",
-      title: t("Terra: the earth as it is now"),
-      text: t("A new screen: the globe lit where the sun stands this minute, the cities' lights at night, the clouds and your place."),
-      done: Boolean(looked.terra),
-      action: html`<button type="button" class="btn" onClick=${() => (look("terra"), showTheme("terra"))}>${t("Show me")}</button>`,
+    startScreen && config.device?.rotate === 180 && {
+      id: "start-screen",
+      title: t("The start screen, upright"),
+      text: t("Your panel is mounted upside down: write its logo and its clip again, and they are upright on it."),
+      done: Boolean(looked.startScreen),
+      action: html`<button type="button" class="btn" onClick=${() => (look("startScreen"), navigate("settings", "panel/start-screen"))}>${t("Show me")}</button>`,
     },
   ].filter(Boolean);
   return html`<section class="news-card" aria-labelledby="news-card-title">

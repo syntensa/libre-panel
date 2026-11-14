@@ -216,11 +216,17 @@ def test_the_ds339_is_started_as_the_vendor_does_and_shown_bgr_frames(chip):
     with TurzxDisplay(DeviceConfig(driver="turzx", model="jonsbo-ds339")) as screen:
         impl = screen._impl
         assert isinstance(impl, ms9132.Ms9132Display) and impl.size == (376, 960)
-        assert chip.reports[: len(ms9132.START)] == list(ms9132.START)  # the vendor's start
+        # the vendor's start, as the DS339 takes it (issue #46: its display control otherwise)
+        assert chip.reports[: len(ms9132.START_DS339)] == list(ms9132.START_DS339)
+        assert ms9132._report(0xB6, 0xF0, 0x05, 0x40) in chip.reports
+        assert ms9132._report(0xB6, 0xF0, 0x05, 0x20) not in chip.reports
         assert chip.sent(0xA6, 0x02)[0][2] == 171  # the mode of 376x960
         assert chip.sent(0xA6, 0x04) and not chip.sent(0xA6, 0x05, 0x01)  # output still off
         screen.show(landscape((960, 376)))
         assert len(chip.frames) == 2 and chip.sent(0xA6, 0x05, 0x01)  # two frames, then on
+        assert chip.sent(0xB6, 0xF0, 0x05, 0x50) and not chip.sent(0xB6, 0xF0, 0x05, 0x30)
+        assert 0xFF not in chip.frames[0][8:-8]  # (no pixel byte FF: FE in its place)
+        assert len(chip.sent(0xB5, 0x00, 0x32)) == 3  # the state: in the start, the mode, once
         header = chip.frames[0][:8]
         assert header == bytes((0xFF, 0, 0, 0, 0, 376 // 16, 0x83, 0xC0))  # 960 | 0x8000
         assert len(chip.frames[0]) == 8 + 376 * 960 * 3 + 8

@@ -200,7 +200,7 @@ def test_sources_say_what_and_where_and_list_the_files_hashes(tmp_path):
         "https://github.com/FFmpeg/FFmpeg/tree/29e619e767cde9045a75c29bc9a8278ae7b3a98b" in sources
     )
     assert (
-        "https://github.com/BtbN/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b"
+        "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b"
         in sources
     )
     assert "https://github.com/GameTechDev/PresentMon/tree/" in sources
@@ -485,10 +485,13 @@ def test_a_missing_file_is_not_asked_for_again_and_a_dead_server_is_given_up_on(
         raise TimeoutError("timed out")
 
     calls.clear()
+    pauses = []
     monkeypatch.setattr(fetch_tools.urllib.request, "urlopen", dead)
+    monkeypatch.setattr(fetch_tools.time, "sleep", pauses.append)
     with pytest.raises(fetch_tools.FetchError, match="cannot be read: timed out"):
         fetch_tools.download("https://x/a")
-    assert len(calls) == 3
+    # (asked six times over more than two minutes: a release server's 504 can last that long)
+    assert len(calls) == 6 and pauses == [5.0, 10.0, 20.0, 40.0, 60.0]
 
 
 # -- the command -------------------------------------------------------------------------------
@@ -536,6 +539,96 @@ def test_the_command_reports_and_fails_with_a_message(tmp_path, capsys, monkeypa
     assert fetch_tools.main(args) == 1
     assert "PresentMon-2.6.0-x64.exe cannot be read" in capsys.readouterr().err
     assert (folder / "ffmpeg.exe").exists()  # the folder from before is as it was
+
+
+def test_a_download_kept_is_taken_again_where_it_is_the_pinned_one(tmp_path, capsys):
+    downloads, tools = lab()
+    asked = []
+
+    def get(tool):
+        asked.append(tool.file)
+        return downloads[tool.file]
+
+    cache = tmp_path / "cache"
+    run_cached = fetch_tools._cached(cache, get)
+    fetch_tools.fetch(tmp_path / "tools", "windows", run_cached, tools)
+    assert asked == ["ffmpeg.exe", "PresentMon.exe", "PawnIO_setup.exe"]
+    assert sorted(p.name for p in cache.iterdir()) == sorted(
+        tool.filename for tool in tools if tool.platform == "windows"
+    )  # (named like the end of the address; no part left)
+    first = (tmp_path / "tools" / "SOURCES.txt").read_text("utf-8")
+
+    asked.clear()
+    capsys.readouterr()
+    fetch_tools.fetch(tmp_path / "tools", "windows", run_cached, tools)
+    assert asked == []  # nothing downloaded the second time
+    assert "kept from a run before: PresentMon-2.6.0-x64.exe" in capsys.readouterr().out
+    assert (tmp_path / "tools" / "SOURCES.txt").read_text("utf-8") == first
+
+
+def test_a_kept_file_that_is_not_the_pinned_one_is_downloaded_again(tmp_path, capsys):
+    downloads, tools = lab()
+    presentmon = next(tool for tool in tools if tool.file == "PresentMon.exe")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / presentmon.filename).write_bytes(b"MZ changed in the cache")
+    asked = []
+
+    def get(tool):
+        asked.append(tool.file)
+        return downloads[tool.file]
+
+    fetch_tools.fetch(tmp_path / "tools", "windows", fetch_tools._cached(cache, get), tools)
+    assert "PresentMon.exe" in asked
+    assert "is not the pinned file: taken again" in capsys.readouterr().out
+    assert (cache / presentmon.filename).read_bytes() == b"MZ presentmon"  # replaced
+    assert (tmp_path / "tools" / "PresentMon.exe").read_bytes() == b"MZ presentmon"
+
+
+def test_a_wrong_download_is_refused_and_not_kept(tmp_path):
+    downloads, tools = lab()
+    downloads["PresentMon.exe"] = b"MZ another program"
+    cache = tmp_path / "cache"
+    get = fetch_tools._cached(cache, lambda tool: downloads[tool.file])
+    with pytest.raises(fetch_tools.FetchError, match="is not what was checked"):
+        fetch_tools.fetch(tmp_path / "tools", "windows", get, tools)
+    assert sorted(p.name for p in cache.iterdir()) == [tools[0].filename]  # ffmpeg's alone
+    assert not (tmp_path / "tools").exists()
+
+
+def test_a_cache_that_cannot_be_written_fails_nothing(tmp_path, capsys):
+    downloads, tools = lab()
+    cache = tmp_path / "cache"
+    cache.write_bytes(b"a file where the folder would be")
+    get = fetch_tools._cached(cache, lambda tool: downloads[tool.file])
+    lines = fetch_tools.fetch(tmp_path / "tools", "windows", get, tools)
+    assert len(lines) == 3
+    assert "cannot be kept" in capsys.readouterr().out
+
+
+def test_the_command_keeps_its_downloads_in_the_cache_it_is_given(tmp_path, monkeypatch):
+    downloads, tools = lab()
+    monkeypatch.setattr(fetch_tools, "TOOLS", tools)
+    by_url = {tool.url: downloads[tool.file] for tool in tools}
+    asked = []
+
+    def download(url, attempts=6):
+        asked.append(url)
+        return by_url[url]
+
+    monkeypatch.setattr(fetch_tools, "download", download)
+    cache = tmp_path / "cache"
+    args = [str(tmp_path / "tools"), "--platform", "linux", "--cache", str(cache)]
+    assert fetch_tools.main(args) == 0
+    assert fetch_tools.main(args) == 0
+    linux = [tool for tool in tools if tool.platform == "linux"]
+    assert asked == [tool.url for tool in linux]  # once
+    assert [p.name for p in cache.iterdir()] == [tool.filename for tool in linux]
+    assert (tmp_path / "tools" / "ffmpeg").exists()
+
+    asked.clear()  # --print-pins asks the addresses what they give now, not the cache
+    assert fetch_tools.main(["--print-pins", "--cache", str(cache)]) == 0
+    assert asked == [tool.url for tool in tools]
 
 
 def test_the_platform_is_the_one_of_the_system_unless_told(monkeypatch):

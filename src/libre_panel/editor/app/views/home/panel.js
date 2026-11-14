@@ -8,7 +8,7 @@ import { appAction } from "../../core/app.js";
 import { endpoints } from "../../core/api.js";
 import { LivePicture, useLivePicture } from "../../core/console.js";
 import { formatNumber, t } from "../../core/i18n.js";
-import { VERTICAL, themeEntry, useMounted, versionFor } from "../../core/orientation.js";
+import { VERTICAL, themeEntry, useMounted, versionBase, versionFor } from "../../core/orientation.js";
 import { saveSettings } from "../../core/settings.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { runtime } from "../../core/stats.js";
@@ -45,13 +45,22 @@ const protocolName = (model) => (model.protocol.startsWith("usb") ? "USB" : t("s
 /** How the model's panel plugs in, unless another model has the same name (two Turing 8.8″). */
 const connection = (model, models) => (models.filter((other) => other.label === model.label).length > 1 ? null : protocolName(model));
 
+/** The name of the theme a version belongs to, as the list beside the card has it: the panel
+ * shows Lumen in its version for the 12.3″, which is named "Lumen 12.3″", and the title read
+ * „Turing 12.3″ zeigt „Lumen 12.3″“", the inch marks against the quotes. */
+function familyName(id) {
+  let family = id;
+  for (let base = versionBase(family); base && themeEntry(base); base = versionBase(family)) family = base;
+  return themeName(family);
+}
+
 /** The state of the panel as the card says it: a title, the dot's state and the line below.
  * ``status``: the panel's, where it is not the first (target.js). */
 export function panelSummary(app, model, shown, status = app.panel) {
   const panel = status || {};
   const stats = panel.stats || {};
   const name = model ? panelName(model) : null;
-  const theme = themeName(panel.theme || shown);
+  const theme = familyName(panel.theme || shown);
   const state = app.quit ? "stopped" : panel.state || "starting";
   const titles = {
     showing: name ? t("{panel} shows “{theme}”", { panel: name, theme }) : t("Showing “{theme}”", { theme }),

@@ -1,0 +1,54 @@
+[package]
+name = "libre-panel-desktop"
+description = "Libre Panel on the desktop: the app's window (WebView2, WebKitGTK) and its tray icon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# (programs apart from libre-panel: GTK and WebKitGTK, which they need on Linux, are theirs
+# alone, so that Libre Panel runs where they are missing and its own FreeType and HarfBuzz are
+# not mixed with theirs; they take in the app's files they share, ../app/src)
+[[bin]]
+name = "libre-panel-window"
+path = "src/window_main.rs"
+
+[[bin]]
+name = "libre-panel-tray"
+path = "src/tray_main.rs"
+
+[dependencies]
+lp-py = { path = "../py" }
+lp-pixels = { path = "../pixels" }
+lp-i18n = { path = "../i18n" }
+lp-theme = { path = "../theme" }
+lp-config = { path = "../config" }
+lp-decode = { path = "../decode" }
+# (whether it runs with the highest rights, access.rs)
+lp-devices = { path = "../devices" }
+# the token of the window and of the app's server (access.rs)
+getrandom = "0.2"
+# the window: WebView2 on Windows, WebKitGTK on Linux; its question before closing with changes
+# not saved, and where a file the page saves goes
+tao = "0.37"
+wry = "0.57"
+rfd = { version = "0.15", default-features = false, features = ["gtk3", "common-controls-v6"] }
+# the tray icon and its menu (libappindicator on Linux, loaded as it runs; no libxdo)
+tray-icon = { version = "0.26", default-features = false, features = ["libappindicator"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+# (the Windows programs' version, icon and manifest: ../winres.rs)
+embed-resource = "3"

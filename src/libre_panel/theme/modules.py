@@ -1202,10 +1202,34 @@ def build_moon(b: _Build, _src: Source) -> None:
     _moon(b, b.ix, b.iy, b.iw, b.ih, details=True, more=True)
 
 
+# The moon's phases as its name tells them (sensors/sky.py's MOON_PHASES), for the room the
+# longest of them takes in the app's language.
+MOON_PHASES = (
+    "New moon", "Waxing crescent", "First quarter", "Waxing gibbous",
+    "Full moon", "Waning gibbous", "Last quarter", "Waning crescent",
+)  # fmt: skip
+
+
 def _moon(b: _Build, x: float, y: float, w: float, h: float, details: bool = False,
           more: bool = False) -> None:  # fmt: skip
     beside = w / max(1, h) >= 1.2 and w >= b.ts * 14
-    lines = [("name", "moon.name", "{value}", 1.25, "text"),
+    name = 1.25  # the size of the phase's name, in the module's text sizes
+    disc = min(h * 0.82, w * 0.38)  # (beside the lines)
+    if beside:
+        # A phase's name is longer in most languages than English's ("Abnehmender Mond",
+        # "Gibbeuse décroissante", "Последняя четверть") and was cut beside the moon. All
+        # eight are set as small as the widest of the language needs, down to a little above
+        # the line under them; past that the moon gives them room, a fifth of itself at most.
+        room = w - disc - b.pad * 1.2
+        need = max(_width_per_size(b.style["text_font"], t(phase)) for phase in MOON_PHASES)
+        need *= b.ts * name
+        if need > room:
+            least = 1.05 / name
+            if need * least > room:
+                disc = max(disc * 0.8, w - b.pad * 1.2 - need * least)
+                room = w - disc - b.pad * 1.2
+            name *= max(least, room / need)
+    lines = [("name", "moon.name", "{value}", name, "text"),
              ("lit", "moon.illumination", t("{value:.0f}% lit"), 1.0, "text2")]  # fmt: skip
     if details:
         lines.append(("full", "moon.full_in", t("Full moon in {value:.0f} days"), 0.95, "text3"))
@@ -1213,7 +1237,6 @@ def _moon(b: _Build, x: float, y: float, w: float, h: float, details: bool = Fal
         lines.append(("new", "moon.new_in", t("New moon in {value:.0f} days"), 0.95, "text3"))
     block = sum(CAP * b.ts * scale for *_rest, scale, _c in lines) + b.ts * 0.9 * (len(lines) - 1)
     if beside:
-        disc = min(h * 0.82, w * 0.38)
         dx, dy = x, y + (h - disc) / 2
         tx, align, width = x + disc + b.pad * 1.2, "left", w - disc - b.pad * 1.2
         top = y + (h - block) / 2
@@ -1228,10 +1251,12 @@ def _moon(b: _Build, x: float, y: float, w: float, h: float, details: bool = Fal
           color=b.c("text"), color2=mix(b.c("track"), b.c("text3"), 0.22),
           glow=round(0.25 * b.glow, 2),
           glow_radius=max(2, round(disc * 0.08)))  # fmt: skip
-    for name, key, fmt, scale, role in lines:
+    for line, key, fmt, scale, role in lines:
         size = b.ts * scale
-        b.value(name, key, fmt, tx, top, size, color=b.c(role), align=align, width=width,
-                font="text_font", tabular=False, fallback="", fit="ellipsis",
+        # (a line too long for its room is set smaller, not cut: "Полнолуние через 27…" told
+        # no more what it counts, and a name comes out a hair wider than it was measured)
+        b.value(line, key, fmt, tx, top, size, color=b.c(role), align=align, width=width,
+                font="text_font", tabular=False, fallback="", fit="shrink",
                 hide_if_missing=True)  # fmt: skip
         top += CAP * size + b.ts * 0.9
 
