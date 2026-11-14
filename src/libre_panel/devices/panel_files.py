@@ -16,7 +16,8 @@ does comes from SPUR II's reading of the 8.8"'s firmware and its measurements on
 
 Its safeguards: only on the person's own action, never while the panel shows themes (the
 app pauses it first); names only below ``usr/data/``, relative, without ``..``; at most
-1 MiB a file; after writing, the size is asked and compared. 12 (halt), 13 and 11 are never
+1 MiB a file; after writing, the size is asked and compared (where the panel kept the file it
+had, that one is taken away and the new one written again). 12 (halt), 13 and 11 are never
 sent from here, and 110 only with the clip's real name (an empty one, saved, would lose the
 standby clip for good).
 """
@@ -240,12 +241,20 @@ class PanelFiles:
         return 0 if size == 0xFFFFFFFF else size
 
     def write(self, name: str, data: bytes) -> None:
-        """Write a file, and check that it has the size it should."""
+        """Write a file, and check that it has the size it should. Where the panel kept the
+        file it had (a 9.2" kept its standby clip when a larger one came, it seems where there
+        is no room for both at once), that one is taken away and the new one written again."""
         raw = checked_name(name)
         if not data or len(data) > MAX_FILE:
             raise DeviceError(f"{name}: a file is 1 byte to 1 MiB, not {len(data)}")
         self._command(CMD_WRITE_FILE, file_args(raw, len(data)), data, timeout_ms=20000)
         written = self.size(name)
+        if written not in (len(data), 0):
+            log.info("start screen: the panel kept the %s it had (%d bytes, not %d): taken "
+                     "away, written again", name, written, len(data))  # fmt: skip
+            self.delete(name)
+            self._command(CMD_WRITE_FILE, file_args(raw, len(data)), data, timeout_ms=20000)
+            written = self.size(name)
         if written != len(data):
             raise DeviceError(f"{name}: the panel has {written} bytes of it, not {len(data)}")
 

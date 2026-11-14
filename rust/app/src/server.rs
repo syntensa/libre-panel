@@ -2058,7 +2058,7 @@ fn start_screen_picture(state: &State, exchange: &mut Exchange, query: &str) {
 
 /// `GET /api/start-screen/file?model=...&what=logo|clip&design=...&panel=n`: the boot logo's
 /// JPEG or the standby clip (H.264) as the panel takes them, to keep: the clip in the range
-/// of values panel `n` gets its video in.
+/// of values panel `n` gets its video in, both turned round where it is mounted upside down.
 fn start_screen_file(state: &State, exchange: &mut Exchange, query: &str) {
     let asked = crate::http::parse_qs(query);
     let Some((model, what, design)) = start_screen_asked(&asked) else {
@@ -2074,12 +2074,16 @@ fn start_screen_file(state: &State, exchange: &mut Exchange, query: &str) {
         Some((device, _)) if device.orientation == "portrait" => "portrait",
         _ => "landscape",
     };
+    // (as start_screen_action writes them: turned round on a panel mounted upside down)
+    let turned = place
+        .as_ref()
+        .is_some_and(|(device, _)| device.rotate == 180);
     let env = lp_theme::Env {
         fonts_dir: state.home.fonts(),
     };
     match state
         .start_screen
-        .file(&env, model, &what, way, design, full)
+        .file(&env, model, &what, way, turned, design, full)
     {
         Ok(data) => {
             let (name, kind) = match what.as_str() {

@@ -620,14 +620,17 @@ limited range their black was grey.
 - **Factory logo again** takes Libre Panel's boot logo away; the factory logo was never
   touched and shows again.
 - **The standby clip replaces** the one the panel has (`usr/data/standby.h264`, the vendor
-  app's name); that one cannot be read back first. Where `video.local_clip` is empty, the
-  video mode is then told this name.
+  app's name); that one cannot be read back first. Where the panel keeps the one it had (a
+  9.2" did when a larger one came, it seems for want of room for both at once), that one is
+  taken away and the new one written again. Where `video.local_clip` is empty, the video mode
+  is then told this name.
 - **With more panels** the card is the one of the panel chosen at the top (*Panel 1 |
   Panel 2*): its own logo and clip, in its size and the way it is mounted, written to that
   panel alone, and a clip there is named in its own `[[panels]]` `video`, never in another's.
   Of two panels alike, the second is the second of that model on the USB bus, as its loop
   found it.
 - **What is on the panel** lists its folder and the sizes of both files.
+- **Mounted upside down** (`rotate = 180`), the panel gets both turned round, as its frames.
 - **JPEG** and **H.264** download the files as the panel takes them.
 
 It works only on a click, never while themes run, and writes only below `usr/data/`, at most

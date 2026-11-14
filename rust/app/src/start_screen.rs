@@ -111,25 +111,34 @@ impl Kept {
     }
 
     /// cached_file: the boot logo's JPEG or the standby clip as the panel takes them (in full
-    /// range with `full`); the clip needs ffmpeg.
+    /// range with `full`; turned round for a panel mounted upside down, `turned`, as they are
+    /// written); the clip needs ffmpeg.
+    #[allow(clippy::too_many_arguments)]
     pub fn file(
         &self,
         env: &lp_theme::Env,
         model: &PanelModel,
         what: &str,
         way: &str,
+        turned: bool,
         design: &str,
         full: bool,
     ) -> Result<Vec<u8>, String> {
-        let key = format!("{}|{what}|{way}|{design}|{full}", model.id);
+        let key = format!("{}|{what}|{way}|{turned}|{design}|{full}", model.id);
         kept_or(&self.files, FILES_KEPT, key, || match what {
             "clip" => {
                 let ffmpeg = lp_devices::h264::find_ffmpeg("")?;
                 let frames =
                     boot::standby_frames(env, model, None, way, design, 1.0).map_err(|e| e.0)?;
+                let frames: Vec<Image> = (frames.into_iter())
+                    .map(|frame| as_mounted(frame, turned))
+                    .collect();
                 clip_h264(&ffmpeg, &frames, full)
             }
-            _ => logo_jpeg(&boot::boot_logo(env, model, way, design, 1.0).map_err(|e| e.0)?),
+            _ => {
+                let picture = boot::boot_logo(env, model, way, design, 1.0).map_err(|e| e.0)?;
+                logo_jpeg(&as_mounted(picture, turned))
+            }
         })
     }
 }
@@ -497,7 +506,10 @@ impl PanelFiles<'_> {
         Ok(if size == u32::MAX { 0 } else { i64::from(size) })
     }
 
-    /// write: a file written, and checked that it has the size it should.
+    /// write: a file written, and checked that it has the size it should. Where the panel
+    /// kept the file it had (a 9.2" kept its standby clip when a larger one came, it seems
+    /// where there is no room for both at once), that one is taken away and the new one
+    /// written again.
     fn write(&self, name: &str, data: &[u8]) -> Result<(), String> {
         let raw = checked_name(name)?;
         if data.is_empty() || data.len() > MAX_FILE {
@@ -507,7 +519,17 @@ impl PanelFiles<'_> {
             ));
         }
         self.command(CMD_WRITE_FILE, &file_args(&raw, data.len()), data, 20000)?;
-        let written = self.size(name)?;
+        let mut written = self.size(name)?;
+        if written != data.len() as i64 && written != 0 {
+            note(&format!(
+                "start screen: the panel kept the {name} it had ({written} bytes, not {}): \
+                 taken away, written again",
+                data.len()
+            ));
+            self.delete(name)?;
+            self.command(CMD_WRITE_FILE, &file_args(&raw, data.len()), data, 20000)?;
+            written = self.size(name)?;
+        }
         if written != data.len() as i64 {
             return Err(format!(
                 "{name}: the panel has {written} bytes of it, not {}",

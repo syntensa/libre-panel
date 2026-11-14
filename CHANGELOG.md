@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- **A standby clip the panel kept in place of the new one is written again.** A 9.2" mounted
+  upside down kept the upright Circuit clip it had when the one turned round came, 5 KB
+  larger, and the start screen stopped with "the panel has 701830 bytes of it, not 706912".
+  It seems to write a file anew only where there is room for both at once. Where the panel
+  keeps the file it had, Libre Panel now takes that one away and writes the new one again.
+- **The start screen's files to keep are turned round too** on a panel mounted upside down,
+  as they are written to it (the JPEG and the H.264 were upright).
+
 ## 0.9.0 — 2026-11-14
 
 > *"Just rewrite it in Rust!"* — the internet's oldest joke.

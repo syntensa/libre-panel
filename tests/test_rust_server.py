@@ -3327,7 +3327,9 @@ def test_the_start_screen_is_written_to_the_panel_as_panel_files_py_writes_it(
     """POST /api/start-screen on a simulated TURZX panel the engine has: what is on it, the
     boot logo written and shown (the JPEG panel_files.py makes, byte for byte), taken away
     again, the standby clip written, played and saved as the start (H.264 byte for byte where
-    ffmpeg is there) and named in config.toml; what is no action, panel or model refused in
+    ffmpeg is there) and named in config.toml; on a panel mounted upside down both turned
+    round, the files to keep as well, and a clip the panel kept in place of the new one taken
+    away and the new one written again; what is no action, panel or model refused in
     server.py's words."""
     from PIL import Image
 
@@ -3365,6 +3367,13 @@ def test_the_start_screen_is_written_to_the_panel_as_panel_files_py_writes_it(
                     request = request.replace("{host}", f"127.0.0.1:{port}")
                     status, _, answer = _asked(port, request.encode("utf-8"))
                     return status.split(" ", 2)[1], json.loads(answer)
+
+                def get(path: str) -> bytes:
+                    request = _get(path, f"X-Libre-Panel: {token}")
+                    request = request.replace("{host}", f"127.0.0.1:{port}")
+                    status, _, answer = _asked(port, request.encode("utf-8"))
+                    assert status.split(" ", 2)[1] == "200", (status, answer[:200])
+                    return answer
 
                 model = panel_files.model_of("turing-9.2-usb")
                 status, said = post({"action": "state"})
@@ -3408,13 +3417,27 @@ def test_the_start_screen_is_written_to_the_panel_as_panel_files_py_writes_it(
                 status, said = post({"action": "logo", "design": "aurora"})
                 assert status == "200" and said["boot_logo"] == len(turned), said
                 assert rig.fake.files[panel_files.BOOT_LOGO] == turned
+                # (and so are the files to keep: as the panel takes them)
+                assert get("/api/start-screen/file?model=turing-9.2-usb&what=logo"
+                           "&design=aurora") == turned  # fmt: skip
                 if shutil.which("ffmpeg"):
                     frames = [frame.transpose(Image.Transpose.ROTATE_180)
                               for frame in bootscreen.standby_frames(model)]  # fmt: skip
                     clip = panel_files.clip_h264(model, shutil.which("ffmpeg"), frames, full=True)
+                    # a panel that keeps the clip it had where there is no room for both at
+                    # once (as a 9.2" did): the old one is taken away and the new one written
+                    # again
+                    old = rig.fake.files[panel_files.STANDBY_CLIP]
+                    rig.fake.room = len(old) + len(clip) - 1
+                    before = len(rig.fake.commands)
                     status, said = post({"action": "clip"})
                     assert status == "200" and said["standby_clip"] == len(clip), said
                     assert rig.fake.files[panel_files.STANDBY_CLIP] == clip
+                    sent = [cmd for cmd in rig.fake.commands[before:]
+                            if cmd in (40, 42, 98, 15, 110, 125)]  # fmt: skip
+                    assert sent == [40, 98, 42, 40, 98, 15, 110, 125], sent
+                    assert get("/api/start-screen/file?model=turing-9.2-usb&what=clip") == clip
+                    rig.fake.room = None
                 for payload, words in (
                     ({"action": "nope"},
                      'expected {"action": "state", "logo", "remove-logo" or "clip"}'),
