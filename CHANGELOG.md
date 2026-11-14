@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.9.1 — 2026-11-14
+
+A hotfix for 0.9.0, Libre Panel rewritten in Rust: a standby clip the panel kept in place of the
+new one is written again now. Coming from 0.8? Everything 0.9.0 brought follows below: a third
+less memory, up to 38 % less processor and a quicker start, with the same pictures on the panel,
+pixel for pixel.
 
 **Fixed**
 - **A standby clip the panel kept in place of the new one is written again.** A 9.2" mounted

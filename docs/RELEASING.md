@@ -50,7 +50,10 @@ from). The downloads are the Rust app's; the Python package is built beside them
 PyPI. Only when all of that passed, it publishes
 the GitHub Release with all files and `SHA256SUMS`, the SHA-256 of each (the
 app's *Update to* checks its download against it), its notes taken from the
-CHANGELOG section, and GitHub's signed attestation for each file that this
+CHANGELOG section (a hotfix's, such as 0.9.1's, followed by the sections down to
+the release it fixes, each under its heading, so that who updates from an older
+version reads all that is new; the app's update card shows the first paragraph),
+and GitHub's signed attestation for each file that this
 workflow built it from this commit (`gh attestation verify FILE --repo
 syntensa/libre-panel`). Then the PyPI upload, after approval, if it is set up.
 The Windows programs carry a version resource (who made them, which version), an

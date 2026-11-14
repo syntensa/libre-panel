@@ -457,7 +457,7 @@ Administratorrechte.
 ### Mit Python
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.1"
 libre-panel tray                    # die Hintergrund-App mit Tray-Symbol; öffnet ihr Fenster
 libre-panel autostart enable        # bei jeder Anmeldung starten
 ```
@@ -612,10 +612,10 @@ bekannter Schadsoftware, und solche Vermutungen treffen neue Programme ohne Sign
 von Libre Panel noch sind. So gehst du sicher, dass deine Datei die hier gebaute ist:
 
 - **Ihre SHA-256** ist die in `SHA256SUMS` auf der Seite des Releases. In der PowerShell:
-  `Get-FileHash .\libre-panel-0.9.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
+  `Get-FileHash .\libre-panel-0.9.1-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
 - **Wo sie gebaut wurde:** Ab 0.8.0 bestätigt GitHub mit seiner Signatur für jeden Download,
   dass der Release-Workflow dieses Repositorys ihn gebaut hat, und aus welchem Commit:
-  `gh attestation verify libre-panel-0.9.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
+  `gh attestation verify libre-panel-0.9.1-windows-x64-setup.exe --repo syntensa/libre-panel`.
 
 Wenn sie es ist, erlaube sie unter *Windows-Sicherheit → Viren- & Bedrohungsschutz →
 Schutzverlauf* (*Aktionen → Auf Gerät zulassen*), starte das Setup noch einmal und melde die

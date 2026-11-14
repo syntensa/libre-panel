@@ -441,7 +441,7 @@ administrator rights.
 ### With Python
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.9.1"
 libre-panel tray                    # the background app with its tray icon; opens its window
 libre-panel autostart enable        # start it whenever you log in
 ```
@@ -588,10 +588,10 @@ guesses hit new programs that are not signed, as Libre Panel's are not yet. To b
 your file is the one built here:
 
 - **Its SHA-256** is the one in `SHA256SUMS` on the release's page. In PowerShell:
-  `Get-FileHash .\libre-panel-0.9.0-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
+  `Get-FileHash .\libre-panel-0.9.1-windows-x64-setup.exe` (Linux: `sha256sum -c SHA256SUMS`).
 - **Where it was built:** from 0.8.0 on, GitHub signs for every download that this
   repository's release workflow built it, and from which commit:
-  `gh attestation verify libre-panel-0.9.0-windows-x64-setup.exe --repo syntensa/libre-panel`.
+  `gh attestation verify libre-panel-0.9.1-windows-x64-setup.exe --repo syntensa/libre-panel`.
 
 When it is, allow it in *Windows Security → Virus & threat protection → Protection history*
 (*Actions → Allow on device*), run the setup again, and report the file to Microsoft as a false
