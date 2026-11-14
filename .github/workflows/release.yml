@@ -127,11 +127,30 @@ jobs:
           done
           ls -l artifacts
       - name: Release notes from CHANGELOG.md
+        # the version's section; a hotfix's (0.9.1) goes on with the sections of the releases
+        # it follows down to the one it fixes (0.9.0), each under its heading, so that who comes
+        # from an older version reads all that is new (the app shows the first paragraph)
         run: |
           version="${TAG#v}"
           base="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_SHA"
-          awk -v v="$version" '
-            /^## / { if (found) exit; if (index($0, "## " v " ") == 1 || $0 == "## " v) { found = 1; next } }
+          minor=""
+          case "$version" in
+            *[!0-9.]* | *.*.*.*) ;;
+            *.*.*) [ "${version##*.}" = 0 ] || minor="${version%.*}" ;;
+          esac
+          awk -v v="$version" -v m="$minor" '
+            function heading(line, w) { return index(line, "## " w " ") == 1 || line == "## " w }
+            function of_minor(line, rest) {
+              if (m == "" || index(line, "## " m ".") != 1) return 0
+              rest = substr(line, length("## " m ".") + 1)
+              sub(/ .*/, "", rest)
+              return rest ~ /^[0-9]+$/
+            }
+            /^## / {
+              if (found && !last && of_minor($0)) { last = heading($0, m ".0"); print; next }
+              if (found) exit
+              if (heading($0, v)) { found = 1; next }
+            }
             found { print }
           ' CHANGELOG.md | sed -E "s#\]\((docs/|[A-Z]+\.md)#](${base}/\1#g" > notes.md
           test -s notes.md

@@ -23,9 +23,12 @@ NINE = get_model("turing-9.2-usb")
 class FakePanel:
     """A TURZX USB panel's files and settings, and the commands it was sent."""
 
-    def __init__(self, files=None, listing="header"):
+    def __init__(self, files=None, listing="header", room=None):
         self.files = dict(files or {})
         self.listing = listing  # "header": [99, ack] in front; "bare": the piece alone (the 9.2")
+        # the bytes its folder holds (None: no end): a file is written anew only where it fits
+        # beside the one it replaces, else the panel keeps what it had (as a 9.2" did)
+        self.room = room
         self.sent = []  # (command, name or args, payload size)
         self.listed = 0
         self.closed = False
@@ -43,7 +46,9 @@ class FakePanel:
             self.sent.append((cmd, name, len(payload)))
             if cmd == 40:
                 assert struct.unpack(">I", args[4:8])[0] == len(payload)
-                self.files[name] = payload
+                used = sum(len(data) for data in self.files.values())
+                if self.room is None or used + len(payload) <= self.room:
+                    self.files[name] = payload
             if cmd == 42:
                 self.files.pop(name, None)
         else:
@@ -321,6 +326,33 @@ def test_a_file_is_at_most_a_mebibyte_and_has_the_size_it_should():
     for never in (11, 12, 13):
         with pytest.raises(DeviceError, match="never sent"):
             files._command(never)
+
+
+def test_a_file_the_panel_kept_is_taken_away_and_written_again(caplog):
+    """A 9.2" kept its standby clip when a larger one came, it seems where there was no room
+    for both at once: the old one is taken away and the new one written again; where it fits
+    beside the old one, it is written at once; where it fits nowhere, the panel has none."""
+    old, new = b"o" * 700, b"n" * 710
+    clip = (F.STANDBY_CLIP, 0)
+    panel = FakePanel({F.STANDBY_CLIP: old}, room=1000)
+    with caplog.at_level("INFO", logger="libre_panel.devices.panel_files"):
+        F.PanelFiles(panel).write(F.STANDBY_CLIP, new)
+    assert panel.files[F.STANDBY_CLIP] == new
+    assert panel.sent == [(40, F.STANDBY_CLIP, 710), (98, *clip), (42, *clip),
+                          (40, F.STANDBY_CLIP, 710), (98, *clip)]  # fmt: skip
+    assert ("the panel kept the usr/data/standby.h264 it had (700 bytes, not 710): taken away, "
+            "written again") in caplog.text  # fmt: skip
+    roomy = FakePanel({F.STANDBY_CLIP: old}, room=1410)
+    F.PanelFiles(roomy).write(F.STANDBY_CLIP, new)
+    assert roomy.files[F.STANDBY_CLIP] == new
+    assert roomy.sent == [(40, F.STANDBY_CLIP, 710), (98, *clip)]
+    full = FakePanel({F.STANDBY_CLIP: old}, room=705)
+    with pytest.raises(DeviceError, match="the panel has 0 bytes of it, not 710"):
+        F.PanelFiles(full).write(F.STANDBY_CLIP, new)
+    none = FakePanel(room=705)  # (nothing kept: nothing taken away)
+    with pytest.raises(DeviceError, match="the panel has 0 bytes of it, not 710"):
+        F.PanelFiles(none).write(F.STANDBY_CLIP, new)
+    assert none.sent == [(40, F.STANDBY_CLIP, 710), (98, *clip)]
 
 
 def test_the_boot_logo_is_written_shown_and_taken_away_again():

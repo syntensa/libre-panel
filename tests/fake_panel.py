@@ -69,6 +69,10 @@ class FakePanel:
         # the panel's files (40 written, 42 deleted, 98 their size, 99 the folder's listing in
         # 20 pieces of 512 without a header, as the 9.2" sends it), 113 shown, 125 saved
         self.files: dict[str, bytes] = {}
+        # the bytes the panel's folder holds (None: no end): a file is written anew only where
+        # it fits beside the one it replaces, else the panel keeps what it had, as a 9.2" kept
+        # its standby clip when a larger one came
+        self.room: int | None = None
         self.shown: list[str] = []
         self.saved: list[bytes] = []
         self._piece = 0
@@ -138,7 +142,9 @@ class FakePanel:
             assert name.startswith("usr/data"), name
         if cmd == 40:
             assert size == len(payload) and 0 < size <= 1024 * 1024, (size, len(payload))
-            self.files[name] = payload
+            used = sum(len(data) for data in self.files.values())
+            if self.room is None or used + size <= self.room:
+                self.files[name] = payload
         if cmd == 42:
             self.files.pop(name, None)
         if cmd == 113:

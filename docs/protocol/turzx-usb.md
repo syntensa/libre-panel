@@ -426,4 +426,9 @@ application's folder (`usr/data/...`; `/usr/data` fails).
 - **Writing it:** 40 `usr/data/standby.h264`, 98 to check, 15 = 30, 110 with the
   name (it plays at once), 125 `[brightness, 2, 0, 0, 0, 0]`. The clip that was
   there cannot be read back first: the protocol has no file read.
+- **A file the panel kept:** a 9.2" mounted upside down answered 98 with the size of
+  the clip it had (Circuit's upright, 701,830 bytes) after 40 with the one turned
+  round (706,912): it kept the old one, it seems for want of room for both at once.
+  Where 98 gives neither the new size nor 0, 42 takes the old file away and 40
+  writes the new one again.
 
