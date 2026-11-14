@@ -1,0 +1,49 @@
+name: Diagnosis, start screen clips (one-off)
+
+# The standby clip of each look for the 9.2", on Windows: each picture as Python draws it, the
+# clip as Python's pictures and the release's own ffmpeg make it, and the clip as the release's
+# app makes it (its file to keep, upright and turned round), to set beside the same on Linux.
+
+on:
+  push:
+    branches: ["diag/clip-windows"]
+
+permissions:
+  contents: read
+
+jobs:
+  clips:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e . pillow==13.0.0
+      - name: The release's portable app (0.9.1)
+        shell: bash
+        run: |
+          curl -sSfL -o portable.zip \
+            https://github.com/syntensa/libre-panel/releases/download/v0.9.1/libre-panel-0.9.1-windows-x64-portable.zip
+          echo "ce1fa1ac644517065f8da2b71f71453b7bedb0110b0bd1b4ef0dadbed948035e  portable.zip" | sha256sum -c
+          python -c "import zipfile; zipfile.ZipFile('portable.zip').extractall('app')"
+      - name: Where its programs are
+        shell: python
+        run: |
+          import os, pathlib
+          root = pathlib.Path("app").resolve()
+          for exe in sorted(root.rglob("*.exe")):
+              print(exe.relative_to(root))
+          ffmpeg = next(root.rglob("ffmpeg.exe"))
+          app = next(root.rglob("libre-panel.exe"))
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"FFMPEG={ffmpeg}\nAPP={app}\n")
+      - name: The clips
+        shell: bash
+        run: |
+          feats=$(python -c "from numpy._core._multiarray_umath import __cpu_features__ as f; print(' '.join(n for n in ('X86_V4', 'AVX512_ICL', 'AVX512_SPR') if f.get(n)))")
+          if [ -n "$feats" ]; then export NPY_DISABLE_CPU_FEATURES="$feats"; fi
+          echo "numpy's AVX-512 left unused: ${feats:-none}"
+          python -I .github/diag/clip_diag.py "$FFMPEG" "$APP" > clips.json
+          cat clips.json
