@@ -77,6 +77,17 @@
       "preview": "pragmata/preview.png",
       "zip": "pragmata/pragmata.zip",
       "sha256": "11e7111ee40d32d59d49e96335372fbaf3f7ff74208a75924921ac29d272c5c2"
+    },
+    {
+      "name": "Basic Computer Info",
+      "author": "wwdaher, after Will Daher",
+      "description": "Update Basic Computer Info with CPU fan speed",
+      "sizes": [
+        "320x480"
+      ],
+      "preview": "basic-computer-info-2/preview.png",
+      "zip": "basic-computer-info-2/basic-computer-info-2.zip",
+      "sha256": "4fbf63e3f669570a1b476ec3bf1dfcbc8604213328eadfa0868fdd962942109d"
     }
   ]
 }
