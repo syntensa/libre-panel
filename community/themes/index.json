@@ -48,13 +48,13 @@
     {
       "name": "Basic Computer Info",
       "author": "Will Daher",
-      "description": "Time, Date, CPU activity, I/O activity, network activity, basic Weather",
+      "description": "Time, date, CPU activity and fan speed, I/O activity, network activity, basic weather",
       "sizes": [
         "320x480"
       ],
       "preview": "basic-computer-info/preview.png",
       "zip": "basic-computer-info/basic-computer-info.zip",
-      "sha256": "9250c1c905810b3131cb0eb2c92953319d540e5cc0febb63c6864d2dec3aa4f3"
+      "sha256": "48349546a4e2e4ce1a3060271b37576e6fa9d98a9af73cb78b03c9c9af2d46fb"
     },
     {
       "name": "Cyberpunk 2077",
@@ -77,17 +77,6 @@
       "preview": "pragmata/preview.png",
       "zip": "pragmata/pragmata.zip",
       "sha256": "11e7111ee40d32d59d49e96335372fbaf3f7ff74208a75924921ac29d272c5c2"
-    },
-    {
-      "name": "Basic Computer Info",
-      "author": "wwdaher, after Will Daher",
-      "description": "Update Basic Computer Info with CPU fan speed",
-      "sizes": [
-        "320x480"
-      ],
-      "preview": "basic-computer-info-2/preview.png",
-      "zip": "basic-computer-info-2/basic-computer-info-2.zip",
-      "sha256": "4fbf63e3f669570a1b476ec3bf1dfcbc8604213328eadfa0868fdd962942109d"
     }
   ]
 }
