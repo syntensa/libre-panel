@@ -345,6 +345,17 @@ layer above it once, and waits when the panel says pictures pile up. As
 [lian-li-linux](https://github.com/sgtaziz/lian-li-linux) driver. The Universal Screen 8.8"
 runs: its owner's report in the TURZX forum; the others are unverified.
 
+**The 8.8"'s clock when the PC is off.** Once the PC has shut down or sleeps, the 8.8" can draw
+a clock of its own: L-Connect has the switch for it, and the panel keeps the choice. Libre
+Panel tells it the time each time it opens it (SetClock with mode 2, between StopPlay and
+StopClock, as L-Connect and the open drivers do), so that clock shows the time instead of
+counting from 00:00 (issue #65). Mode 2 sets the clock only: the panel's own choice whether it
+draws one stays as it is, and nothing is saved in it. Where the panel does not answer the
+time, it is opened as before. From the same
+[protocol reference](https://github.com/immortalbob/lian-li-universal-screen-protocol) as the
+light ring below; not yet tried on a panel. The 9.2" and the HydroShift screens are not told
+the time: nothing is known of their clock.
+
 **The light ring around the Universal Screen** (its 60 ARGB LEDs, a USB device of its own,
 `0416:8050`) is a service: *Settings → Services → Light ring*. It lights the ring in one
 colour, breathing, as a rainbow, as a spinning light, or by a reading (green to red between

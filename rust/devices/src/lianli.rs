@@ -5,6 +5,9 @@
 //! when the panel is opened; the answer to a picture may not come, its byte 8 says how many
 //! pictures wait in the panel, and over 3 the next waits until it is 2 (asked with 122);
 //! opening: 10, 123, 52, the cleared PNG layer and 15 (30 a second); 14 sets the brightness.
+//! The Universal Screen 8.8" is also told the time when it is opened (51, SetClock, between
+//! 123 and 52, as L-Connect and the open drivers tell it): the clock its firmware draws by
+//! itself once the PC has gone then shows the time, not 00:00 and on.
 
 use std::time::{Duration, Instant};
 
@@ -13,7 +16,7 @@ use lp_pixels::{Filter, Image, Mode, Transpose};
 use crate::base::{tf, Counters, DeviceError, Result};
 use crate::driver::{Driver, Region};
 use crate::models::{PanelModel, MODELS};
-use crate::turzx_packet::{now_stamp, Stamp, Transport};
+use crate::turzx_packet::{now_stamp, wall_clock, Stamp, Transport};
 use crate::usb_link::{self, UsbIo};
 
 pub const PROTOCOL: &str = "usb-lianli";
@@ -21,12 +24,19 @@ pub const VENDOR_ID: u16 = 0x1CBE;
 const CMD_SYNC: u8 = 10;
 const CMD_BRIGHTNESS: u8 = 14;
 const CMD_FRAME_RATE: u8 = 15;
+const CMD_SET_CLOCK: u8 = 51;
 const CMD_STOP_CLOCK: u8 = 52;
 const CMD_JPEG: u8 = 101;
 const CMD_PNG: u8 = 102;
 const CMD_LEVEL: u8 = 122;
 const CMD_STOP_MEDIA: u8 = 123;
 pub const MAX_PICTURE: usize = 512_000;
+/// The screens told the time as they are opened: the Universal Screen 8.8", whose SetClock the
+/// protocol reference has from L-Connect and from its firmware (lianli88_0001_0023).
+pub const CLOCK_MODELS: [&str; 1] = ["lianli-universal-8.8"];
+/// SetClock's mode 2: the clock set, and the panel's own choice whether it draws a clock once
+/// the PC has gone (saved in it by modes 0 and 1, L-Connect's switch) left as it is.
+const CLOCK_ONLY: u8 = 2;
 pub const QUALITIES: [i64; 5] = [92, 85, 75, 60, 45];
 
 pub fn models() -> Vec<&'static PanelModel> {
@@ -63,12 +73,44 @@ pub fn jpeg(native: &Image) -> Result<Vec<u8>> {
     )))
 }
 
+/// The local time now as year, month, day, hour, minute and second (None where it cannot be
+/// told).
+pub type LocalNow = fn() -> Option<[u32; 6]>;
+
+/// The time of this computer's zone now, as the panel is told it.
+pub fn local_now() -> Option<[u32; 6]> {
+    let utc = lp_py::zones::Zone::utc();
+    let zone = lp_py::zones::local().unwrap_or(&utc);
+    let (t, _) = lp_py::zones::fromtimestamp(zone, wall_clock().floor())?;
+    let year = u32::try_from(t.year).ok().filter(|year| *year <= 0xFFFF)?;
+    Some([year, t.month, t.day, t.hour, t.minute, t.second])
+}
+
+/// SetClock's arguments (bytes 8 to 15 of its packet): the year big endian, the month, the
+/// day, the hour, the minute, the second, and the mode.
+pub fn clock_args(now: [u32; 6], mode: u8) -> [u8; 8] {
+    let [year, month, day, hour, minute, second] = now;
+    let byte = |value: u32| u8::try_from(value).unwrap_or(0);
+    [
+        byte(year >> 8),
+        byte(year & 0xFF),
+        byte(month),
+        byte(day),
+        byte(hour),
+        byte(minute),
+        byte(second),
+        mode,
+    ]
+}
+
 /// A Lian Li screen (LianLiDisplay).
 pub struct LianLi {
     pub model: Option<&'static PanelModel>,
     transport: Option<Transport>,
     counters: Counters,
     pub stamp: Stamp,
+    /// the time a screen of CLOCK_MODELS is told as it is opened (the tests' a fixed one)
+    pub local_now: LocalNow,
 }
 
 impl LianLi {
@@ -78,6 +120,7 @@ impl LianLi {
             transport: None,
             counters: Counters::default(),
             stamp: now_stamp,
+            local_now,
         }
     }
 
@@ -132,13 +175,21 @@ impl LianLi {
         let opened = (|| -> Result<()> {
             let transport = self.transport.as_mut().expect("just made");
             transport.drain(50, 64);
-            for (command, data) in [
-                (CMD_SYNC, &[][..]),
-                (CMD_STOP_MEDIA, &[][..]),
-                (CMD_STOP_CLOCK, &[0][..]),
-            ] {
+            for (command, data) in [(CMD_SYNC, &[][..]), (CMD_STOP_MEDIA, &[][..])] {
                 transport.ask(command, data, 2000, false)?;
             }
+            if CLOCK_MODELS.contains(&model.id) {
+                if let Some(now) = (self.local_now)() {
+                    // (the time is a help, not a need: where it is not answered, the panel is
+                    // opened as before, a late answer thrown away)
+                    let told =
+                        transport.ask(CMD_SET_CLOCK, &clock_args(now, CLOCK_ONLY), 2000, false);
+                    if told.is_err() {
+                        transport.drain(200, 4);
+                    }
+                }
+            }
+            transport.ask(CMD_STOP_CLOCK, &[0], 2000, false)?;
             let clear = Image::blank(
                 Mode::RGBA,
                 model.native_width as usize,
@@ -246,5 +297,191 @@ impl Driver for LianLi {
 impl Drop for LianLi {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+    use crate::models::find_model;
+    use crate::turzx_packet::packet;
+    use crate::usb_link::{EndpointInfo, InterfaceInfo, UsbError, UsbResult};
+
+    /// The moment the tests tell: 2026-10-30 05:19:47, the reference's own capture.
+    fn at_capture() -> Option<[u32; 6]> {
+        Some([2026, 10, 30, 5, 19, 47])
+    }
+
+    fn stamp() -> u32 {
+        0x0102_0304
+    }
+
+    /// A screen the tests make up: what was written to it, the packets it answers (all but
+    /// those `silent` names, by their place among the writes).
+    struct Made {
+        written: Arc<Mutex<Vec<Vec<u8>>>>,
+        waiting: usize,
+        silent: Vec<usize>,
+    }
+
+    impl UsbIo for Made {
+        fn product(&mut self) -> String {
+            "Lian Li".into()
+        }
+        fn interfaces(&self) -> Vec<InterfaceInfo> {
+            let endpoint = |address| EndpointInfo {
+                address,
+                max_packet: 512,
+                interrupt: false,
+            };
+            vec![InterfaceInfo {
+                number: 0,
+                class: 0xFF,
+                endpoints: vec![endpoint(0x01), endpoint(0x81)],
+            }]
+        }
+        fn claim(&mut self, _: &[u8]) -> UsbResult<()> {
+            Ok(())
+        }
+        fn write(&mut self, _: u8, data: &[u8], _: u64) -> UsbResult<()> {
+            let mut written = self.written.lock().unwrap();
+            if !self.silent.contains(&written.len()) {
+                self.waiting += 1;
+            }
+            written.push(data.to_vec());
+            Ok(())
+        }
+        fn read(&mut self, _: u8, _: usize, _: u64) -> UsbResult<Vec<u8>> {
+            if self.waiting == 0 {
+                return Err(UsbError::Timeout);
+            }
+            self.waiting -= 1;
+            // (byte 8 of an answer to a picture: none waits in the screen)
+            Ok(vec![0; 512])
+        }
+        fn control_out(&mut self, _: u8, _: u8, _: u16, _: u16, _: &[u8], _: u64) -> UsbResult<()> {
+            panic!("a Lian Li screen is sent no control transfer");
+        }
+        fn control_in(
+            &mut self,
+            _: u8,
+            _: u8,
+            _: u16,
+            _: u16,
+            _: u16,
+            _: u64,
+        ) -> UsbResult<Vec<u8>> {
+            panic!("a Lian Li screen is sent no control transfer");
+        }
+        fn release(&mut self) {}
+    }
+
+    /// The packets written as `model` was opened, the screen answering all but `silent`.
+    fn opened(model: &str, silent: Vec<usize>) -> (Result<()>, Vec<Vec<u8>>) {
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let io = Made {
+            written: Arc::clone(&written),
+            waiting: 0,
+            silent,
+        };
+        let mut screen = LianLi::new(find_model(model));
+        screen.stamp = stamp;
+        screen.local_now = at_capture;
+        let done = screen.open_on(Box::new(io));
+        let packets = written.lock().unwrap().clone();
+        (done, packets)
+    }
+
+    fn command(cmd: u8, args: &[u8]) -> Vec<u8> {
+        packet(cmd, args, stamp()).unwrap().to_vec()
+    }
+
+    /// The reference's capture of L-Connect's switch (on, 2026-10-30 05:19:47): the bytes after
+    /// the stamp, 07 EA 0A 1E 05 13 2F 01; Libre Panel sends the same time with mode 2.
+    #[test]
+    fn the_time_is_laid_out_as_the_reference_captured_it() {
+        let now = at_capture().unwrap();
+        assert_eq!(
+            clock_args(now, 1),
+            [0x07, 0xEA, 0x0A, 0x1E, 0x05, 0x13, 0x2F, 0x01]
+        );
+        assert_eq!(clock_args(now, CLOCK_ONLY)[7], 2);
+    }
+
+    /// The 8.8" is told the time between StopPlay and StopClock, as L-Connect tells it, with
+    /// the mode that leaves its own choice of an offline clock as it is.
+    #[test]
+    fn the_8_8_is_told_the_time_as_it_is_opened() {
+        let (done, packets) = opened("lianli-universal-8.8", Vec::new());
+        assert!(done.is_ok(), "{done:?}");
+        let told = clock_args(at_capture().unwrap(), CLOCK_ONLY);
+        assert_eq!(
+            packets[..4],
+            [
+                command(CMD_SYNC, &[]),
+                command(CMD_STOP_MEDIA, &[]),
+                command(CMD_SET_CLOCK, &told),
+                command(CMD_STOP_CLOCK, &[0]),
+            ]
+        );
+        let last = packets.last().unwrap();
+        assert_eq!(*last, command(CMD_FRAME_RATE, &[30]));
+    }
+
+    /// The other Lian Li screens are opened as before: nothing is known of their clock.
+    #[test]
+    fn the_other_screens_are_not_told_the_time() {
+        for model in [
+            "lianli-universal-9.2",
+            "lianli-hydroshift2-lcd",
+            "lianli-hydroshift2-oled",
+        ] {
+            let (done, packets) = opened(model, Vec::new());
+            assert!(done.is_ok(), "{model}: {done:?}");
+            assert_eq!(
+                packets[..3],
+                [
+                    command(CMD_SYNC, &[]),
+                    command(CMD_STOP_MEDIA, &[]),
+                    command(CMD_STOP_CLOCK, &[0]),
+                ],
+                "{model}"
+            );
+        }
+    }
+
+    /// An 8.8" that does not answer SetClock is opened all the same.
+    #[test]
+    fn an_8_8_that_does_not_answer_the_time_is_opened_all_the_same() {
+        let (done, packets) = opened("lianli-universal-8.8", vec![2]);
+        assert!(done.is_ok(), "{done:?}");
+        assert_eq!(packets[3], command(CMD_STOP_CLOCK, &[0]));
+    }
+
+    /// Where the time cannot be told, the 8.8" is opened without it.
+    #[test]
+    fn without_a_time_the_8_8_is_opened_without_it() {
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let io = Made {
+            written: Arc::clone(&written),
+            waiting: 0,
+            silent: Vec::new(),
+        };
+        let mut screen = LianLi::new(find_model("lianli-universal-8.8"));
+        screen.stamp = stamp;
+        screen.local_now = || None;
+        assert!(screen.open_on(Box::new(io)).is_ok());
+        let packets = written.lock().unwrap().clone();
+        assert_eq!(packets[2], command(CMD_STOP_CLOCK, &[0]));
+    }
+
+    /// The zone's time now is a real date and time.
+    #[test]
+    fn the_local_time_is_a_date_and_a_time() {
+        let [year, month, day, hour, minute, second] = local_now().expect("a time");
+        assert!(year >= 2024 && (1..=12).contains(&month) && (1..=31).contains(&day));
+        assert!(hour < 24 && minute < 60 && second < 61);
     }
 }
