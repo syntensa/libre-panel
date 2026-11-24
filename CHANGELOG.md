@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.6rc1 — 2026-11-24
+
+A candidate for 0.9.6 with one change, to try on a Lian Li Universal Screen 8.8": its clock
+when the PC is off shows the time. Everything else is 0.9.5.
+
+**Fixed**
+- **The Lian Li Universal Screen 8.8"'s clock when the PC is off** counted up from 00:00
+  (issue #65): Libre Panel never told the panel the time. It now tells it each time it opens
+  the panel, as L-Connect does (SetClock with mode 2: the clock is set, and the panel's own
+  choice whether it shows a clock stays as it is; nothing is saved in the panel). Where the
+  panel does not answer, it opens as before. Not yet tried on a panel: if you have one, how it
+  went is welcome in issue #65.
+
 ## 0.9.5 — 2026-11-24
 
 Transitions that move across all your panels at once, among them the new Morph, Cascade, Comet
