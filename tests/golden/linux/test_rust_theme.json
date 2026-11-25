@@ -7405,7 +7405,7 @@
 ],
 "test_grids_of_what_files_hold_are_python_s": [
 [
-"485c6d0fd14f"
+"8be425c717d4"
 ]
 ],
 "test_light_colours_are_worked_out_as_python_works_them_out": [
@@ -7415,7 +7415,7 @@
 ],
 "test_the_format_s_tables_and_the_panel_models_are_python_s": [
 [
-"17bad0b18074"
+"ad29ba98fbee"
 ]
 ],
 "test_theme_folders_are_read_as_python_reads_them": [
@@ -7447,12 +7447,12 @@
 ],
 "test_themes_adapted_to_other_panels_as_python_adapts_them": [
 [
-"14333b5ec70c"
+"f06ef4105aec"
 ]
 ],
 "test_themes_laid_out_on_panels_they_have_no_version_for_as_python_lays_them_out": [
 [
-"7df8aa578f91"
+"d9258e9a7282"
 ]
 ],
 "test_themes_with_slips_in_them_are_refused_or_completed_as_python_does": [
@@ -10461,15 +10461,15 @@
 ],
 "test_versions_beside_one_s_own_themes_are_found_and_laid_out_as_python_does": [
 [
-"6434edfbe66a"
+"369830e4245d"
 ]
 ],
 "test_versions_places_and_variants_of_themes_as_python_s": [
 [
-"f6795697b273"
+"5ea739550fe7"
 ],
 [
-"0ac671c1de2b"
+"786aa7bb4208"
 ]
 ]
 }

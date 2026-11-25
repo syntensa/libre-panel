@@ -23,7 +23,7 @@ use lp_py::{Dict, Value};
 pub const USB_VENDORS: [&str; 3] = ["1cbe", "43a8", "345f"];
 /// and other makers' screens (and the light ring of Lian Li's Universal Screen 8.8"), with
 /// their product ids
-pub const USB_PRODUCTS: [(&str, &str); 11] = [
+pub const USB_PRODUCTS: [(&str, &str); 13] = [
     ("0416", "8050"),
     ("0416", "5302"),
     ("0416", "5408"),
@@ -35,6 +35,8 @@ pub const USB_PRODUCTS: [(&str, &str); 11] = [
     ("264a", "2347"),
     ("303a", "2986"),
     ("303a", "2987"),
+    ("1d6b", "0103"),
+    ("374a", "a005"),
 ];
 pub const UDEV_RULES: &str = "/etc/udev/rules.d/60-libre-panel.rules";
 pub const RAPL_RULES: &str = "/etc/udev/rules.d/60-libre-panel-rapl.rules";
@@ -905,7 +907,14 @@ fn panel(root: &Path) -> (bool, bool) {
             .to_lowercase();
         let ours = USB_VENDORS.contains(&vendor.as_str())
             || USB_PRODUCTS.contains(&(vendor.as_str(), product.as_str()));
-        if !ours {
+        // (AIGO's screen has the Linux Foundation's vendor id: another device with its ids is
+        // none of ours, as the rule says)
+        let other = (vendor.as_str(), product.as_str()) == ("1d6b", "0103")
+            && !text(&at.join("manufacturer"))
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("aigo");
+        if !ours || other {
             continue;
         }
         present = true;

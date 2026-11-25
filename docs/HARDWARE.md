@@ -34,9 +34,10 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
   whose protocol Libre Panel follows), but nobody has confirmed this model with
   Libre Panel yet. Please run `libre-panel doctor` and report the result. For the panels of
-  JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT and Thermaltake (and the
-  Turing 1.6" and 2.1" USB panels) the protocol comes from other projects' notes and captures
-  and from the makers' own sources: nobody has run them with Libre Panel yet, but for the
+  JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT, Thermaltake, AIGO and
+  Valkyrie (and the Turing 1.6" and 2.1" USB panels) the protocol comes from other projects'
+  notes and captures, owners' captures and the makers' own sources: nobody has run them with
+  Libre Panel yet, but for the
   JONSBO ZC-360's screens as panels of their own (#13), the JONSBO DS339 (#46) and DS916 (#64),
   the Lian Li Universal Screen 8.8" and the Thermalright Trofeo Vision 9.16" (#54), which are
   supported.
@@ -116,6 +117,8 @@ the panel lists show it when you point at one.
 | BeadaPanel | yes | no | its own | yes: the backlight off | whole pictures in 16-bit colour, a few a second |
 | NZXT Kraken (LCD) | yes | no | its own (0–100) | yes: brightness 0 | each picture goes through the cooler's memory: a few a second; close NZXT CAM |
 | Thermaltake 6" LCD | yes | no | none known: dimming darkens the picture | no: it shows its own screen again | whole JPEG pictures; close TT RGB Plus |
+| AIGO Xingcanchen | yes | no | none known: dimming darkens the picture | no: it shows its own screen again | whole JPEG pictures; on Windows it keeps its own driver; close AIGO's program |
+| Valkyrie B360-GT VK | yes | no | not proven: dimming darkens the picture | no: it keeps the last picture | whole pictures of raw pixels; close Myth.Cool |
 
 For all of them: close the maker's own program first. Two programs cannot drive one panel at
 once.
@@ -337,6 +340,54 @@ has the 6" alone; turing-smart-screen-python and liquidctl have none), and Libre
 guess one. A `libre-panel devices` listing and the product's name in a
 ["panel support" issue](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
 help.
+
+## AIGO
+
+| Model id | Size | Resolution (landscape) | Connection | Driver |
+|---|---|---|---|---|
+| `aigo-xingcanchen` | 9.16" | 1920×462 | USB HID (`1d6b:0103`) | unverified |
+
+The screen of AIGO's Xingcanchen case (爱国者星璨辰), found by `auto`. It speaks the protocol of
+[Thermaltake's LCD](#thermaltake) with its commands framed a little differently: Libre Panel
+wakes it, connects to it and switches it to the pictures it is sent ("POST power",
+"POST conn", "POST realtimeDisplay"), sends it JPEG pictures in HID reports of 1024 bytes when
+the picture changes, and every 5 seconds a heartbeat ("STATE all"); when Libre Panel quits, the
+screen goes back to its own. Its vendor id is the Linux Foundation's, which other devices built
+on Linux carry too: Libre Panel takes a device with these ids for the screen only where its
+product names AIGO. **On Windows** the screen keeps Windows' own HID driver, which it comes
+with: Libre Panel writes its reports through it, so no Zadig or WinUSB is needed. On Linux,
+`libre-panel system-setup --linux` gives your user access to it. No brightness command is
+known, so the brightness goes into the pixels. Close AIGO's program first.
+
+The protocol comes from its owner's captures of AIGO's program
+([#68](https://github.com/syntensa/libre-panel/issues/68)) and the notes of
+[LanScreen](https://github.com/Savathun/LanScreen) (MIT, by Savathun), written for the
+Xingcanlan (`1d6b:0172`, 1480×720) of the same family; see the
+[protocol notes](protocol/aigo.md). Unverified: the owner tries it. The Xingcanlan is not in
+the catalog yet.
+
+## Valkyrie
+
+| Model id | Size | Resolution | Connection | Driver |
+|---|---|---|---|---|
+| `valkyrie-b360gt-vk` | 2.8" | 480×480 | USB (`374a:a005`, WinUSB) | unverified |
+
+The screen of Valkyrie's B360-GT VK cooler (瓦尔基里), found by `auto`: its USB product calls
+itself `Vk-Copl-08`. Libre Panel checks what the screen says of itself (480×480, 16-bit
+pixels) before it sends anything, sets its backlight to full and sends each picture as raw
+BGR565 pixels when it changes, and a heartbeat once a second while none goes. The backlight's
+range is not proven, so the brightness goes into the pixels. When Libre Panel quits, the last
+picture stays: the maker's closing command blanks the screen, and Libre Panel never sends it.
+It comes with the WinUSB driver on Windows, so nothing is to be installed; on Linux,
+`libre-panel system-setup --linux` gives your user access to it. Close Myth.Cool first.
+
+The protocol comes from its owner's captures of Myth.Cool
+([#69](https://github.com/syntensa/libre-panel/issues/69)) and the notes on the same family in
+[msdisplay](https://github.com/codehz/msdisplay) (the BoWei screens, VID `374a`) and
+[InfoPanel-linux](https://github.com/emaspa/InfoPanel-linux) (GPL-3.0, its notes on the Valkyrie
+MC360); see the [protocol notes](protocol/valkyrie.md). Unverified: the owner tries it. Its
+other screens (the MC360's 640×480 on `374a:a021`, and those built on a MacroSilicon chip) are
+not in the catalog yet.
 
 ## Lian Li and others
 

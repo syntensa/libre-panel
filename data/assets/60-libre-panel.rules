@@ -38,6 +38,13 @@ KERNEL=="hidraw*", ATTRS{idVendor}=="1e71", ATTRS{idProduct}=="3014", MODE="0660
 # Thermaltake's 6" LCD (a HID device)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="264a", ATTRS{idProduct}=="2347", MODE="0660", TAG+="uaccess"
 
+# AIGO's Xingcanchen case screen (a HID device; its vendor id is the Linux Foundation's, which
+# other devices built on Linux carry too: only the one that names AIGO as its maker)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0103", ATTRS{manufacturer}=="Aigo Inc.", MODE="0660", TAG+="uaccess"
+
+# Valkyrie's B360-GT VK cooler screen
+SUBSYSTEM=="usb", ATTRS{idVendor}=="374a", ATTRS{idProduct}=="a005", MODE="0660", TAG+="uaccess"
+
 # udisp USB displays (Waveshare's USB monitors with their USB display card image, ESP32 displays)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="2986", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="2987", MODE="0660", TAG+="uaccess"

@@ -34,6 +34,8 @@ PROTOCOLS = {
     "usb-beada": "USB bulk (VID 0x4E58), BeadaPanel's Panel-Link, 16-bit frames",
     "usb-nzxt": "USB bulk and HID (VID 0x1E71), an NZXT Kraken's LCD, frames through its memory",
     "usb-thermaltake": "USB HID (VID 0x264A), Thermaltake's LCD, JPEG frames",
+    "usb-aigo": "USB HID (VID 0x1D6B), AIGO's case screens, JPEG frames",
+    "usb-valkyrie": "USB bulk (VID 0x374A), Valkyrie's cooler screens, BGR565 frames",
     "usb-udisp": "USB bulk (VID 0x303A), a udisp USB display (Waveshare's USB display image), a "
     'video stream of the pictures as the display asks for them (JPEG on the 2.8" round one)',
 }
@@ -711,6 +713,26 @@ MODELS: tuple[PanelModel, ...] = (
         usb_ids=((0x264A, 0x2347),),
     ),
     PanelModel(
+        "aigo-xingcanchen",
+        "AIGO",
+        "AIGO Xingcanchen",
+        9.16,
+        462,
+        1920,
+        "usb-aigo",
+        usb_ids=((0x1D6B, 0x0103),),
+    ),
+    PanelModel(
+        "valkyrie-b360gt-vk",
+        "Valkyrie",
+        "Valkyrie B360-GT VK",
+        2.8,
+        480,
+        480,
+        "usb-valkyrie",
+        usb_ids=((0x374A, 0xA005),),
+    ),
+    PanelModel(
         "waveshare-2.8-udisp",
         "Waveshare",
         "Waveshare USB Monitor",
@@ -744,6 +766,8 @@ _DRIVER_STATUS = {
         "usb-beada",
         "usb-nzxt",
         "usb-thermaltake",
+        "usb-aigo",
+        "usb-valkyrie",
         "usb-udisp",
     )
 }
@@ -846,6 +870,16 @@ _LIMITS = {
     "thermalright-trofeo-9.16": _TROFEO.removeprefix(f"{_UNSEEN} "),
     **{m.id: _BEADA for m in MODELS if m.protocol == "usb-beada"},
     **{m.id: _KRAKEN for m in MODELS if m.protocol == "usb-nzxt"},
+    "aigo-xingcanchen": (
+        "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Its "
+        "brightness goes into the picture: dimming darkens it. Close AIGO's program while Libre "
+        "Panel runs. When Libre Panel quits, the panel shows its own screen again."
+    ),
+    "valkyrie-b360gt-vk": (
+        "Not yet seen on the hardware. It takes whole pictures, their pixels as they are. Its "
+        "brightness goes into the picture: dimming darkens it. Close Myth.Cool while Libre Panel "
+        "runs. When Libre Panel quits, the panel keeps the last picture."
+    ),
     "thermaltake-lcd-6": (
         "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Its "
         "brightness goes into the picture: dimming darkens it. Close TT RGB Plus while Libre "

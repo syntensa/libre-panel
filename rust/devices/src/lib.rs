@@ -5,6 +5,7 @@
 //! bit rate (rate), and their single pictures), found on the bus (usb) and driven through
 //! Libre Panel's engine (engine); PNG files (png); and lp-panel, to try a panel with.
 
+pub mod aigo;
 pub mod base;
 pub mod beada;
 pub mod changes;
@@ -39,4 +40,7 @@ pub mod turzx_packet;
 pub mod udisp;
 pub mod usb;
 pub mod usb_link;
+pub mod valkyrie;
 pub mod waveshare;
+#[cfg(windows)]
+pub mod win_hid;

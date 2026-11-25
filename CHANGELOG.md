@@ -16,6 +16,15 @@
   keeps its format there; any other, an MQTT value for one, shows its number with its own unit.
   Until now that took detaching the module into widgets. Asked for in issue #54.
 
+- **Two more panels: AIGO's Xingcanchen case screen and Valkyrie's B360-GT VK cooler
+  screen**, both found by `auto`, both written from their owners' captures (issues #68 and
+  #69) and not yet seen with Libre Panel: if you have one, how it goes is welcome there. The
+  AIGO (1920×462, `1d6b:0103`) takes JPEG pictures as Thermaltake's LCD does; on Windows it
+  keeps its own driver (Windows' HID driver: no Zadig), and a device with its ids that does not
+  name AIGO is left alone. The Valkyrie (480×480, `374a:a005`, WinUSB) takes raw pixels, and is
+  sent a picture only where it says it is that screen. Both get a picture when it changes and
+  a light heartbeat in between, never the same picture again and again.
+
 **Fixed**
 - **Videos in Design.** Design, the theme library and a shared theme's picture drew no theme
   with a video and said "not drawn: videos without ffmpeg", although the panel played it

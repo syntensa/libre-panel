@@ -91,7 +91,7 @@
 <p align="center">
   <sub><b>Works with</b> Turing / TURZX · Turing Smart Screen · JONSBO · Waveshare · WeAct ·
   Kipye · UsbPCMonitor · XuanFang · Lian Li · Thermalright · BeadaPanel · NZXT Kraken ·
-  Thermaltake · <a href="#supported-panels">every panel</a></sub>
+  Thermaltake · AIGO · Valkyrie · <a href="#supported-panels">every panel</a></sub>
 </p>
 
 ## Rewritten in Rust
@@ -364,6 +364,8 @@ nothing while no theme shows it.
 | **BeadaPanel** | – | every model | USB |
 | **NZXT Kraken** | – | with an LCD | USB |
 | **Thermaltake** | – | 6" LCD | USB |
+| **AIGO** | – | Xingcanchen case screen | USB |
+| **Valkyrie** | – | B360-GT VK cooler screen | USB |
 
 **Not supported yet:** GUITION 3.5", Fuldho 3.5", AX206 picture frames, and Lian Li's TL LCD,
 Galahad II LCD and Lancool 207.

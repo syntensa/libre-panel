@@ -75,6 +75,14 @@ fn other(
             let mut driver = lp_devices::thermalright::Trofeo::new(model);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
         }
+        "usb-aigo" => {
+            let mut driver = lp_devices::aigo::Aigo::new(model);
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
+        "usb-valkyrie" => {
+            let mut driver = lp_devices::valkyrie::Valkyrie::new(model);
+            driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
+        }
         "usb-nzxt" => {
             let mut driver = lp_devices::nzxt::Kraken::new(model, device.brightness);
             driver.open().map(|()| Box::new(driver) as Box<dyn Driver>)
@@ -171,8 +179,8 @@ fn serial(
 }
 
 /// other_usb_model: the USB screen of another maker on the bus, as `auto` finds it, in this
-/// order (turzx.py's: Lian Li, Thermalright, BeadaPanel, NZXT, Thermaltake, udisp), without
-/// opening it.
+/// order (turzx.py's: Lian Li, Thermalright, BeadaPanel, NZXT, Thermaltake, udisp; then AIGO
+/// and Valkyrie), without opening it.
 pub fn other_usb_model() -> Option<&'static PanelModel> {
     lp_devices::lianli::present_model()
         .or_else(lp_devices::thermalright::present_model)
@@ -180,6 +188,8 @@ pub fn other_usb_model() -> Option<&'static PanelModel> {
         .or_else(lp_devices::nzxt::present_model)
         .or_else(lp_devices::thermaltake::present_model)
         .or_else(lp_devices::udisp::present_model)
+        .or_else(lp_devices::aigo::present_model)
+        .or_else(lp_devices::valkyrie::present_model)
 }
 
 /// output_path: the file of `[device] output`; a relative one is inside the settings folder.
