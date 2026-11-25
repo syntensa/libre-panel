@@ -338,14 +338,25 @@ def server_answer(url, route):
 
 def server_language(url, language):
     """The app's language as the person sets it in Settings: its server is told so through its
-    settings."""
+    settings. With the background app, once its panel's loop runs: the loop takes the language
+    of config.toml as it read it when it began, which until it reads the file again (a second
+    later) was the one before, and a page opened then stayed in it (CI saw English pages after
+    German was set). Done when the server answers in the language."""
     import urllib.request
 
-    body = json.dumps({"language": language}).encode("utf-8")
     headers = {"Content-Type": "application/json", "X-Libre-Panel": url.token}
-    asked = urllib.request.Request(f"{url}api/language", data=body, headers=headers)
-    with urllib.request.urlopen(asked, timeout=30) as answer:
-        answer.read()
+
+    def asked(path, body=None):
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(f"{url}{path}", data=data, headers=headers)
+        with urllib.request.urlopen(request, timeout=30) as answer:
+            return json.loads(answer.read())
+
+    running = lambda: (asked("api/app").get("panel") or {}).get("state") == "showing"  # noqa: E731
+    if asked("api/app").get("available"):
+        assert wait_for(running), "the background app's panel shows nothing"
+    asked("api/language", {"language": language})
+    assert wait_for(lambda: asked("api/i18n")["language"] == language), language
 
 
 def expected_404(message, allow=()):

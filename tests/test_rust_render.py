@@ -1620,8 +1620,6 @@ def test_a_calendar_s_dot_as_python_rounds_its_side(tmp_path: Path) -> None:
 THEMES = Path(__file__).parent.parent / "data" / "themes"
 
 
-# (the answers kept on CI's computers come from its next run, which keeps them: unchecked till then)
-@pytest.mark.live
 @pytest.mark.c_library
 def test_the_app_s_own_themes_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, with the demo's readings at a fixed moment: the same to the
@@ -6844,8 +6842,6 @@ def test_weather_symbols_that_move_as_python_draws_them(tmp_path: Path) -> None:
     assert drawn > 340 and moving > 290, (drawn, moving)
 
 
-# (the answers kept on CI's computers come from its next run, which keeps them: unchecked till then)
-@pytest.mark.live
 @pytest.mark.c_library
 def test_the_app_s_own_themes_in_moving_frames_as_python_draws_them(tmp_path: Path) -> None:
     # (every theme the app brings, drawn as the panels' loop draws it: frames a 25th of a second
