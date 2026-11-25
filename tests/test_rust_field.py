@@ -212,8 +212,6 @@ def _steps(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if "unported" not in step]  # fmt: skip
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
-@pytest.mark.live("win32")
 def test_frames_over_the_light_as_python_lays_them(tmp_path: Path) -> None:
     # (themes of cards and texts over a light field, drifting or not, following the load or
     # not: each frame to the bit, its boxes, whether it moves on and when it is due again (the
@@ -237,8 +235,6 @@ def test_frames_over_the_light_as_python_lays_them(tmp_path: Path) -> None:
     assert len(made) > 300 and due > 100 and lit > 150, (len(made), due, lit)
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
-@pytest.mark.live("win32")
 def test_lumen_over_the_light_on_both_panels_as_python_lays_it(tmp_path: Path) -> None:
     # (Lumen on the 12.3" and its companion on end beside it, as the person's two panels stand,
     # each its part of one light; the demo's readings, the loads busy, idle or rising: within a
@@ -261,8 +257,6 @@ def test_lumen_over_the_light_on_both_panels_as_python_lays_it(tmp_path: Path) -
     assert len(_steps(_moving(cases))) >= 12
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
-@pytest.mark.live("win32")
 def test_frames_of_layers_over_the_light_as_python_hands_them_out(tmp_path: Path) -> None:
     # (the same frames as a panel's engine gets them: as their layers over the light where the
     # engine draws the light up and takes every piece as it is, else composed here; each, made
