@@ -25,6 +25,12 @@
   a light heartbeat in between, never the same picture again and again.
 
 **Fixed**
+- **The light under Lumen v2, Arena v2 and Encore v2 is smooth.** Its faint glow showed as
+  rings of steps across the panel, a level of brightness each, their edges jagged in steps of
+  eight pixels, and the panel's video made them stand out more. The light is now worked out in
+  sixteenths of a level and made whole levels only pixel by pixel, through a fine pattern that
+  stays the same from frame to frame: a step becomes a fade. A frame that does not change
+  stays the same to the bit, and the panel's video needs fewer bits for the light, not more.
 - **Dell's fans: what the source reads, in the log.** With *Dell fans* on, the log says what
   Dell Command | Monitor gives, each reading by its name (`fan.dell.processor_fan`), and again
   when that changes; or why it gives none: no sensor at all, or the sensors there are with what

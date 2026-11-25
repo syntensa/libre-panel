@@ -849,7 +849,7 @@ impl TurzxVideo {
                 .with_rings(can.contains("rings"))
                 .with_bars(can.contains("bars"))
                 .with_fans(can.contains("laid") && can.contains("fans"))
-                .with_lights(can.contains("lights"))
+                .with_lights(can.contains("light16"))
         });
         let mut panel = TurzxVideo {
             conn,

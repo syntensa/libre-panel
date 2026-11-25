@@ -479,11 +479,11 @@ impl Scene {
         Ok(())
     }
 
-    /// A light field for the ground: its levels, a point in the middle of each block of 8 by 8
-    /// pixels (`fw` x `fh`, RGB row by row), drawn up to the frame ([`drawn_up`], as
-    /// render/field.py draws it up). What lies in front of a light before stays (it is the same over
-    /// any light); every block is composed anew over the new one.
-    pub fn ground_light(&mut self, fw: usize, fh: usize, levels: &[u8]) -> Result<(), String> {
+    /// A light field for the ground: its levels in sixteenths, a point in the middle of each
+    /// block of 8 by 8 pixels (`fw` x `fh`, RGB row by row), drawn up to the frame
+    /// ([`drawn_up`], as render/field.rs draws it up). What lies in front of a light before
+    /// stays (it is the same over any light); every block is composed anew over the new one.
+    pub fn ground_light(&mut self, fw: usize, fh: usize, levels: &[u16]) -> Result<(), String> {
         if fw != self.width.div_ceil(LIGHT_STEP) || fh != self.height.div_ceil(LIGHT_STEP) {
             return Err(format!(
                 "a light of {fw}x{fh} for a frame of {}x{}",
@@ -1471,12 +1471,19 @@ fn between(n: usize, points: usize) -> Vec<(usize, usize, u16)> {
         .collect()
 }
 
-/// A light field's levels (`fw` x `fh`, RGB) drawn up to `w` x `h` as render/field.py's
-/// drawn_up: each pixel between the four points nearest its middle, weighted in sixteenths
-/// each way, the sum rounded once. The rows across first, for every row of points (sixteen
-/// times the level: whole numbers), then each row of the frame of the two it lies between,
+/// The dither a light is drawn up through (render/field.rs's DITHER, Bayer's four by four):
+/// each pixel made a level from its exact one plus (k + 1/2) / 16 of a level, k as it lies in
+/// the pattern (row by row: y % 4, x % 4). The same pattern in every frame: a light that does
+/// not change stays the same to the bit.
+const DITHER: [[u16; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+
+/// A light field's levels in sixteenths (`fw` x `fh`, RGB) drawn up to `w` x `h` as
+/// render/field.rs's drawn_up, to the bit: each pixel between the four points nearest its
+/// middle, weighted in sixteenths each way, made a level once through the dither. The rows
+/// across first, for every row of points (in sixteenths of a level, rounded), then each row of
+/// the frame of the two it lies between (in 256ths) with the dither's thresholds for its row,
 /// sixteen bits a channel (the compiler takes eight at a time).
-fn drawn_up(levels: &[u8], fw: usize, fh: usize, w: usize, h: usize) -> Vec<u8> {
+fn drawn_up(levels: &[u16], fw: usize, fh: usize, w: usize, h: usize) -> Vec<u8> {
     let across: Vec<Vec<u16>> = {
         let taps = between(w, fw);
         levels
@@ -1485,19 +1492,32 @@ fn drawn_up(levels: &[u8], fw: usize, fh: usize, w: usize, h: usize) -> Vec<u8> 
                 let mut out = Vec::with_capacity(w * 3);
                 for &(a, b, f) in &taps {
                     for c in 0..3 {
-                        let (va, vb) = (u16::from(row[a * 3 + c]), u16::from(row[b * 3 + c]));
-                        out.push(va * (16 - f) + vb * f);
+                        let (va, vb) = (u32::from(row[a * 3 + c]), u32::from(row[b * 3 + c]));
+                        let v = va * u32::from(16 - f) + vb * u32::from(f);
+                        out.push(((v + 8) >> 4) as u16);
                     }
                 }
                 out
             })
             .collect()
     };
+    let thresholds: [Vec<u16>; 4] = std::array::from_fn(|row| {
+        (0..w)
+            .flat_map(|x| [DITHER[row][x % 4] * 16 + 8; 3])
+            .collect()
+    });
     let mut out = vec![0u8; w * h * 3];
-    for ((a, b, f), line) in between(h, fh).into_iter().zip(out.chunks_exact_mut(w * 3)) {
+    let rows = between(h, fh).into_iter().zip(out.chunks_exact_mut(w * 3));
+    for (y, ((a, b, f), line)) in rows.enumerate() {
         let (first, second, g) = (&across[a], &across[b], 16 - f);
-        for ((o, &u), &v) in line.iter_mut().zip(first).zip(second) {
-            *o = ((u * g + v * f + 128) >> 8) as u8;
+        // (at most 4080 * 16 + 248: sixteen bits)
+        for (((o, &u), &v), &k) in line
+            .iter_mut()
+            .zip(first)
+            .zip(second)
+            .zip(&thresholds[y % 4])
+        {
+            *o = ((u * g + v * f + k) >> 8) as u8;
         }
     }
     out
@@ -2870,7 +2890,9 @@ mod light_timing {
     #[ignore]
     fn light_timing() {
         let (w, h) = (1920usize, 720usize);
-        let levels: Vec<u8> = (0..240 * 90 * 3).map(|i| (i * 7 % 61) as u8).collect();
+        let levels: Vec<u16> = (0..240 * 90 * 3)
+            .map(|i| (i * 7 % 61 * 16 + i % 16) as u16)
+            .collect();
         let best = |f: &mut dyn FnMut()| {
             (0..15)
                 .map(|_| {
@@ -2935,13 +2957,33 @@ mod light_tests {
 
     #[test]
     fn a_light_drawn_up_keeps_a_level_and_its_points() {
-        let flat = vec![37u8; 5 * 3 * 3];
-        assert!(drawn_up(&flat, 5, 3, 40, 20).iter().all(|&v| v == 37));
-        let levels = noise(5 * 3 * 3, 9);
+        for level in [0u16, 37, 255] {
+            let flat = vec![level * 16; 5 * 3 * 3];
+            let up = drawn_up(&flat, 5, 3, 40, 20);
+            assert!(up.iter().all(|&v| u16::from(v) == level), "{level}");
+        }
+        // points of whole levels: the corners' pixels are their points (beyond the first and
+        // last, as they are; a frame that ends within its last block ends before its last point)
+        let whole = noise(5 * 3 * 3, 9);
+        let levels: Vec<u16> = whole.iter().map(|&v| u16::from(v) * 16).collect();
         let up = drawn_up(&levels, 5, 3, 40, 24);
-        // the corners' pixels are their points (beyond the first and last, as they are; a
-        // frame that ends within its last block ends before its last point)
-        assert_eq!(&up[..3], &levels[..3]);
-        assert_eq!(&up[up.len() - 3..], &levels[levels.len() - 3..]);
+        assert_eq!(&up[..3], &whole[..3]);
+        assert_eq!(&up[up.len() - 3..], &whole[whole.len() - 3..]);
+        // a quarter of a level above 20: a quarter of the pixels of each four by four at 21,
+        // where the pattern has them, frame after frame
+        let quarter = vec![20 * 16 + 4; 5 * 3 * 3];
+        let up = drawn_up(&quarter, 5, 3, 40, 24);
+        for y in 0..24 {
+            for x in 0..40 {
+                let want = if DITHER[y % 4][x % 4] >= 12 { 21 } else { 20 };
+                assert!(
+                    up[(y * 40 + x) * 3..][..3].iter().all(|&v| v == want),
+                    "{x} {y}"
+                );
+            }
+        }
+        // the highest level (4080) at the most weight: no sixteen-bit lane runs over
+        let top = vec![4080u16; 5 * 3 * 3];
+        assert!(drawn_up(&top, 5, 3, 40, 24).iter().all(|&v| v == 255));
     }
 }

@@ -1,9 +1,11 @@
 """The light field under a theme in Rust (rust/render/src/field.rs) as the Python app's
-render/field.py made it, to the bit: its levels at an eighth of the panel and the picture drawn
-up, for panels of every size where they stand in canvases of one to three panels, at moments
-over hours and under every load; and frames over it, step after step. What lp-check answers is
-checked against what the Python app answered (golden.py); that the field runs on from one panel
-to the next is field.rs's own test."""
+render/field.py made it, but finer: its levels at an eighth of the panel (in sixteenths of a
+level, where Python made them whole) and the picture drawn up (through a dither, where Python
+rounded each pixel), for panels of every size where they stand in canvases of one to three
+panels, at moments over hours and under every load; and frames over it, step after step. What
+lp-check answers is checked against what it answered when the light was made so, which with
+whole levels and no dither was what the Python app answered (golden.py); that the field runs on
+from one panel to the next, and the dither's own sums, are field.rs's own tests."""
 
 from __future__ import annotations
 
@@ -80,7 +82,7 @@ def test_the_light_field_as_python_makes_it() -> None:
     assert {c["look"] for c in cases} == set(LOOKS)
     for case, answer in zip(cases, got, strict=True):
         fw, fh, data = answer["small"]
-        assert len(base64.b64decode(data)) == fw * fh * 3, case
+        assert len(base64.b64decode(data)) == fw * fh * 3 * 2, case  # (two bytes a level)
         assert ("sha256" in answer["field"]) == (case not in small), case
     assert len(got) == len(cases) and len(small) > 20
 
@@ -210,6 +212,8 @@ def _steps(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if "unported" not in step]  # fmt: skip
 
 
+# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
+@pytest.mark.live("win32")
 def test_frames_over_the_light_as_python_lays_them(tmp_path: Path) -> None:
     # (themes of cards and texts over a light field, drifting or not, following the load or
     # not: each frame to the bit, its boxes, whether it moves on and when it is due again (the
@@ -233,6 +237,8 @@ def test_frames_over_the_light_as_python_lays_them(tmp_path: Path) -> None:
     assert len(made) > 300 and due > 100 and lit > 150, (len(made), due, lit)
 
 
+# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
+@pytest.mark.live("win32")
 def test_lumen_over_the_light_on_both_panels_as_python_lays_it(tmp_path: Path) -> None:
     # (Lumen on the 12.3" and its companion on end beside it, as the person's two panels stand,
     # each its part of one light; the demo's readings, the loads busy, idle or rising: within a
@@ -255,6 +261,8 @@ def test_lumen_over_the_light_on_both_panels_as_python_lays_it(tmp_path: Path) -
     assert len(_steps(_moving(cases))) >= 12
 
 
+# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
+@pytest.mark.live("win32")
 def test_frames_of_layers_over_the_light_as_python_hands_them_out(tmp_path: Path) -> None:
     # (the same frames as a panel's engine gets them: as their layers over the light where the
     # engine draws the light up and takes every piece as it is, else composed here; each, made

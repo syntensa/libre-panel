@@ -3464,8 +3464,8 @@ fn run(case: &Value) -> Result<Value, String> {
         "field" => {
             // render/field.py's small and field: the light field of the look "look" on a panel
             // of "size" standing at "own" in the canvas "whole" (millimetres, each a double's
-            // bits), at "t" under "load" (bits too), on "base" (RGB): its levels at an eighth,
-            // and drawn up ("digest": the drawn-up picture's SHA-256 alone)
+            // bits), at "t" under "load" (bits too), on "base" (RGB): its levels at an eighth
+            // (in sixteenths), and drawn up ("digest": the drawn-up picture's SHA-256 alone)
             let bits = |v: &Value| {
                 f64::from_bits(u64::from_str_radix(v.as_str().unwrap_or("0"), 16).unwrap_or(0))
             };
@@ -3481,6 +3481,8 @@ fn run(case: &Value) -> Result<Value, String> {
             let (fw, fh, levels) = lp_render::field::small(size, own, whole, t, load, pools, base);
             let drawn = lp_render::field::field(size, own, whole, t, load, pools, base)
                 .map_err(|e| e.to_string())?;
+            // (the levels in sixteenths, two bytes each, little-endian)
+            let levels: Vec<u8> = levels.iter().flat_map(|v| v.to_le_bytes()).collect();
             json!({
                 "small": [fw, fh, STANDARD.encode(&levels)],
                 "field": image_answer(&drawn, case["digest"].as_bool() == Some(true)),

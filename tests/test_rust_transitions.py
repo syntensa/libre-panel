@@ -558,6 +558,8 @@ SCENARIOS = [_entrance_at_its_turns, _entrance_on_another_size, _every_one_at_it
                        21)]  # fmt: skip
 
 
+# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
+@pytest.mark.live("win32")
 def test_transitions_as_python_draws_them(tmp_path: Path) -> None:
     frames = _compare(tmp_path, 0x7AA5, 120, scenarios=SCENARIOS)
     assert frames > 900, frames

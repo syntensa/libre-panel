@@ -1,8 +1,15 @@
 //! render/field.py: a light field under a theme, soft pools of light that drift slowly over the
 //! panels that stand together, as one; each panel shows its part of it, where it stands (in
 //! millimetres). Made at an eighth of the panel's pixels, a point in the middle of each block
-//! of 8 by 8, and drawn up between them in whole numbers ([`drawn_up`]), the same numbers as
-//! Python's: the C library's exp, sin and cos, the products and sums in its order.
+//! of 8 by 8 (the C library's exp, sin and cos, the products and sums in Python's order), its
+//! levels in sixteenths, and drawn up between them in whole numbers ([`drawn_up`]), each pixel
+//! made a level of 0 to 255 only at the end, through a dither of four by four.
+//!
+//! The light is faint (a few dozen levels across a panel at rest): made whole levels at once,
+//! as render/field.py made them, each step of a level stood out as an edge across the panel, its
+//! points' rounding in steps of eight pixels, and more so through the panel's video. In
+//! sixteenths, with an ordered dither (the same pattern in every frame, so that a frame that
+//! does not change stays the same to the bit), a step is a mix of the levels on either side.
 
 use std::f64::consts::PI;
 
@@ -10,6 +17,11 @@ use lp_pixels::{Image, Mode};
 
 /// The panel's pixels a point of the field stands for, across and down.
 pub const STEP: usize = 8;
+/// A point's level in parts of a level (sixteenths: 0 to 4080).
+pub const FINE: u16 = 16;
+/// The dither's pattern (Bayer's, four by four): each pixel made a level from its exact one
+/// plus (k + 1/2) / 16 of a level, k as it lies in the pattern (row by row: y % 4, x % 4).
+pub const DITHER: [[u32; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 /// Fields a second (the panel's frames between are the same: the encoder skips them).
 pub const RATE: f64 = 6.25;
 
@@ -131,7 +143,8 @@ pub fn stepped(t: f64) -> f64 {
     (t * RATE).floor() / RATE
 }
 
-/// small: the field at an eighth of the panel (`size` its pixels) as levels, RGB row by row:
+/// small: the field at an eighth of the panel (`size` its pixels) as levels in sixteenths
+/// ([`FINE`]), RGB row by row:
 /// `own` where the panel stands and `whole` the canvas of all the panels standing together
 /// (millimetres), at `t` (seconds) under `load` (0 to 1), its light on `base` (the theme's
 /// background colour); its width and height first. Each point in the middle of its block of
@@ -144,7 +157,7 @@ pub fn small(
     load: f64,
     pools: &[Pool],
     base: [u8; 3],
-) -> (usize, usize, Vec<u8>) {
+) -> (usize, usize, Vec<u16>) {
     let load = load.clamp(0.0, 1.0);
     let (fw, fh) = (size.0.div_ceil(STEP), size.1.div_ceil(STEP));
     let half = STEP as f64 / 2.0;
@@ -189,9 +202,10 @@ pub fn small(
             }
         }
     }
+    let fine = f64::from(FINE);
     let levels = acc
         .iter()
-        .map(|&v| (v + 0.5).floor().clamp(0.0, 255.0) as u8)
+        .map(|&v| (v * fine + 0.5).floor().clamp(0.0, 255.0 * fine) as u16)
         .collect();
     (fw, fh, levels)
 }
@@ -226,11 +240,24 @@ fn between(n: usize, points: usize) -> Vec<(usize, usize, u16)> {
         .collect()
 }
 
-/// drawn_up: the field's levels (`fw` x `fh`, RGB) drawn up to `size` as render/field.py's
-/// drawn_up and the engine's: each pixel between the four points nearest its middle, weighted
-/// in sixteenths each way, the sum rounded once; beyond the first and the last points, as they
-/// are.
-pub fn drawn_up(levels: &[u8], fw: usize, fh: usize, size: (usize, usize)) -> Vec<u8> {
+/// The dither's thresholds for the rows of a frame `w` pixels wide (RGB), four of them (by the
+/// row's place in the pattern, y % 4): (k + 1/2) / 16 of a level in 256ths, k as [`DITHER`]
+/// has it at the pixel's place across.
+pub fn thresholds(w: usize) -> [Vec<u16>; 4] {
+    std::array::from_fn(|row| {
+        (0..w)
+            .flat_map(|x| [(DITHER[row][x % 4] * 16 + 8) as u16; 3])
+            .collect()
+    })
+}
+
+/// drawn_up: the field's levels in sixteenths (`fw` x `fh`, RGB) drawn up to `size` as the
+/// engine draws them up, to the bit: each pixel between the four points nearest its middle,
+/// weighted in sixteenths each way (across first, in sixteenths of a level, then down, in
+/// 256ths), and made a level once, through the dither ([`DITHER`]); beyond the first and the
+/// last points, as they are. A whole level stays that level everywhere (black stays black), and
+/// over four by four pixels the levels make the exact one.
+pub fn drawn_up(levels: &[u16], fw: usize, fh: usize, size: (usize, usize)) -> Vec<u8> {
     let (w, h) = size;
     let taps = between(w, fw);
     let across: Vec<Vec<u16>> = levels
@@ -240,18 +267,26 @@ pub fn drawn_up(levels: &[u8], fw: usize, fh: usize, size: (usize, usize)) -> Ve
             let mut out = Vec::with_capacity(w * 3);
             for &(a, b, f) in &taps {
                 for c in 0..3 {
-                    let (va, vb) = (u16::from(row[a * 3 + c]), u16::from(row[b * 3 + c]));
-                    out.push(va * (16 - f) + vb * f);
+                    let (va, vb) = (u32::from(row[a * 3 + c]), u32::from(row[b * 3 + c]));
+                    out.push(((va * u32::from(16 - f) + vb * u32::from(f) + 8) >> 4) as u16);
                 }
             }
             out
         })
         .collect();
+    let thresholds = thresholds(w);
     let mut out = vec![0u8; w * h * 3];
-    for ((a, b, f), line) in between(h, fh).into_iter().zip(out.chunks_exact_mut(w * 3)) {
+    let rows = between(h, fh).into_iter().zip(out.chunks_exact_mut(w * 3));
+    for (y, ((a, b, f), line)) in rows.enumerate() {
         let (first, second, g) = (&across[a], &across[b], 16 - f);
-        for ((o, &u), &v) in line.iter_mut().zip(first).zip(second) {
-            *o = ((u * g + v * f + 128) >> 8) as u8;
+        // (at most 4080 * 16 + 248: sixteen bits)
+        for (((o, &u), &v), &k) in line
+            .iter_mut()
+            .zip(first)
+            .zip(second)
+            .zip(&thresholds[y % 4])
+        {
+            *o = ((u * g + v * f + k) >> 8) as u8;
         }
     }
     out
@@ -304,7 +339,8 @@ pub struct LightKey {
 /// RGB) and drawn up to the frame (made the first time it is asked for, where the frame is
 /// composed here: the engine draws it up itself).
 pub struct Light {
-    pub small: Vec<u8>,
+    /// its points' levels in sixteenths ([`FINE`])
+    pub small: Vec<u16>,
     pub fw: usize,
     pub fh: usize,
     pub size: (usize, usize),
@@ -623,6 +659,47 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_level_stays_that_level_and_a_part_of_one_is_a_mix_of_its_neighbours() {
+        let (fw, fh, size) = (5, 3, (40, 24));
+        // a whole level everywhere: that level in every pixel (black stays black)
+        for level in [0u16, 37, 255] {
+            let flat = vec![level * FINE; fw * fh * 3];
+            let up = drawn_up(&flat, fw, fh, size);
+            assert!(up.iter().all(|&v| u16::from(v) == level), "{level}");
+        }
+        // a quarter of a level above 20: in each four by four pixels, four at 21
+        let quarter = vec![20 * FINE + FINE / 4; fw * fh * 3];
+        let up = drawn_up(&quarter, fw, fh, size);
+        assert!(up.iter().all(|&v| v == 20 || v == 21));
+        for (by, bx) in (0..6).flat_map(|by| (0..10).map(move |bx| (by, bx))) {
+            let at = |y: usize, x: usize| up[((by * 4 + y) * 40 + bx * 4 + x) * 3];
+            let lit = (0..4)
+                .flat_map(|y| (0..4).map(move |x| (y, x)))
+                .filter(|&(y, x)| at(y, x) == 21)
+                .count();
+            assert_eq!(lit, 4, "{by} {bx}");
+        }
+        // the same light, the same pixels: the pattern stays where it is, frame after frame
+        assert_eq!(up, drawn_up(&quarter, fw, fh, size));
+    }
+
+    #[test]
+    fn a_step_of_a_level_is_no_edge_but_a_mix() {
+        // from 20 to 21 over a row of points: the pixels between mix the two, more and more
+        let (fw, fh, size) = (6, 1, (48, 4));
+        let levels: Vec<u16> = (0..fw)
+            .flat_map(|i| [20 * FINE + (i as u16) * FINE / 5; 3])
+            .collect();
+        let up = drawn_up(&levels, fw, fh, size);
+        let lit = |x0: usize| (x0..x0 + 8).filter(|&x| up[x * 3] == 21).count();
+        let mixes: Vec<usize> = (0..6).map(|i| lit(i * 8)).collect();
+        assert!(mixes.windows(2).all(|w| w[0] <= w[1]), "{mixes:?}");
+        assert!(
+            mixes[0] < 8 && mixes[5] > 0 && mixes.iter().filter(|&&n| n > 0 && n < 8).count() >= 3
+        );
     }
 
     #[test]

@@ -21,8 +21,10 @@
 //! kind 8, a picture:  a the panel's block size, b its length: H.264 made elsewhere (ffmpeg's:
 //!                     a video from its file, the screen), sent as it is, at once
 //! a frame of layers (scene.rs), in a stream:
-//! kind 9, its ground: a 0 a colour (b 3: R, G, B) or 1 a picture of the stream's size (b its
-//!                     length: three bytes a pixel, row by row)
+//! kind 9, its ground: a 0 a colour (b 3: R, G, B), 1 a picture of the stream's size (b its
+//!                     length: three bytes a pixel, row by row) or 3 a light field (b its
+//!                     length: its points across and down (u32 each), then their levels in
+//!                     sixteenths, RGB row by row, u16 each: scene.rs's ground_light)
 //! kind 10, a layer:   a its number, b the length of what follows: x, y (i32), w, h and how it
 //!                     goes on (u32 each: 0 RGBA through its alpha, 1 RGB as it is, 2 RGB light
 //!                     added), then its pixels, row by row
@@ -160,12 +162,12 @@ pub enum Record {
         colour: Option<[u8; 3]>,
         picture: Vec<u8>,
     },
-    /// A light field for the ground (render/field.py): its levels at a fraction of the frame,
-    /// `w` x `h`, RGB row by row (kind 9, 2).
+    /// A light field for the ground (render/field.rs): its levels at a fraction of the frame,
+    /// `w` x `h`, RGB row by row, in sixteenths (kind 9, 3).
     Light {
         w: usize,
         h: usize,
-        levels: Vec<u8>,
+        levels: Vec<u16>,
     },
     Layer {
         id: u32,
@@ -518,18 +520,21 @@ pub fn read(input: &mut impl Read) -> io::Result<Option<Record>> {
                         picture,
                     }))
                 }
-                2 if (8..=MOST_LAYER).contains(&len) => {
+                3 if (8..=MOST_LAYER).contains(&len) => {
                     let data = bytes(input, len, "a light cut short")?;
                     let w = u32::from_le_bytes(data[..4].try_into().expect("four bytes")) as usize;
                     let h = u32::from_le_bytes(data[4..8].try_into().expect("four bytes")) as usize;
-                    if w.checked_mul(h).and_then(|n| n.checked_mul(3)) != Some(len - 8) {
+                    if w.checked_mul(h).and_then(|n| n.checked_mul(6)) != Some(len - 8) {
                         return Err(invalid("a light whose levels are not its size"));
                     }
-                    Ok(Some(Record::Light {
-                        w,
-                        h,
-                        levels: data[8..].to_vec(),
-                    }))
+                    let levels: Vec<u16> = data[8..]
+                        .chunks_exact(2)
+                        .map(|two| u16::from_le_bytes([two[0], two[1]]))
+                        .collect();
+                    if levels.iter().any(|&v| v > 255 * 16) {
+                        return Err(invalid("a light's level beyond 255"));
+                    }
+                    Ok(Some(Record::Light { w, h, levels }))
                 }
                 _ => Err(invalid("a ground of no kind known")),
             }
@@ -1088,6 +1093,32 @@ mod tests {
         h.extend(a.to_le_bytes());
         h.extend(b.to_le_bytes());
         h
+    }
+
+    #[test]
+    fn a_light_comes_as_its_points_in_sixteenths() {
+        let light = |levels: &[u16]| {
+            let mut data = head(9, 3, 8 + 2 * levels.len() as u32);
+            data.extend(2u32.to_le_bytes());
+            data.extend(1u32.to_le_bytes());
+            data.extend(levels.iter().flat_map(|v| v.to_le_bytes()));
+            data
+        };
+        let levels = [0, 16, 4080, 333, 1, 4079];
+        let data = light(&levels);
+        match read(&mut data.as_slice()).unwrap() {
+            Some(Record::Light { w, h, levels: got }) => {
+                assert_eq!((w, h, got.as_slice()), (2, 1, &levels[..]));
+            }
+            _ => panic!("not the light"),
+        }
+        // (a level beyond 255, and levels that are not its size: refused)
+        assert!(read(&mut light(&[0, 0, 0, 0, 0, 4081]).as_slice()).is_err());
+        assert!(read(&mut light(&[0, 0, 0]).as_slice()).is_err());
+        // (the light of before, a level a byte: no ground known now)
+        let mut old = head(9, 2, 8 + 6);
+        old.extend([2, 0, 0, 0, 1, 0, 0, 0, 1, 2, 3, 4, 5, 6]);
+        assert!(read(&mut old.as_slice()).is_err());
     }
 
     #[test]

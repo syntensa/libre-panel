@@ -474,12 +474,13 @@ pub struct Cut {
 pub enum Ground<'a> {
     Colour([u8; 3]),
     Picture(&'a Rc<Image>),
-    /// a light field (render/field.py's Light) the engine draws up: its points, `fw` x `fh`
-    /// (RGB, row by row), and what keeps it alive (the same light: the same Rc)
+    /// a light field (render/field.rs's Light) the engine draws up: its points, `fw` x `fh`
+    /// (RGB, row by row, in sixteenths of a level), and what keeps it alive (the same light:
+    /// the same Rc)
     Light {
         fw: u32,
         fh: u32,
-        levels: &'a [u8],
+        levels: &'a [u16],
         keep: Rc<dyn Any>,
     },
 }
@@ -545,8 +546,8 @@ pub struct SceneSender {
     rotors: Vec<((String, usize), u32)>,
     /// whether the engine cuts layers from pictures it keeps ("views"), grows a picture from
     /// one it keeps ("grown"), makes lit rings ("rings") and lit bars ("bars"), and lays layers
-    /// of a fan's pictures it makes itself ("laid", "fans"); draws a light field up and lays a
-    /// frame's layers in front of it ("lights")
+    /// of a fan's pictures it makes itself ("laid", "fans"); draws a light field up from its
+    /// points in sixteenths and lays a frame's layers in front of it ("light16")
     views: bool,
     grown: bool,
     makes_rings: bool,
@@ -600,13 +601,13 @@ impl SceneSender {
     }
 
     /// The same for an engine that draws a light field up and lays a frame's layers in front of
-    /// it (`lights`: GROUND records of kind 2).
+    /// it (`light16`: GROUND records of kind 3).
     pub fn with_lights(mut self, lights: bool) -> SceneSender {
         self.draws_lights = lights;
         self
     }
 
-    /// Whether the engine draws a light field up (GROUND records of kind 2).
+    /// Whether the engine draws a light field up (GROUND records of kind 3).
     pub fn lights(&self) -> bool {
         self.draws_lights
     }
@@ -1144,12 +1145,12 @@ impl SceneSender {
                     levels,
                     keep,
                 } => {
-                    // (a light the engine draws up from its points)
-                    let mut data = Vec::with_capacity(8 + levels.len());
+                    // (a light the engine draws up from its points: two bytes each)
+                    let mut data = Vec::with_capacity(8 + 2 * levels.len());
                     data.extend_from_slice(&fw.to_le_bytes());
                     data.extend_from_slice(&fh.to_le_bytes());
-                    data.extend_from_slice(levels);
-                    parts.push(head(GROUND, 2, data.len() as u32));
+                    data.extend(levels.iter().flat_map(|v| v.to_le_bytes()));
+                    parts.push(head(GROUND, 3, data.len() as u32));
                     self.bytes += data.len() as u64;
                     parts.push(data);
                     self.ground = Some((kept, Some(Rc::clone(keep))));
@@ -1411,10 +1412,11 @@ mod tests {
 
     #[test]
     fn a_light_goes_as_its_points_once_and_again_when_it_is_another() {
-        // (render/field.py's Light: its points at an eighth, which the engine draws up; kind 2,
-        // its width and height first; the same light, kept alive, is not sent again)
+        // (render/field.rs's Light: its points at an eighth in sixteenths, which the engine
+        // draws up; kind 3, its width and height first, two bytes a level; the same light,
+        // kept alive, is not sent again)
         let mut sender = SceneSender::new().with_lights(true);
-        let levels: Vec<u8> = (0..2 * 3 * 3).map(|i| i as u8).collect();
+        let levels: Vec<u16> = (0..2 * 3 * 3).map(|i| i * 200 + 1).collect();
         let keep: Rc<dyn Any> = Rc::new(1u8);
         let light = |keep: &Rc<dyn Any>| Ground::Light {
             fw: 2,
@@ -1423,9 +1425,9 @@ mod tests {
             keep: Rc::clone(keep),
         };
         let parts = sender.records(&light(&keep), vec![], 1, None, false);
-        assert_eq!(kinds(&parts), vec![(GROUND, 2, 8 + 18), (SCENE, 1, 0)]);
+        assert_eq!(kinds(&parts), vec![(GROUND, 3, 8 + 36), (SCENE, 1, 0)]);
         let mut want = vec![2, 0, 0, 0, 3, 0, 0, 0];
-        want.extend_from_slice(&levels);
+        want.extend(levels.iter().flat_map(|v| v.to_le_bytes()));
         assert_eq!(&parts[1], &want);
         let parts = sender.records(&light(&keep), vec![], 2, None, false);
         assert_eq!(kinds(&parts), vec![(SCENE, 2, 0)]);
@@ -1433,12 +1435,12 @@ mod tests {
         drop(keep);
         let other: Rc<dyn Any> = Rc::new(2u8);
         let parts = sender.records(&light(&other), vec![], 3, None, false);
-        assert_eq!(kinds(&parts), vec![(GROUND, 2, 26), (SCENE, 3, 0)]);
+        assert_eq!(kinds(&parts), vec![(GROUND, 3, 44), (SCENE, 3, 0)]);
         // a colour after it, and the light again
         let parts = sender.records(&Ground::Colour([1, 2, 3]), vec![], 4, None, false);
         assert_eq!(kinds(&parts), vec![(GROUND, 0, 3), (SCENE, 4, 0)]);
         let parts = sender.records(&light(&other), vec![], 5, None, false);
-        assert_eq!(kinds(&parts), vec![(GROUND, 2, 26), (SCENE, 5, 0)]);
+        assert_eq!(kinds(&parts), vec![(GROUND, 3, 44), (SCENE, 5, 0)]);
         assert!(sender.lights() && !SceneSender::new().lights());
     }
 

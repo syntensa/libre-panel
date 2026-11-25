@@ -471,10 +471,11 @@ fn main() -> ExitCode {
             // at each position and its ring it makes as sources (fan.rs); "masks", a source of a
             // mask and an ink, a text or a letter (scene.rs's masked); "shown", the frame of
             // layers it composed last, whole, for the app's picture of the panel (wire.rs's
-            // kind 28); "lights", a light field it draws up for the ground and lays a frame's
-            // layers in front of (scene.rs's ground_light, kind 9 with 2))
+            // kind 28); "light16", a light field it draws up for the ground from its points in
+            // sixteenths, through a dither, and lays a frame's layers in front of (scene.rs's
+            // ground_light, kind 9 with 3; "lights", before it, took whole levels))
             println!(
-                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, proven, fills, laid, grown, bars, fans, masks, shown, lights)",
+                "libre-panel-engine {} (x264 build {}; panel, scenes, rings, views, globes, cards, proven, fills, laid, grown, bars, fans, masks, shown, light16)",
                 env!("CARGO_PKG_VERSION"),
                 x264::build()
             );
