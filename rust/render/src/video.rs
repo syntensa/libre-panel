@@ -240,6 +240,93 @@ pub fn first_frame(
     Image::from_bytes(Mode::RGBA, w, h, out[..size].to_vec()).ok()
 }
 
+/// A video file as it is: its path, when it was last written and its size (another file at
+/// the path, or the same one written again, is another).
+type FileStamp = (std::path::PathBuf, std::time::SystemTime, u64);
+
+fn file_stamp(path: &Path) -> Option<FileStamp> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((path.to_path_buf(), meta.modified().ok()?, meta.len()))
+}
+
+/// What ffmpeg said of the videos, kept for the whole program: a renderer made for each picture
+/// (the editor's, the theme library's) asks ffmpeg once for each file, not each time.
+type InfoKey = (std::path::PathBuf, FileStamp);
+static INFOS: Mutex<VecDeque<(InfoKey, VideoInfo)>> = Mutex::new(VecDeque::new());
+const INFOS_KEPT: usize = 64;
+
+/// video_info, kept for the file as it is (only what ffmpeg read: a run that failed is asked
+/// again).
+pub fn video_info_kept(ffmpeg: &Path, path: &Path) -> Result<VideoInfo, String> {
+    let Some(stamp) = file_stamp(path) else {
+        return video_info(ffmpeg, path);
+    };
+    let key = (ffmpeg.to_path_buf(), stamp);
+    if let Some((_, info)) = held(&INFOS).iter().find(|(k, _)| *k == key) {
+        return Ok(*info);
+    }
+    let found = video_info(ffmpeg, path)?;
+    if found != VideoInfo::default() {
+        let mut kept = held(&INFOS);
+        if kept.len() >= INFOS_KEPT {
+            kept.pop_front();
+        }
+        kept.push_back((key, found));
+    }
+    Ok(found)
+}
+
+/// The first frames, kept for the whole program as video_info's are: at most FIRSTS_BYTES of
+/// them, the oldest going first.
+type FirstKey = (std::path::PathBuf, FileStamp, usize, usize, String, u64);
+static FIRSTS: Mutex<VecDeque<(FirstKey, Arc<Image>)>> = Mutex::new(VecDeque::new());
+const FIRSTS_BYTES: usize = 48 << 20;
+
+/// first_frame, kept for the file as it is (one ffmpeg could not make is asked for again).
+pub fn first_frame_kept(
+    ffmpeg: &Path,
+    path: &Path,
+    w: usize,
+    h: usize,
+    fit: &str,
+    start: f64,
+) -> Option<Arc<Image>> {
+    let Some(stamp) = file_stamp(path) else {
+        return first_frame(ffmpeg, path, w, h, fit, start).map(Arc::new);
+    };
+    let key = (
+        ffmpeg.to_path_buf(),
+        stamp,
+        w,
+        h,
+        fit.to_string(),
+        start.to_bits(),
+    );
+    if let Some((_, frame)) = held(&FIRSTS).iter().find(|(k, _)| *k == key) {
+        return Some(Arc::clone(frame));
+    }
+    let frame = Arc::new(first_frame(ffmpeg, path, w, h, fit, start)?);
+    let size = w * h * 4;
+    if size <= FIRSTS_BYTES {
+        let mut kept = held(&FIRSTS);
+        let mut total: usize = kept.iter().map(|(k, _)| k.2 * k.3 * 4).sum();
+        while total + size > FIRSTS_BYTES {
+            let Some(((_, _, ow, oh, _, _), _)) = kept.pop_front() else {
+                break;
+            };
+            total -= ow * oh * 4;
+        }
+        kept.push_back((key, Arc::clone(&frame)));
+    }
+    Some(frame)
+}
+
+fn held<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// A frame of a video as it came, and whether its video has no transparency anywhere (its
 /// first frame says: moving.solid), so it is laid without its alpha.
 #[derive(Clone, Debug)]

@@ -138,6 +138,16 @@ fn ffmpeg() -> Option<PathBuf> {
     lp_devices::h264::find_ffmpeg("").ok()
 }
 
+/// give_ffmpeg: a renderer told where ffmpeg is for the videos of its theme, the panel's and
+/// every picture's of a theme alike (the editor's, the library's), or why there is none: its
+/// videos are then left out, warned.
+pub fn give_ffmpeg(renderer: &mut lp_render::Renderer) {
+    match lp_devices::h264::find_ffmpeg("") {
+        Ok(path) => renderer.ffmpeg = Some(path),
+        Err(why) => renderer.no_ffmpeg = why,
+    }
+}
+
 /// has_ffmpeg: whether videos can play here.
 pub fn has_ffmpeg() -> bool {
     ffmpeg().is_some()

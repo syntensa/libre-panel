@@ -971,6 +971,76 @@ def test_a_theme_with_an_error_or_one_that_cannot_be_drawn_is_said_with_its_reas
     assert status.split()[1] == "500" and json.loads(body) == {"error": undrawn}, (status, body)
 
 
+@pytest.mark.parametrize("found", [True, False], ids=["ffmpeg", "no-ffmpeg"])
+def test_design_draws_a_theme_with_a_video_as_the_panel_shows_it(
+    tmp_path: Path, found: bool
+) -> None:
+    """Design's picture of a theme that plays a video (POST /api/render): the video's first
+    frame where ffmpeg is, as the panel shows it. In 0.9.5 the editor's pictures were told of
+    no ffmpeg, and Design said "not drawn: videos without ffmpeg" (issue 67). Where there is
+    none, the theme is drawn without its video, warned, as Python's renderer drew it."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    ffmpeg = shutil.which("ffmpeg")
+    if found and ffmpeg is None:
+        pytest.skip("ffmpeg is not installed")
+    folder = tmp_path / "themes" / "mine"
+    folder.mkdir(parents=True)
+    if ffmpeg:  # (a red second of video)
+        subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "color=c=red:s=64x64:d=1:r=10", "-pix_fmt", "yuv420p",
+                        str(folder / "clip.mp4")], check=True, timeout=60)  # fmt: skip
+    else:
+        (folder / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    theme: dict[str, Any] = {
+        "format": "libre-panel-theme/1", "name": "Mine",
+        "display": {"model": "turing-5", "orientation": "landscape", "width": 800,
+                    "height": 480},
+        "palette": {"bg": "#000000"}, "font": "builtin:Barlow-Medium",
+        "background": {"color": "@bg", "image": None},
+        "widgets": [{"id": "clip", "type": "image", "x": 0, "y": 0, "w": 64, "h": 64,
+                     "src": "clip.mp4"}],
+    }  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        'theme = "mine"\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        "[sensors]\nproviders = []\n",
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    if not found:  # (a PATH without ffmpeg; next to the program there is none either)
+        empty = tmp_path / "bin"
+        empty.mkdir()
+        env["PATH"] = str(empty)
+    with subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+            request = _post("/api/render", {"theme": theme, "base": "mine"}).decode()
+            request = request.replace("{host}", f"localhost:{port}").replace("{token}", token)
+            status, _, body = _asked(port, request.encode())
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            program.communicate(timeout=30)
+    assert status.split()[1] == "200", (status, body)
+    told = json.loads(body)
+    picture = Image.open(io.BytesIO(base64.b64decode(told["png"]))).convert("RGB")
+    red, green, blue = picture.getpixel((32, 32))
+    if found:
+        assert red > 200 and green < 60 and blue < 60, picture.getpixel((32, 32))
+        assert not [w for w in told["warnings"] if "ffmpeg" in w], told["warnings"]
+    else:
+        assert (red, green, blue) == (0, 0, 0)
+        assert [w for w in told["warnings"] if w.startswith("a video needs ffmpeg (")], told
+
+
 def test_a_theme_sent_to_the_panel_is_shown_on_it(tmp_path: Path) -> None:
     """Design → To the panel and Start's gallery (POST /api/pages with the page "normal" and a
     theme): config.toml names the theme and the running panel goes over to it, the first panel

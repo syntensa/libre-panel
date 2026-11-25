@@ -522,6 +522,7 @@ fn look(data: &[u8], model_id: &str, places: &Places, env: &Env) -> Result<Vec<u
     };
     let mut renderer = lp_render::Renderer::new(theme, env, options).map_err(|e| bad(e.0))?;
     crate::plugins::attach(&mut renderer);
+    crate::player::give_ffmpeg(&mut renderer);
     let utc = lp_py::zones::Zone::utc();
     let zone = lp_py::zones::local().unwrap_or(&utc);
     let mut snapshot = lp_services::demo::demo_snapshot(

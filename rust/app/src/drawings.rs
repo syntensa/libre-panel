@@ -424,6 +424,7 @@ pub fn render(
     };
     let mut renderer = Renderer::new(dressed, env, options).map_err(undrawn)?;
     crate::plugins::attach(&mut renderer);
+    crate::player::give_ffmpeg(&mut renderer);
     renderer.fan_choices = fan_choices(config);
     renderer.symbols = config.symbols.clone();
     renderer.switches = switches(&theme, config);
@@ -545,6 +546,7 @@ pub fn still_picture(theme: Theme, symbols: &str, env: &Env) -> Answer<Value> {
         dither: false,
     };
     let mut renderer = Renderer::new(theme, env, options).map_err(undrawn)?;
+    crate::player::give_ffmpeg(&mut renderer);
     renderer.symbols = symbols.to_string();
     let drawn = renderer.render(snapshot, lp_render::video::monotonic());
     renderer.close();

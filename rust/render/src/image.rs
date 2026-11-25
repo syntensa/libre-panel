@@ -154,9 +154,6 @@ const SLIDES_KEPT: std::time::Duration = std::time::Duration::from_secs(30);
 pub(crate) type PictureKey = (String, i64, i64, String, String);
 /// What an animation's frames are kept by: that and the widget's blur and radius.
 pub(crate) type AnimationKey = (String, i64, i64, String, String, i64, i64);
-/// Why Rust leaves a frame with a video to Python: it was told of no ffmpeg (the app finds it
-/// as devices/h264.find_ffmpeg does; without it, Python's warns and draws none).
-const NO_FFMPEG: &str = "videos without ffmpeg";
 /// What a video is played by (a feed of its own): the video, the widget's size and fit, its
 /// speed (a double's bits), its frames a second and whether its keyframes alone.
 pub(crate) type VideoKey = (String, usize, usize, String, u64, u32, bool);
@@ -702,17 +699,21 @@ impl Renderer {
         }
         let speed = speed_of(w.get("speed").unwrap_or(&Value::int(1))).map_err(Drawn::Failed)?;
         let length = if is_video(rel) {
-            // (a video's length as ffmpeg reads it from the file; none where it cannot tell)
-            let Some(ffmpeg) = self.ffmpeg.clone() else {
-                return Err(Drawn::Unported(NO_FFMPEG.into()));
-            };
+            // (a video's length as ffmpeg reads it from the file; none where it cannot tell, or
+            // where there is no ffmpeg)
             if rel.contains('\0') {
                 // (resolve_asset's ValueError, which _slide_seconds does not catch)
                 return Err(Drawn::Failed(Failed(lp_theme::model::NUL_IN_PATH.into())));
             }
             let root = self.theme.root.clone().unwrap_or_default();
             match lp_theme::model::resolve_asset(&root, &Value::from(rel)) {
-                Ok(path) => self.video_info(rel, &ffmpeg, &path)?.length.unwrap_or(0.0),
+                Ok(path) => match self.ffmpeg.clone() {
+                    Some(ffmpeg) => self.video_info(rel, &ffmpeg, &path)?.length.unwrap_or(0.0),
+                    None => {
+                        self.warn_no_ffmpeg();
+                        0.0
+                    }
+                },
                 Err(_) => 0.0,
             }
         } else {
@@ -880,6 +881,14 @@ impl Renderer {
         }
     }
 
+    /// _ffmpeg_path's warning where there is no ffmpeg: once (the warnings are each said once).
+    fn warn_no_ffmpeg(&self) {
+        self.warn(match self.no_ffmpeg.as_str() {
+            "" => "a video needs ffmpeg".to_string(),
+            why => format!("a video needs ffmpeg ({why})"),
+        });
+    }
+
     /// _video_info: what ffmpeg says of a video, kept by its name; Python's error where its
     /// reading raises (a turn too large).
     fn video_info(
@@ -891,7 +900,8 @@ impl Renderer {
         if let Some(&found) = self.video_infos.get(rel) {
             return Ok(found);
         }
-        let found = crate::video::video_info(ffmpeg, path).map_err(|e| Drawn::Failed(Failed(e)))?;
+        let found =
+            crate::video::video_info_kept(ffmpeg, path).map_err(|e| Drawn::Failed(Failed(e)))?;
         self.video_infos.insert(rel.to_string(), found);
         Ok(found)
     }
@@ -904,7 +914,8 @@ impl Renderer {
             return Drawn::Nothing;
         };
         let Some(ffmpeg) = self.ffmpeg.clone() else {
-            return Drawn::Unported(NO_FFMPEG.into());
+            self.warn_no_ffmpeg();
+            return Drawn::Nothing;
         };
         if rel.contains('\0') {
             // (resolve_asset's ValueError, which _draw_video does not catch)
@@ -1008,8 +1019,8 @@ impl Renderer {
             let poster = match kept {
                 Some(poster) => poster,
                 None => {
-                    let poster =
-                        crate::video::first_frame(&ffmpeg, &path, vw, vh, &fit, 0.0).map(Rc::new);
+                    let poster = crate::video::first_frame_kept(&ffmpeg, &path, vw, vh, &fit, 0.0)
+                        .map(|frame| Rc::new((*frame).clone()));
                     self.pictures
                         .borrow_mut()
                         .put(pkey, poster.clone(), vw * vh * 4);

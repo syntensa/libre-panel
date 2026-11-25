@@ -10,6 +10,14 @@
   `units` can be given to one field (`macos/+/memory/memory/percent = "%"`). Asked for in issue
   #54, for agents on a Mac and a Synology NAS.
 
+**Fixed**
+- **Videos in Design.** Design, the theme library and a shared theme's picture drew no theme
+  with a video and said "not drawn: videos without ffmpeg", although the panel played it
+  (issue #67): they never looked for ffmpeg, which the downloads carry. They find it as the
+  panel does now, and a video's first frame is read once, not again for each picture. Where
+  there is no ffmpeg at all, a theme shows without its videos, with the reason in the log, as
+  until 0.8 (0.9 did not draw such a theme at all).
+
 **Changed**
 - **The Thermalright Trofeo Vision 9.16" is supported**: it "worked perfectly right out of the
   box" with 0.9.5, its owner's report in issue #54.

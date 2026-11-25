@@ -335,8 +335,10 @@ pub struct Renderer {
     /// each list's levels with where their bars lie (their layer's info["bars"])
     level_bars: HashMap<String, (Rc<Piece>, Vec<list::Corners>)>,
     /// where ffmpeg is, for the videos (the app finds it as devices/h264.find_ffmpeg does);
-    /// None: Rust leaves a frame with a video to Python
+    /// None: none was found, and `no_ffmpeg` says why: a video is left out, warned, as Python's
+    /// renderer leaves it
     pub ffmpeg: Option<std::path::PathBuf>,
+    pub no_ffmpeg: String,
     /// a picture under the theme instead of its own background picture: the panel's part of
     /// one across all panels (arrangement.py), fitted to the theme's size (set_backdrop)
     backdrop: Option<Image>,
@@ -506,6 +508,7 @@ impl Renderer {
             bars_drawn: RefCell::new(None),
             level_bars: HashMap::new(),
             ffmpeg: None,
+            no_ffmpeg: String::new(),
             backdrop: None,
             video_fps: None,
             video_keys: false,

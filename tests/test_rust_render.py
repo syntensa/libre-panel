@@ -2603,11 +2603,14 @@ def test_a_picture_where_the_frame_s_time_has_no_timestamp_as_python_shows_it(
     assert drawn > 90 and refused == 5 * len(looks), (drawn, refused)
 
 
+# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
+@pytest.mark.live("win32")
 def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
     # (a video, and a slideshow whose turn is a video's: told of no ffmpeg (the app tells it
-    # where one is: tests/test_rust_video.py), Rust leaves them to Python, nor a file of a kind
-    # it does not know (a picture, a slideshow's: Pillow knows forty more), nor a slideshow with
-    # one where the turn is another's; an animated picture alone, a slideshow of one, of none
+    # where one is: tests/test_rust_video.py), the frame is drawn without it, warned, as
+    # Python's renderer draws it; Rust leaves to Python no file of a kind it does not know (a
+    # picture, a slideshow's: Pillow knows forty more), nor a slideshow with one where the
+    # turn is another's; an animated picture alone, a slideshow of one, of none
     # there, a slideshow with a picture that moves (its first turn a still's, an animated
     # one's), it draws, and a picture cut short (the widget's, a slideshow's, the
     # background's), one named with a NUL, one not there, an animation cut short whose first
@@ -2616,10 +2619,11 @@ def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
     from PIL import Image
 
     rng = random.Random(0x7E1D)
-    looks = [({"src": "clips/a.mp4"}, "videos without ffmpeg"),
+    no_ffmpeg = "a video needs ffmpeg"
+    looks = [({"src": "clips/a.mp4"}, no_ffmpeg),
              ({"src": "pics/a.png", "slides": "anim/run.gif"}, None),
              ({"src": "", "slides": "pics/b.png\nclips/*"}, None),
-             ({"src": "", "slides": "clips/*\npics/b.png"}, "videos without ffmpeg"),
+             ({"src": "", "slides": "clips/*\npics/b.png"}, no_ffmpeg),
              ({"src": "", "slides": "anim/wave.png\npics/c.png"}, None),
              ({"src": "anim/run.gif"}, None), ({"src": "", "slides": "anim/spin.webp"}, None),
              ({"src": "", "slides": "pics/*.gif"}, None), ({"src": "bad/half.png"}, None),
@@ -2659,6 +2663,9 @@ def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
         reasons.append(why)
     [ours] = run([{"op": "render_frame", "frames": cases, "fonts_dir": str(fonts.FONT_DIR)}])
     for n, (got, why) in enumerate(zip(ours["frames"], reasons, strict=True)):
+        if why == no_ffmpeg:  # (drawn, the video left out)
+            assert "sha256" in got and no_ffmpeg in got["warnings"], (n, got)
+            continue
         if why is not None:
             assert got.get("unported") == why, (n, got)
             continue
