@@ -6,8 +6,10 @@
 //! Fan" is `fan.dell.processor_fan`), where every fan and temperature of a PC is.
 //!
 //! It is asked every `update_s` seconds in a thread of its own; a PC without Dell Command |
-//! Monitor is said once and asked again only a minute later. A reading that does not come
-//! again keeps its last value for three times `update_s`, then it goes.
+//! Monitor is said once and asked again only a minute later. What it reads is said when it
+//! first answers and again when that changes (each reading's name, or why there is none: the
+//! sensors it gave and what they are), so that an owner finds the names in the log. A reading
+//! that does not come again keeps its last value for three times `update_s`, then it goes.
 
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -124,6 +126,41 @@ pub fn readings_from_rows(rows: &[Row]) -> Readings {
     out
 }
 
+/// gives: what a round read, for the log: each reading's name and label, or why there is none
+/// (no sensor at all, or those there are, with their type, units and reading: the first eight).
+pub fn gives(rows: &[Row], readings: &Readings) -> String {
+    if !readings.is_empty() {
+        let named: Vec<String> = (readings.iter())
+            .map(|(key, reading)| format!("{key} ({})", reading.label))
+            .collect();
+        return format!("dell: Dell Command | Monitor gives {}", named.join(", "));
+    }
+    if rows.is_empty() {
+        return "dell: Dell Command | Monitor answers, but with no sensor".into();
+    }
+    let n = |row: &Row, key: &str| number(row, key).map_or("none".to_string(), |v| v.to_string());
+    let seen: Vec<String> = (rows.iter().take(8))
+        .map(|row| {
+            let name = match text(row, "ElementName") {
+                name if name.is_empty() => text(row, "DeviceID"),
+                name => name,
+            };
+            format!(
+                "{name}: type {}, units {}, reading {}",
+                n(row, "SensorType"),
+                n(row, "BaseUnits"),
+                n(row, "CurrentReading")
+            )
+        })
+        .collect();
+    format!(
+        "dell: Dell Command | Monitor answers, but none of its {} sensors is a fan or a \
+         temperature with a reading ({})",
+        rows.len(),
+        seen.join("; ")
+    )
+}
+
 /// WMI on Windows: a query's rows in a namespace, each with the properties asked for.
 #[cfg(windows)]
 pub mod wmi {
@@ -209,6 +246,19 @@ pub mod wmi {
                         None,
                     )
                     .map_err(said)?;
+                // (the rows come through a proxy of their own: as the connection's, its calls
+                // made on this process's behalf, as a provider that acts for the caller needs
+                // them; where it is no proxy, there is nothing to set)
+                let _ = CoSetProxyBlanket(
+                    &found,
+                    AUTHN_WINNT,
+                    AUTHZ_NONE,
+                    PCWSTR::null(),
+                    RPC_C_AUTHN_LEVEL_CALL,
+                    RPC_C_IMP_LEVEL_IMPERSONATE,
+                    None,
+                    EOAC_NONE,
+                );
                 loop {
                     let mut one: [Option<IWbemClassObject>; 1] = [None];
                     let mut returned = 0u32;
@@ -301,6 +351,8 @@ fn run(shared: &Shared, every: Duration) {
     let mut connection = None;
     // said once, until it answers again
     let mut failed = false;
+    // the readings' names said last (what it reads is said again when they change)
+    let mut said: Option<Vec<String>> = None;
     loop {
         let found = fetch(&mut connection);
         let Ok(mut state) = shared.state.lock() else {
@@ -314,7 +366,13 @@ fn run(shared: &Shared, every: Duration) {
                         .notes
                         .push("dell: Dell Command | Monitor answers again".into());
                 }
-                state.got = Some((Instant::now(), readings_from_rows(&rows)));
+                let readings = readings_from_rows(&rows);
+                let names: Vec<String> = readings.keys().cloned().collect();
+                if said.as_ref() != Some(&names) {
+                    state.notes.push(gives(&rows, &readings));
+                    said = Some(names);
+                }
+                state.got = Some((Instant::now(), readings));
             }
             Err(why) => {
                 if !failed {
@@ -515,6 +573,46 @@ mod tests {
             ]
         );
         assert!(got.values().all(|r| r.device == "Dell"));
+    }
+
+    #[test]
+    fn what_it_reads_is_said_by_name_or_why_it_reads_nothing() {
+        let fan = row(&[
+            ("ElementName", text("Processor Fan")),
+            ("DeviceID", text("Root/MainSystemChassis/FanObj")),
+            ("SensorType", int(5)),
+            ("BaseUnits", int(19)),
+            ("CurrentReading", int(2345)),
+        ]);
+        let rows = [fan];
+        assert_eq!(
+            gives(&rows, &readings_from_rows(&rows)),
+            "dell: Dell Command | Monitor gives fan.dell.processor_fan (Processor Fan)"
+        );
+        assert_eq!(
+            gives(&[], &Readings::new()),
+            "dell: Dell Command | Monitor answers, but with no sensor"
+        );
+        // (sensors, but no fan or temperature with a reading among them: what they are)
+        let rows = [
+            row(&[
+                ("DeviceID", text("Root/MainSystemChassis/FanObj")),
+                ("SensorType", int(5)),
+                ("CurrentReading", Value::None),
+            ]),
+            row(&[
+                ("ElementName", text("CPU Voltage")),
+                ("SensorType", int(3)),
+                ("BaseUnits", int(5)),
+                ("CurrentReading", int(1100)),
+            ]),
+        ];
+        assert_eq!(
+            gives(&rows, &readings_from_rows(&rows)),
+            "dell: Dell Command | Monitor answers, but none of its 2 sensors is a fan or a \
+             temperature with a reading (Root/MainSystemChassis/FanObj: type 5, units none, \
+             reading none; CPU Voltage: type 3, units 5, reading 1100)"
+        );
     }
 
     #[test]

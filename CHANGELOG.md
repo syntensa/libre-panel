@@ -25,6 +25,12 @@
   a light heartbeat in between, never the same picture again and again.
 
 **Fixed**
+- **Dell's fans: what the source reads, in the log.** With *Dell fans* on, the log says what
+  Dell Command | Monitor gives, each reading by its name (`fan.dell.processor_fan`), and again
+  when that changes; or why it gives none: no sensor at all, or the sensors there are with what
+  they are. Until now it said nothing where Dell Command | Monitor answered without a fan, and
+  an owner had no way to find the names (issue #54). Its sensors are also asked the way Windows
+  wants for a program that acts on the caller's behalf, for the rows as for the connection.
 - **Videos in Design.** Design, the theme library and a shared theme's picture drew no theme
   with a video and said "not drawn: videos without ffmpeg", although the panel played it
   (issue #67): they never looked for ffmpeg, which the downloads carry. They find it as the
