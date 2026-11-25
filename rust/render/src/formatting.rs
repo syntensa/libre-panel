@@ -5,7 +5,8 @@
 //! (3d 5h), `{value:clock}` (3:07), `{value:gb}` (a size in GB from the reading's own unit),
 //! `{value:rate}` with `{value:rate_unit}` (519 and KB/s, from 1 MB/s 1.2 and MB/s),
 //! `{value:upper}` (a text in capitals), `{value:mb}` (an amount in MB from the reading's own
-//! unit) and `{value:count}` (a count said short: 987, 48.2k, 2.4M). Where the app says
+//! unit), `{value:count}` (a count said short: 987, 48.2k, 2.4M) and `{value:auto}` (the
+//! number as auto_format writes it, without the unit: 7.3, 83). Where the app says
 //! amounts of data in MB alone (`data_unit = "mb"`, lp_i18n::data_in_mb), `bytes` and `rate`
 //! say a count of bytes in MB too. Whether a format shows its value as a number (counts(),
 //! which the modules ask) is lp-theme's modules::counts.
@@ -184,15 +185,27 @@ pub fn auto_format(value: &Value, unit: &str) -> Result<String, FmtError> {
         "%" | "°C" | "°F" | "°" => return Ok(format!("{}{unit}", fmt(".0f")?)),
         _ => {}
     }
-    let x = py::float_of(value)?;
-    // (abs(value) < 10 and value != int(value): a float with a fraction, an int never)
-    let fraction = matches!(value, Value::Float(_)) && x.abs() < 10.0 && x != x.trunc();
-    let number = fmt(if fraction { ".1f" } else { ".0f" })?;
+    let number = auto_number(value)?;
     Ok(if unit.is_empty() {
         number
     } else {
         format!("{number} {unit}")
     })
+}
+
+/// auto_number: a reading's number as auto_format writes it, without its unit (`{value:auto}`):
+/// a float with a fraction under 10 with one decimal, any other number without; a text as it
+/// is, none as "--".
+fn auto_number(value: &Value) -> Result<String, FmtError> {
+    match value {
+        Value::Str(s) => return Ok(s.clone()),
+        Value::None | Value::Bool(_) => return Ok("--".into()),
+        _ => {}
+    }
+    let x = py::float_of(value)?;
+    // (abs(value) < 10 and value != int(value): a float with a fraction, an int never)
+    let fraction = matches!(value, Value::Float(_)) && x.abs() < 10.0 && x != x.trunc();
+    py::format(value, if fraction { ".1f" } else { ".0f" })
 }
 
 /// Whether a spec has four digits in a row (of any script): too large a width.
@@ -232,6 +245,7 @@ fn format_field(value: &Value, spec: &str, unit: &str) -> Result<String, FmtErro
         "upper" => Ok(lp_py::upper(&py::str_of(value))),
         "mb" => mb_of(value, unit),
         "count" => count_of(value),
+        "auto" => auto_number(value),
         "gb" => {
             let gb = py::float_of(value)? * size_of(unit) / (1024.0f64 * 1024.0 * 1024.0);
             Ok(fixed(gb, ".1f"))
@@ -327,6 +341,19 @@ fn made(fmt: &str, value: &Value, unit: &str, label: &str) -> Result<String, For
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_number_alone_as_libre_panel_writes_it() {
+        let auto = |v: Value, unit: &str| safe_format("{value:auto} {unit}", &v, unit, "").unwrap();
+        assert_eq!(auto(Value::Float(83.0), "%"), "83 %");
+        assert_eq!(auto(Value::Float(7.34), "GB"), "7.3 GB");
+        assert_eq!(auto(Value::Float(12.6), ""), "13 ");
+        assert_eq!(auto(Value::int(4107206656), "B"), "4107206656 B");
+        assert_eq!(auto(Value::Str("ok".into()), ""), "ok ");
+        assert_eq!(auto(Value::None, ""), "-- ");
+        // (as auto_format writes the number of a reading in a unit of none of its own)
+        assert_eq!(auto_format(&Value::Float(7.34), "V").unwrap(), "7.3 V");
+    }
 
     #[test]
     fn amounts_of_data_in_mb_alone_and_as_they_fit() {

@@ -883,6 +883,7 @@
     "it is outside your user folder, where other users may be allowed to write": "ユーザーフォルダーの外にあり、他のユーザーが書き込める可能性があります",
     "one per line, from the theme folder; \"assets/*.jpg\" takes them all; several take turns": "1行に1つ、テーマフォルダーからのパス。「assets/*.jpg」ですべて対象になり、複数ある場合は順番に表示されます",
     "one per line: a sensor (\"cpu.temp\"), a pattern (\"temp.*\") and a name if you like (\"cpu.temp = CPU\"); empty: as shown": "1行に1つ：センサー（「cpu.temp」）、パターン（「temp.*」）、必要なら名前（「cpu.temp = CPU」）。空欄の場合：そのまま表示",
+    "one per line: a sensor (\"cpu.load\") and a name if you like (\"cpu.load = Load\"), as many as there is room for; empty: as shown": "1行に1つ：センサー（「cpu.load」）、必要なら名前（「cpu.load = 負荷」）。入るだけ表示。空欄の場合：そのまま表示",
     "one per line: a time zone and a name if you like (\"Asia/Tokyo = Tokyo\"); empty: as shown": "1行に1つ：タイムゾーンと、必要なら名前（「Asia/Tokyo = 東京」）。空欄の場合：そのまま表示",
     "other users may write to it": "他のユーザーが書き込める可能性があります",
     "options is a table": "optionsはテーブルです",

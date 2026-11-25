@@ -982,6 +982,103 @@ fn build_fan(b: &mut Build, src: &Source) -> Result<()> {
 /// A reading in a row: (sensor, format, name).
 type Row = (String, String, String);
 
+/// The format of a row of one's own whose reading Libre Panel shows nowhere of its own: the
+/// number as it comes, and the reading's own unit beside it.
+const OWN_FORMAT: &str = "{value:auto} {unit}";
+
+/// The format and the name Libre Panel gives a reading where it shows it somewhere of its own:
+/// under a ring, as a part's main reading or among its details.
+fn known_row(sensor: &str) -> Option<(String, String)> {
+    for role in ["cpu", "gpu", "mem"] {
+        let rows = rows_of(role).unwrap_or_default();
+        if let Some((_, fmt, name)) = rows.into_iter().find(|(s, _, _)| s == sensor) {
+            return Some((fmt, name));
+        }
+    }
+    for (_, src) in super::sources() {
+        if src.load == sensor {
+            return Some((src.fmt.to_string(), src.label.clone()));
+        }
+        if let Some((_, fmt, name)) = src.details.iter().find(|(s, _, _)| *s == sensor) {
+            return Some((fmt.to_string(), name.clone()));
+        }
+    }
+    None
+}
+
+/// The rows under a ring that `items` names, a reading a line and a name if one likes
+/// ("cpu.load = Load"), as a list's lines are read: each in the format Libre Panel shows it in
+/// (OWN_FORMAT where it shows it nowhere), named as given, else as Libre Panel names it, else
+/// by the last part of its key. A pattern ("temp.*") is no reading a row can show, and what
+/// is no reading's key (one has a dot, and no slash or space) was another kind's: a time zone
+/// a world clock had, a card a slot had, where the module was one of those.
+pub fn own_rows(items: &str) -> Vec<Row> {
+    let mut rows = Vec::new();
+    for line in lp_py::splitlines(items) {
+        let line = lp_py::strip(line);
+        if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
+            continue;
+        }
+        let (sensor, name) = line.split_once('=').unwrap_or((line, ""));
+        let (sensor, name) = (lp_py::strip(sensor), lp_py::strip(name));
+        let key = sensor.contains('.') && !sensor.contains(|c: char| c == '/' || c.is_whitespace());
+        if !key || sensor.contains(['*', '?', '[']) {
+            continue;
+        }
+        let known = known_row(sensor);
+        let fmt = known
+            .as_ref()
+            .map_or_else(|| OWN_FORMAT.to_string(), |(fmt, _)| fmt.clone());
+        let name = match (name, known) {
+            ("", Some((_, known))) => known,
+            ("", None) => sensor
+                .rsplit('.')
+                .next()
+                .unwrap_or(sensor)
+                .replace('_', " "),
+            (name, _) => name.to_string(),
+        };
+        rows.push((sensor.to_string(), fmt, name));
+    }
+    rows
+}
+
+/// The rows a ring of `source` has unless one names one's own: as the editor offers them to
+/// begin from ("cpu.temp = Temp" a line).
+pub fn shown_rows(source: &str) -> String {
+    let rows = rows_of(source).unwrap_or_else(|| {
+        super::sources()
+            .into_iter()
+            .find(|(k, _)| *k == source)
+            .map(|(_, src)| {
+                src.details
+                    .iter()
+                    .map(|(s, f, n)| (s.to_string(), f.to_string(), n.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    let lines: Vec<String> = rows.iter().map(|(s, _, n)| format!("{s} = {n}")).collect();
+    lines.join("\n")
+}
+
+/// A row's number and what follows it: the unit in its format, or the reading's own
+/// (`{unit}`: `Unit::Live`), or none.
+enum Unit {
+    Own(String),
+    Live,
+}
+
+fn parts_of(fmt: &str) -> (String, Unit) {
+    match fmt.strip_suffix(" {unit}") {
+        Some(number) => (number.to_string(), Unit::Live),
+        None => {
+            let (number, unit) = unit_of(fmt);
+            (number, Unit::Own(unit))
+        }
+    }
+}
+
 /// _rows: the readings under a ring, as the Studio screen shows them; a source that is not
 /// here shows the rows its module has.
 fn rows_of(role: &str) -> Option<Vec<Row>> {
@@ -1058,12 +1155,17 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
     }
     let color = b.tint(src.role);
     b.card(true)?;
-    let rows: Vec<Row> = rows_of(src.role).unwrap_or_else(|| {
-        src.details
-            .iter()
-            .map(|(s, f, n)| (s.to_string(), f.to_string(), n.clone()))
-            .collect()
-    });
+    // (the person's own, where `items` names them; else the part's)
+    let own = own_rows(&b.ms("items"));
+    let rows: Vec<Row> = match own.is_empty() {
+        false => own,
+        true => rows_of(src.role).unwrap_or_else(|| {
+            src.details
+                .iter()
+                .map(|(s, f, n)| (s.to_string(), f.to_string(), n.clone()))
+                .collect()
+        }),
+    };
     let (ix, iy, iw, ih) = (b.ix as f64, b.iy as f64, b.iw as f64, b.ih as f64);
     let ts = b.ts as f64;
     let wide = b.aspect() >= 1.3;
@@ -1216,7 +1318,9 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
     // a reading in a row: its name, its number (right-aligned in a column of the widest)
     // and its unit; the row as wide as the widest of each, smaller where that is not room
     let names: Vec<String> = shown.iter().map(|(_, _, n)| lp_py::upper(n)).collect();
-    let parts: Vec<(String, String)> = shown.iter().map(|(_, f, _)| unit_of(f)).collect();
+    let parts: Vec<(String, Unit)> = shown.iter().map(|(_, f, _)| parts_of(f)).collect();
+    // (a reading's own unit is not known before it comes: as wide as the widest of the rings')
+    let live = "MHz";
     let gap = 8.0 * u;
     let measure = |b: &mut Build, k: f64| -> Result<(f64, f64, f64)> {
         let spacing = 1.max(round(label * k * 0.14));
@@ -1229,10 +1333,18 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
         }
         let mut number_w = Vec::new();
         for (n, s) in &parts {
+            let s = match s {
+                Unit::Own(s) => s.as_str(),
+                Unit::Live => "",
+            };
             number_w.push(b.width_per_size(&display_font, sample(n, s))? * value * k);
         }
         let mut unit_w = Vec::new();
         for (_, s) in &parts {
+            let s = match s {
+                Unit::Own(s) => s.as_str(),
+                Unit::Live => live,
+            };
             unit_w.push(b.width_per_size(&text_font, s)? * note * k);
         }
         Ok((widest(names_w), widest(number_w), widest(unit_w)))
@@ -1299,19 +1411,40 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
                 ("color_rules", rules),
             ],
         )?;
-        if !suffix.is_empty() {
-            let mut fields: Fields = vec![
-                ("text", suffix.clone().into()),
-                ("x", round(edge + 5.0 * u * k).into()),
-            ];
-            let kw: Fields = vec![
-                ("color", b.c("text3").into()),
-                ("max_width", round(unit_w * 1.2).into()),
-                ("tabular", false.into()),
-            ];
-            let cap = base - CAP * note_k;
-            fields.extend(super::weather::text(b, note_k, cap, "text_font", kw));
-            b.add("text", &format!("r{i}-unit"), fields)?;
+        match suffix {
+            Unit::Own(suffix) if !suffix.is_empty() => {
+                let mut fields: Fields = vec![
+                    ("text", suffix.clone().into()),
+                    ("x", round(edge + 5.0 * u * k).into()),
+                ];
+                let kw: Fields = vec![
+                    ("color", b.c("text3").into()),
+                    ("max_width", round(unit_w * 1.2).into()),
+                    ("tabular", false.into()),
+                ];
+                let cap = base - CAP * note_k;
+                fields.extend(super::weather::text(b, note_k, cap, "text_font", kw));
+                b.add("text", &format!("r{i}-unit"), fields)?;
+            }
+            Unit::Own(_) => {}
+            Unit::Live => {
+                // (the reading's own unit, as it comes with it)
+                let color = Some(b.c("text3"));
+                b.value(
+                    &format!("r{i}-unit"),
+                    sensor,
+                    "{unit}",
+                    edge + 5.0 * u * k,
+                    base - CAP * note_k,
+                    note_k,
+                    color,
+                    "left",
+                    unit_w * 1.2,
+                    "text_font",
+                    false,
+                    Vec::new(),
+                )?;
+            }
         }
         let (own, label_id) = (format!("r{i}"), format!("r{i}-label"));
         for widget in &mut b.out[first..] {

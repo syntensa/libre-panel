@@ -702,7 +702,11 @@ are flat thin lines in their colour: a card has no bevel and no trough.
   goes warm and hot. The RAM's rows are what is free (`mem.free`), the modules'
   temperature (`mem.temp`) and the speed they run at (`mem.speed`, in MT/s); a
   reading the PC cannot give stays on show as `--` with its name, as in the Studio,
-  where the other parts leave such a row out. `source` `fan` makes it a fan: the rotor of the
+  where the other parts leave such a row out. `items` names the rows yourself, a reading a
+  line and a name if you like (`cpu.load = Load`, `mqtt.nas.storage.volumes.0.used = Vol 1`):
+  a reading Libre Panel shows somewhere of its own keeps its format and name from there
+  (`cpu.load` 38 %, `gpu.fan` in RPM), any other shows its number with the unit it comes with
+  (`{value:auto} {unit}`); in Design it is the module's *Readings*. `source` `fan` makes it a fan: the rotor of the
   [`fan` widget](#fans) in its ring, which turns with the speed, with the fan's
   name and its speed in RPM beside it or under it; `sensor` names the fan
   (`fan.cpu`; default `gpu.fan`), `color` sets its colour.
@@ -948,6 +952,7 @@ kept.
 | `{value:rate}` and `{value:rate_unit}` | `519` and `KB/s`, from 1 MB/s `1.2` and `MB/s` (a data rate: the number and its unit apart, so each can have its own font) |
 | `{value:count}` | `987`, `48.2k`, `2.4M` (a count said short, the same in every language: in thousands and millions from a thousand on, a decimal below 100) |
 | `{value:upper}` | `ROUND REPORT` (a text in capitals; `{label:upper}` does so for a reading's name) |
+| `{value:auto} {unit}` | `83 %`, `7.3 GB` (the number as Libre Panel writes it by itself: a decimal below 10 where there is one, else none) |
 | `{label}: {value:.0f}` | `CPU load: 38` |
 
 Where the app says amounts of data in MB alone (`data_unit = "mb"`, Settings → Panel →

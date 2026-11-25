@@ -883,6 +883,7 @@
     "it is outside your user folder, where other users may be allowed to write": "它位于你的用户文件夹之外，其他用户可能被允许写入",
     "one per line, from the theme folder; \"assets/*.jpg\" takes them all; several take turns": "每行一个，来自主题文件夹；“assets/*.jpg”会取用全部；多个会轮流显示",
     "one per line: a sensor (\"cpu.temp\"), a pattern (\"temp.*\") and a name if you like (\"cpu.temp = CPU\"); empty: as shown": "每行一个：传感器（“cpu.temp”）、模式（“temp.*”），如需要也可加名称（“cpu.temp = CPU”）；留空：按原样显示",
+    "one per line: a sensor (\"cpu.load\") and a name if you like (\"cpu.load = Load\"), as many as there is room for; empty: as shown": "每行一个：传感器（“cpu.load”），如需要也可加名称（“cpu.load = 负载”），能放下几个就显示几个；留空：按原样显示",
     "one per line: a time zone and a name if you like (\"Asia/Tokyo = Tokyo\"); empty: as shown": "每行一个：时区和可选名称（“Asia/Tokyo = Tokyo”）；留空：按原样显示",
     "other users may write to it": "其他用户可能可写入",
     "options is a table": "options 是一个表",

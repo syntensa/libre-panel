@@ -9,6 +9,12 @@
   `mqtt.macos.mac-studio.memory.memory.percent`, the first item of a list `.0`. A unit in
   `units` can be given to one field (`macos/+/memory/memory/percent = "%"`). Asked for in issue
   #54, for agents on a Mac and a Synology NAS.
+- **The rows under a ring, your own.** An instrument (the ring of the CPU, the GPU, the RAM or a
+  drive) shows the readings you name under it or beside it, a reading a line and a name if you
+  like (`cpu.load = Load`), where it showed the same three each time: *Design → the module →
+  Readings*, which shows the usual ones while it is empty. A reading Libre Panel shows elsewhere
+  keeps its format there; any other, an MQTT value for one, shows its number with its own unit.
+  Until now that took detaching the module into widgets. Asked for in issue #54.
 
 **Fixed**
 - **Videos in Design.** Design, the theme library and a shared theme's picture drew no theme

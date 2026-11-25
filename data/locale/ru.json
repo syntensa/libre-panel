@@ -883,6 +883,7 @@
     "it is outside your user folder, where other users may be allowed to write": "находится вне вашей пользовательской папки, где запись могут иметь другие пользователи",
     "one per line, from the theme folder; \"assets/*.jpg\" takes them all; several take turns": "по одному в строке, из папки темы; «assets/*.jpg» берёт все; если их несколько, они сменяют друг друга",
     "one per line: a sensor (\"cpu.temp\"), a pattern (\"temp.*\") and a name if you like (\"cpu.temp = CPU\"); empty: as shown": "по одному в строке: датчик («cpu.temp»), шаблон («temp.*») и при желании имя («cpu.temp = CPU»); пусто: как есть",
+    "one per line: a sensor (\"cpu.load\") and a name if you like (\"cpu.load = Load\"), as many as there is room for; empty: as shown": "по одному в строке: датчик («cpu.load») и при желании имя («cpu.load = Нагрузка»), сколько поместится; пусто: как есть",
     "one per line: a time zone and a name if you like (\"Asia/Tokyo = Tokyo\"); empty: as shown": "по одному в строке: часовой пояс и при желании имя («Europe/Moscow = Москва»); пусто: как есть",
     "other users may write to it": "другие пользователи могут в него писать",
     "options is a table": "options — таблица",

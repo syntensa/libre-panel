@@ -294,8 +294,16 @@ export function setModuleArea(widget, [col, row, cols, rows]) {
  * it too; else it is the new kind's first source, so a big number that showed the network
  * does not keep that as a ring (which has no network and would draw the processor).
  */
+// What a module's `items` are, by its kind: another kind's mean something else to it (a world
+// clock's time zones are no readings), so they go when the kind changes to one of another.
+const ITEMS_ARE = {
+  temps: "readings", drives: "readings", values: "readings", instrument: "readings",
+  world: "places", image: "pictures", cards: "cards", netcard: "cards",
+};
+
 export function setModuleKind(widget, kind) {
   edit(`prop:${widget.id}:module`, () => {
+    if (widget.items && ITEMS_ARE[widget.module] !== ITEMS_ARE[kind]) widget.items = "";
     widget.module = kind;
     const sources = moduleKinds()[kind]?.sources || [];
     if (sources.length && !sources.includes(widget.source)) widget.source = sources[0];

@@ -94,6 +94,16 @@ pub fn module_info() -> Dict {
             String::new()
         };
         info.insert("fan_items".into(), fans.into());
+        if key == "instrument" {
+            // (the rows under a ring of each source, to begin one's own from; a fan has none)
+            let rows: Dict = kind
+                .sources
+                .iter()
+                .filter(|&&s| s != "fan")
+                .map(|&s| (s.to_string(), super::cards::shown_rows(s).into()))
+                .collect();
+            info.insert("readings".into(), Value::Dict(rows));
+        }
         kinds.insert(key.into(), Value::Dict(info));
     }
     let mut looks = Dict::default();

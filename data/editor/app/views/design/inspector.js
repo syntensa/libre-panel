@@ -570,6 +570,14 @@ function ModuleInspector({ widget }) {
 
   const items = widget.module === "cards"
     ? html`<${SlotCards} widget=${widget} change=${change} onChange=${(value) => edit(null, () => (widget.items = value))} />`
+    : widget.module === "instrument"
+    ? widget.source === "fan"
+      ? null
+      : html`<${Field} label=${t("Readings")}
+          hint=${t('one per line: a sensor ("cpu.load") and a name if you like ("cpu.load = Load"), as many as there is room for; empty: as shown')}>
+          <${TextField} multiline rows=${3} mono label=${t("Readings")} value=${widget.items}
+            placeholder=${info.readings?.[widget.source] ?? ""} onChange=${change("items")} />
+        <//>`
     : info.items
     ? html`<${Field}
         label=${widget.module === "world" ? t("Places") : t("Readings")}

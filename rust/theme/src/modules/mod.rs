@@ -215,7 +215,7 @@ pub fn mix(a: &str, b: &str, amount: f64) -> Result<String> {
 /// render/formatting.py's counts: whether a format shows its value as a number that may
 /// count to a new reading (`{value:.0f}°`, `{value:bytes}/s`), not a text or a time.
 pub fn counts(fmt: &str) -> bool {
-    // \{value:(bytes|rate|rate_unit|gb|mb|count|[^{}A-Za-z]*[bcdeEfFgGnoxX%])\}
+    // \{value:(bytes|rate|rate_unit|gb|mb|count|auto|[^{}A-Za-z]*[bcdeEfFgGnoxX%])\}
     let mut from = 0;
     while let Some(at) = fmt[from..].find("{value:") {
         let rest: Vec<char> = fmt[from + at + 7..].chars().collect();
@@ -223,7 +223,7 @@ pub fn counts(fmt: &str) -> bool {
             let w: Vec<char> = word.chars().collect();
             rest.len() > w.len() && rest[..w.len()] == w[..] && rest[w.len()] == '}'
         };
-        let app_s = ["bytes", "rate", "rate_unit", "gb", "mb", "count"];
+        let app_s = ["bytes", "rate", "rate_unit", "gb", "mb", "count", "auto"];
         if app_s.iter().any(|word| starts(word)) {
             return true;
         }
@@ -1432,6 +1432,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_rows_under_a_ring_one_names() {
+        let rows = cards::own_rows(
+            "cpu.load = Load\n# a comment\n\ngpu.fan\nmqtt.mac.memory.percent\ntemp.*\n\
+             mqtt.nas.volumes.0.used_gb = Vol 1\n!cpu.temp\n = nothing\nAsia/Tokyo = Tokyo\n\
+             UTC\nring\ninstrument for 90s # cpu\nforecast if weather.temperature",
+        );
+        let row = |s: &str, f: &str, n: &str| (s.to_string(), f.to_string(), n.to_string());
+        assert_eq!(
+            rows,
+            vec![
+                row("cpu.load", "{value:.0f}%", "Load"),
+                row("gpu.fan", "{value:.0f} RPM", "Fan"),
+                row("mqtt.mac.memory.percent", "{value:auto} {unit}", "percent"),
+                row("mqtt.nas.volumes.0.used_gb", "{value:auto} {unit}", "Vol 1"),
+            ]
+        );
+        assert!(cards::own_rows("  \n# none").is_empty());
+        // (what the editor begins from: the rows a ring of each source shows)
+        assert_eq!(
+            cards::shown_rows("cpu"),
+            "cpu.temp = Temp\ncpu.power = Watt\ncpu.freq = Freq"
+        );
+        assert_eq!(
+            cards::shown_rows("disk"),
+            "disk.used = Used\ndisk.total = Total\ndisk.read = Read"
+        );
+        assert_eq!(cards::shown_rows("fan"), "");
+    }
+
+    #[test]
     fn formats_that_count() {
         for (fmt, want) in [
             ("{value:.0f}%", true),
@@ -1444,6 +1474,7 @@ mod tests {
             ("{value:10.1%}", true),
             ("x {value:upper} {value:,d}", true),
             ("{value:clock}", false),
+            ("{value:auto} {unit}", true),
         ] {
             assert_eq!(counts(fmt), want, "{fmt}");
         }

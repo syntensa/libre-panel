@@ -3552,6 +3552,31 @@ def test_a_list_modules_settings(page):
     )
 
 
+def test_an_instruments_own_readings(page):
+    """The rows under a ring were the same three for each source, and choosing others took
+    detaching the module, three widgets a row: an instrument's Readings name them, the rows
+    its source shows as the field's placeholder; a fan has none."""
+    new_theme_from_a_layout(page)
+    first = js(page, "window.libre.doc.widgets().find(window.libre.doc.isModule).id")
+    js(page, f"window.libre.doc.setSelection([{first!r}])")
+    page.locator(".inspector select[aria-label='Module']").select_option("instrument")
+    chips = page.locator(".inspector .chips .chip")
+    chips.filter(has_text="CPU").first.click()
+    readings = page.locator(".inspector .field", has_text="Readings").locator("textarea")
+    assert readings.get_attribute("placeholder") == (
+        "cpu.temp = Temp\ncpu.power = Watt\ncpu.freq = Freq"
+    )
+    chips.filter(has_text="GPU").first.click()
+    assert readings.get_attribute("placeholder").startswith("gpu.temp = Temp\ngpu.power = Watt")
+    readings.fill("gpu.load = Load\nmqtt.mac.memory.percent = Mac")
+    page.wait_for_function(
+        f"window.libre.doc.widgetById({first!r}).items === "
+        "'gpu.load = Load\\nmqtt.mac.memory.percent = Mac'"
+    )
+    chips.filter(has_text="Fan").first.click()
+    expect(page.locator(".inspector .field", has_text="Readings")).to_have_count(0)
+
+
 def test_a_time_modules_settings(page):
     new_theme_from_a_layout(page)
     first = js(page, "window.libre.doc.widgets().find(window.libre.doc.isModule).id")

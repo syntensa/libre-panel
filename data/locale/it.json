@@ -883,6 +883,7 @@
     "it is outside your user folder, where other users may be allowed to write": "si trova fuori dalla cartella utente, dove altri utenti potrebbero poter scrivere",
     "one per line, from the theme folder; \"assets/*.jpg\" takes them all; several take turns": "uno per riga, dalla cartella del tema; “assets/*.jpg” li prende tutti; più di uno si alternano",
     "one per line: a sensor (\"cpu.temp\"), a pattern (\"temp.*\") and a name if you like (\"cpu.temp = CPU\"); empty: as shown": "uno per riga: un sensore (“cpu.temp”), un pattern (“temp.*”) e, se si vuole, un nome (“cpu.temp = CPU”); vuoto: come mostrato",
+    "one per line: a sensor (\"cpu.load\") and a name if you like (\"cpu.load = Load\"), as many as there is room for; empty: as shown": "uno per riga: un sensore (“cpu.load”) e, se si vuole, un nome (“cpu.load = Carico”), quanti ne entrano; vuoto: come mostrato",
     "one per line: a time zone and a name if you like (\"Asia/Tokyo = Tokyo\"); empty: as shown": "uno per riga: un fuso orario e, se si vuole, un nome (“Europe/Rome = Roma”); vuoto: come mostrato",
     "other users may write to it": "altri utenti possono scrivervi",
     "options is a table": "options è una tabella",
