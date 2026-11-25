@@ -1885,6 +1885,9 @@ def test_the_search_field_says_whole_words_or_none(background, language):
     server_language(url, language)
     phrase, word = SEARCH_SAYS[language]
     with browser_page(url, "design", size=(1920, 1000), allow=PICTURE) as page:
+        # (the page in the server's language: its words come with its catalog, a moment later)
+        page.wait_for_function(f"document.documentElement.lang === '{language}'")
+        expect(page.locator(".topbar .search-trigger-text")).to_have_text(phrase)
         bar = page.locator(".topbar")
         expect(bar).to_have_attribute("data-fit", "")
         assert search_words(page) == [phrase, 0]

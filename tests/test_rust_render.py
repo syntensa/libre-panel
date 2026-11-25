@@ -2603,8 +2603,6 @@ def test_a_picture_where_the_frame_s_time_has_no_timestamp_as_python_shows_it(
     assert drawn > 90 and refused == 5 * len(looks), (drawn, refused)
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
-@pytest.mark.live("win32")
 def test_videos_and_pictures_rust_does_not_draw_yet(tmp_path: Path) -> None:
     # (a video, and a slideshow whose turn is a video's: told of no ffmpeg (the app tells it
     # where one is: tests/test_rust_video.py), the frame is drawn without it, warned, as
