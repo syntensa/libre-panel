@@ -392,9 +392,7 @@ def test_light_colours_are_worked_out_as_python_works_them_out() -> None:
     assert ours["made"][:3] == ["", "@cpu", "nope"]  # (none, a name, no colour: as they are)
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
 @pytest.mark.kept
-@pytest.mark.live("win32")
 def test_versions_places_and_variants_of_themes_as_python_s(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -773,9 +771,7 @@ def _listed_in_order(answers: list[Any]) -> list[Any]:
     return [{**ours, "versions": versions}]
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
 @pytest.mark.kept
-@pytest.mark.live("win32")
 def test_versions_beside_one_s_own_themes_are_found_and_laid_out_as_python_does(
     tmp_path: Path,
 ) -> None:

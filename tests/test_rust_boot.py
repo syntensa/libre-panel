@@ -96,8 +96,6 @@ def _strips(rng: random.Random, designs: list[str]) -> list[dict[str, Any]]:
     return cases
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
-@pytest.mark.live("win32")
 def test_the_panel_s_own_screens_as_python_draws_them() -> None:
     drawn, refused, sizes = 0, 0, set()
     for answer in _drawn(_cases(random.Random(0xB007))):
@@ -163,8 +161,6 @@ def _every_room(rng: random.Random) -> list[dict[str, Any]]:
     return cases
 
 
-# (the answer kept on Windows comes from CI's next run, which keeps it: unchecked there till then)
-@pytest.mark.live("win32")
 def test_every_look_of_the_panel_s_screens_as_python_draws_it() -> None:
     cases = _look_cases(random.Random(0xB00715)) + _every_room(random.Random(0xB00716))
     drawn: dict[str, int] = {}
