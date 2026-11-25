@@ -949,8 +949,15 @@ entities = ["sensor.*", "binary_sensor.front_door", "climate.*"]
 poll_seconds = 10
 ```
 
-**MQTT** (`mqtt.*`): what your devices publish. A JSON object is taken apart into one
-reading per field. Libre Panel has it built in, a pip install too.
+**MQTT** (`mqtt.*`): what your devices publish. Libre Panel has it built in, a pip install
+too. A topic is a sensor named `mqtt.` and the topic with dots: `home/kitchen/temperature` is
+`mqtt.home.kitchen.temperature`. A JSON object is taken apart into one reading per field,
+the objects and lists in it too, a list by the place of each item (from 0), a space in a
+name as `_`: `{"memory": {"percent": 83.0}}` on `macos/mac-studio/memory` gives
+`mqtt.macos.mac-studio.memory.memory.percent`, and `{"volumes": [{"used": 40}]}` on
+`nas/storage` gives `mqtt.nas.storage.volumes.0.used`. `units` gives the topics a pattern
+matches a unit; a pattern can also name a field, as if it were a topic of its own
+(`macos/+/memory/memory/percent`). The first pattern that matches counts.
 
 ```toml
 [sensors]
@@ -961,8 +968,8 @@ host = "192.168.1.10"
 port = 1883
 username = ""
 password = ""
-topics = ["home/+/temperature", "zigbee2mqtt/#"]
-units = { "home/+/temperature" = "°C" }
+topics = ["home/+/temperature", "zigbee2mqtt/#", "macos/#"]
+units = { "home/+/temperature" = "°C", "macos/+/memory/memory/percent" = "%" }
 ```
 
 **Game frame rate** (`game.*`, Windows): Intel's

@@ -2,7 +2,9 @@
 //!
 //! A message on `home/kitchen/temperature` becomes `mqtt.home.kitchen.temperature`. A JSON
 //! object is taken apart: `{"temperature": 21.5, "humidity": 40}` on `zigbee2mqtt/sensor`
-//! gives `mqtt.zigbee2mqtt.sensor.temperature` and `...humidity`.
+//! gives `mqtt.zigbee2mqtt.sensor.temperature` and `...humidity`; an object or a list in it
+//! too, each to its own reading: `{"memory": {"percent": 83}}` gives `...memory.percent`,
+//! `{"volumes": [{"used": 40}]}` `...volumes.0.used` (sensors/mqtt.py took one level).
 //!
 //! The broker is spoken to here as the Python app's client (paho) speaks to it: MQTT 3.1.1,
 //! a clean session, the topics subscribed at quality 0, a ping every minute, and after a
@@ -22,6 +24,9 @@ use crate::homeassistant::as_float;
 use crate::lhm::Readings;
 
 pub const MAX_KEYS: usize = 2000;
+/// how deep a JSON message is taken apart, and how many of a list's items
+const MAX_DEPTH: usize = 8;
+const MAX_ITEMS: usize = 64;
 const KEEPALIVE_S: u16 = 60;
 /// the largest packet read (a message's topic and payload)
 const MAX_PACKET: usize = 1 << 20;
@@ -66,46 +71,110 @@ fn scalar(value: &Value) -> Option<Value> {
     }
 }
 
-/// readings_from_message: what a message on `topic` gives; the unit of the first pattern of
-/// `units` the topic matches.
+/// readings_from_message: what a message on `topic` gives. A JSON object or list is taken
+/// apart, what is in it too (`MAX_DEPTH` levels, `MAX_ITEMS` of a list), a reading for each
+/// number or text: its key and its name follow the path to it. Its unit is that of the first
+/// pattern of `units` that matches the topic or the path as a topic of its own
+/// (`macos/+/memory/memory/percent`).
 pub fn readings_from_message(
     topic: &str,
     payload: &[u8],
     units: &IndexMap<String, String>,
 ) -> Readings {
-    let unit = units
-        .iter()
-        .find(|(pattern, _)| topic_matches(pattern, topic))
-        .map_or("", |(_, unit)| unit.as_str());
     let text = String::from_utf8_lossy(payload);
     let text = lp_py::strip(&text);
-    let key = key_of(topic);
     let data = lp_py::json::loads(text).unwrap_or_else(|_| Value::Str(text.to_string()));
     let mut out = Readings::new();
-    let mut put = |key: String, value: Value, label: String| {
-        let reading = Reading {
-            unit: unit.into(),
-            label,
-            ..Reading::of(value)
-        };
-        out.insert(key, reading);
-    };
     match &data {
-        Value::Dict(table) => {
-            for (name, value) in table {
-                if let Some(value) = scalar(value) {
-                    let sub = format!("{key}.{}", name.replace(' ', "_"));
-                    put(sub, value, format!("{topic} {name}"));
-                }
-            }
+        Value::Dict(_) | Value::List(_) => {
+            let mut at = Path {
+                topic,
+                units,
+                key: key_of(topic),
+                names: Vec::new(),
+            };
+            take_apart(&data, &mut at, &mut out);
         }
         other => {
             if let Some(value) = scalar(other) {
-                put(key, value, topic.to_string());
+                let unit = unit_of(units, topic, None);
+                out.insert(key_of(topic), reading(value, unit, topic.to_string()));
             }
         }
     }
     out
+}
+
+/// Where in a message a value is: its topic, the key so far, the names on the way.
+struct Path<'a> {
+    topic: &'a str,
+    units: &'a IndexMap<String, String>,
+    key: String,
+    names: Vec<String>,
+}
+
+fn take_apart(data: &Value, at: &mut Path, out: &mut Readings) {
+    let parts: Vec<(String, &Value)> = match data {
+        Value::Dict(table) => table.iter().map(|(name, v)| (name.clone(), v)).collect(),
+        Value::List(items) => items
+            .iter()
+            .take(MAX_ITEMS)
+            .enumerate()
+            .map(|(i, v)| (i.to_string(), v))
+            .collect(),
+        _ => return,
+    };
+    for (name, value) in parts {
+        let length = at.key.len();
+        at.key.push('.');
+        at.key.push_str(&name.replace(' ', "_"));
+        at.names.push(name);
+        match value {
+            Value::Dict(_) | Value::List(_) => {
+                if at.names.len() < MAX_DEPTH {
+                    take_apart(value, at, out);
+                }
+            }
+            _ => {
+                if let Some(value) = scalar(value) {
+                    let unit = unit_of(at.units, at.topic, Some(&at.names));
+                    let label = format!("{} {}", at.topic, at.names.join("."));
+                    out.insert(at.key.clone(), reading(value, unit, label));
+                }
+            }
+        }
+        at.names.pop();
+        at.key.truncate(length);
+    }
+}
+
+/// The unit of the first pattern that matches the topic, or the path in the message after it.
+fn unit_of<'a>(
+    units: &'a IndexMap<String, String>,
+    topic: &str,
+    names: Option<&[String]>,
+) -> &'a str {
+    if units.is_empty() {
+        return "";
+    }
+    let path = names.map(|names| format!("{topic}/{}", names.join("/")));
+    units
+        .iter()
+        .find(|(pattern, _)| {
+            topic_matches(pattern, topic)
+                || path
+                    .as_deref()
+                    .is_some_and(|path| topic_matches(pattern, path))
+        })
+        .map_or("", |(_, unit)| unit.as_str())
+}
+
+fn reading(value: Value, unit: &str, label: String) -> Reading {
+    Reading {
+        unit: unit.into(),
+        label,
+        ..Reading::of(value)
+    }
 }
 
 /// A text as MQTT sends one: its length in two bytes, then its bytes.
@@ -486,5 +555,162 @@ impl MqttSource {
 impl Drop for MqttSource {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read(
+        topic: &str,
+        payload: &str,
+        units: &[(&str, &str)],
+    ) -> Vec<(String, Value, String, String)> {
+        let units = units
+            .iter()
+            .map(|(p, u)| (p.to_string(), u.to_string()))
+            .collect();
+        readings_from_message(topic, payload.as_bytes(), &units)
+            .into_iter()
+            .map(|(key, r)| (key, r.value, r.unit, r.label))
+            .collect()
+    }
+
+    fn row(key: &str, value: Value, unit: &str, label: &str) -> (String, Value, String, String) {
+        (key.into(), value, unit.into(), label.into())
+    }
+
+    #[test]
+    fn an_object_in_a_message_gives_a_reading_for_each_of_its_fields() {
+        let payload = r#"{"schema_version": 1, "hostname": "mac.local",
+            "memory": {"percent": 83.0, "used_bytes": 4107206656}}"#;
+        let topic = "macos/mac-studio/memory";
+        let units = [("macos/+/memory/memory/percent", "%")];
+        assert_eq!(
+            read(topic, payload, &units),
+            vec![
+                row(
+                    "mqtt.macos.mac-studio.memory.schema_version",
+                    Value::Float(1.0),
+                    "",
+                    "macos/mac-studio/memory schema_version"
+                ),
+                row(
+                    "mqtt.macos.mac-studio.memory.hostname",
+                    Value::Str("mac.local".into()),
+                    "",
+                    "macos/mac-studio/memory hostname"
+                ),
+                row(
+                    "mqtt.macos.mac-studio.memory.memory.percent",
+                    Value::Float(83.0),
+                    "%",
+                    "macos/mac-studio/memory memory.percent"
+                ),
+                row(
+                    "mqtt.macos.mac-studio.memory.memory.used_bytes",
+                    Value::Float(4107206656.0),
+                    "",
+                    "macos/mac-studio/memory memory.used_bytes"
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_list_gives_its_items_by_their_place() {
+        let payload =
+            r#"{"volumes": [{"name": "volume 1", "used": 40}, 7], "empty": [], "none": {}}"#;
+        assert_eq!(
+            read("nas/storage", payload, &[]),
+            vec![
+                row(
+                    "mqtt.nas.storage.volumes.0.name",
+                    Value::Str("volume 1".into()),
+                    "",
+                    "nas/storage volumes.0.name"
+                ),
+                row(
+                    "mqtt.nas.storage.volumes.0.used",
+                    Value::Float(40.0),
+                    "",
+                    "nas/storage volumes.0.used"
+                ),
+                row(
+                    "mqtt.nas.storage.volumes.1",
+                    Value::Float(7.0),
+                    "",
+                    "nas/storage volumes.1"
+                ),
+            ]
+        );
+        let keys: Vec<String> = read("a", "[1, [2], 3]", &[])
+            .into_iter()
+            .map(|r| r.0)
+            .collect();
+        assert_eq!(keys, ["mqtt.a.0", "mqtt.a.1.0", "mqtt.a.2"]);
+    }
+
+    #[test]
+    fn a_topics_unit_holds_for_all_its_fields_where_the_first_pattern_is_the_topics() {
+        let units = [("home/+/temperature", "°C"), ("#", "?")];
+        let rows = read(
+            "home/kitchen/temperature",
+            r#"{"value": 21.5, "my room": {"a b": 1}}"#,
+            &units,
+        );
+        assert_eq!(
+            rows,
+            vec![
+                row(
+                    "mqtt.home.kitchen.temperature.value",
+                    Value::Float(21.5),
+                    "°C",
+                    "home/kitchen/temperature value"
+                ),
+                row(
+                    "mqtt.home.kitchen.temperature.my_room.a_b",
+                    Value::Float(1.0),
+                    "°C",
+                    "home/kitchen/temperature my room.a b"
+                ),
+            ]
+        );
+        let rows = read(
+            "x/y",
+            r#"{"t": 1, "h": 2}"#,
+            &[("x/y/h", "%"), ("x/#", "W")],
+        );
+        assert_eq!(
+            rows.iter().map(|r| r.2.as_str()).collect::<Vec<_>>(),
+            ["W", "%"]
+        );
+    }
+
+    #[test]
+    fn a_message_is_taken_apart_so_deep_and_so_many_items_of_a_list() {
+        let deep = format!(
+            "{}1{}",
+            "[".repeat(MAX_DEPTH + 2),
+            "]".repeat(MAX_DEPTH + 2)
+        );
+        assert!(read("d", &deep, &[]).is_empty());
+        let deep = format!("{}1{}", "[".repeat(MAX_DEPTH), "]".repeat(MAX_DEPTH));
+        assert_eq!(
+            read("d", &deep, &[])[0].0,
+            format!("mqtt.d{}", ".0".repeat(MAX_DEPTH))
+        );
+        let long = format!("[{}]", vec!["1"; MAX_ITEMS + 10].join(","));
+        assert_eq!(read("l", &long, &[]).len(), MAX_ITEMS);
+    }
+
+    #[test]
+    fn a_plain_message_is_one_reading() {
+        assert_eq!(
+            read("a/b c.d", " 21.5 ", &[("a/#", "V")]),
+            vec![row("mqtt.a.b_c_d", Value::Float(21.5), "V", "a/b c.d")]
+        );
+        assert!(read("a", "null", &[]).is_empty());
     }
 }

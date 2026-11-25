@@ -1564,8 +1564,9 @@ def test_dell_command_monitor_s_sensors_are_read_as_dell_py_reads_them() -> None
 @pytest.mark.kept
 def test_mqtt_messages_are_read_as_mqtt_py_reads_them() -> None:
     """sensors/mqtt.py: a topic against patterns with + and #, a message's payload as a
-    number, a text or a JSON object taken apart, with the unit of the first pattern that
-    matches; and the client's packets as MQTT 3.1.1 writes them."""
+    number, a text or a JSON object taken apart (all the way, where mqtt.py took one level),
+    with the unit of the first pattern that matches; and the client's packets as MQTT 3.1.1
+    writes them."""
     rng = random.Random(0x1883)
     levels = ["home", "kitchen", "temperature", "+", "#", "", "a.b", "my room", "zigbee2mqtt"]
     topics = ["/".join(rng.choice(levels) for _ in range(rng.randrange(1, 5))) for _ in range(300)]
@@ -1610,6 +1611,10 @@ def test_mqtt_messages_are_read_as_mqtt_py_reads_them() -> None:
             seen["unit"] += bool(row[2])
             seen["text" if isinstance(row[1], str) else "number"] += 1
     assert all(count > 50 for count in seen.values()), seen
+    # (an object and a list in a message too, each value a reading of its own)
+    keys = {row[0].rsplit(".", 2)[-2] + "." + row[0].rsplit(".", 1)[-1]
+            for rows in ours["messages"] for row in rows}  # fmt: skip
+    assert {"n.a", "list.0"} <= keys
 
     b64 = base64.b64encode
     assert ours["packets"] == [

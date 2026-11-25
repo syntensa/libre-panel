@@ -772,6 +772,8 @@ _CONFIRMED: set[str] = {
     "lianli-universal-8.8",
     # shows the theme as it should, with 0.9.4 on Windows: its owner's report (#64, 0.9.5)
     "jonsbo-ds916",
+    # "worked perfectly right out of the box", with 0.9.5 on Windows: its owner's report (#54)
+    "thermalright-trofeo-9.16",
 }
 # What the panels whose drivers were written from other projects' notes cannot do (their
 # drivers say why); each begins with what all of them share: nobody has run them yet.
@@ -841,6 +843,7 @@ _LIMITS = {
     "lianli-hydroshift2-lcd": _LIANLI,
     "lianli-hydroshift2-oled": _LIANLI,
     **{m.id: _TROFEO for m in MODELS if m.protocol == "usb-thermalright"},
+    "thermalright-trofeo-9.16": _TROFEO.removeprefix(f"{_UNSEEN} "),
     **{m.id: _BEADA for m in MODELS if m.protocol == "usb-beada"},
     **{m.id: _KRAKEN for m in MODELS if m.protocol == "usb-nzxt"},
     "thermaltake-lcd-6": (

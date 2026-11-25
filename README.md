@@ -360,7 +360,7 @@ nothing while no theme shows it.
 | **VMAX** | – | 4.6" | USB |
 | **Hongtai / Jungle Leopard** | – | Chill Arc 360, MSI EZ Display and more | COM port |
 | **Lian Li** | Universal Screen 8.8" | Universal Screen 9.2", HydroShift II, OLED Curve | USB |
-| **Thermalright** | – | Trofeo Vision | USB |
+| **Thermalright** | Trofeo Vision 9.16" | Trofeo Vision 6.86", 11.3" | USB |
 | **BeadaPanel** | – | every model | USB |
 | **NZXT Kraken** | – | with an LCD | USB |
 | **Thermaltake** | – | 6" LCD | USB |

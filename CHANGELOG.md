@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **MQTT takes a JSON message apart all the way.** An object or a list inside a message gives
+  a reading for each of its values too, where until now only the first level did:
+  `{"memory": {"percent": 83.0}}` on `macos/mac-studio/memory` is
+  `mqtt.macos.mac-studio.memory.memory.percent`, the first item of a list `.0`. A unit in
+  `units` can be given to one field (`macos/+/memory/memory/percent = "%"`). Asked for in issue
+  #54, for agents on a Mac and a Synology NAS.
+
+**Changed**
+- **The Thermalright Trofeo Vision 9.16" is supported**: it "worked perfectly right out of the
+  box" with 0.9.5, its owner's report in issue #54.
+
 ## 0.9.6rc1 — 2026-11-24
 
 A candidate for 0.9.6 with one change, to try on a Lian Li Universal Screen 8.8": its clock

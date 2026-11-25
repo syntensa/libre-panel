@@ -991,7 +991,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `media.title`, `.artist`, `.album`, `.source`, `.state`, `.playing`, `.position`, `.duration`, `.remaining`, `.progress` | text, 1/0, s, 0–1 | what is playing, while a theme shows it; the cover is the picture `@media.cover`, the icon of the player `@media.app_icon` |
 | `calendar.<n>.title`, `.when`, `.day`, `.time`, `.location`, `.calendar`, `.start`, `.minutes`, `.now`; `calendar.events`, `calendar.today` | text, s, min | the next events (1 = the next or the one going on), [calendars](CONFIGURATION.md#more-sensor-sources) |
 | `ha.<entity id>`, `ha.<entity id>.<attribute>` | as Home Assistant says | [Home Assistant](CONFIGURATION.md#more-sensor-sources) |
-| `mqtt.<topic with dots>` (`.field` for JSON) | | [MQTT](CONFIGURATION.md#more-sensor-sources) |
+| `mqtt.<topic with dots>` (`.field`, `.field.inner`, `.list.0` for JSON) | | [MQTT](CONFIGURATION.md#more-sensor-sources) |
 | `game.fps`, `game.frametime`, `game.low`, `game.app` | fps, ms, fps, text | the game being played, through [PresentMon](CONFIGURATION.md#more-sensor-sources) (Windows) or MangoHud's log (Linux) |
 | `json.<name>.<field>` | as the answer says | [values from JSON](CONFIGURATION.md#more-sensor-sources): an address or a file |
 | `ups.charge`, `ups.runtime`, `ups.load`, `ups.power`, `ups.input`, `ups.on_battery`, `ups.status` | %, min, %, W, V, 1/0, text | [the UPS](CONFIGURATION.md#more-sensor-sources) through Network UPS Tools |

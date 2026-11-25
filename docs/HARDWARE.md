@@ -37,8 +37,9 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT and Thermaltake (and the
   Turing 1.6" and 2.1" USB panels) the protocol comes from other projects' notes and captures
   and from the makers' own sources: nobody has run them with Libre Panel yet, but for the
-  JONSBO ZC-360's screens as panels of their own (#13), the JONSBO DS339 (#46) and DS916 (#64)
-  and the Lian Li Universal Screen 8.8", which are supported.
+  JONSBO ZC-360's screens as panels of their own (#13), the JONSBO DS339 (#46) and DS916 (#64),
+  the Lian Li Universal Screen 8.8" and the Thermalright Trofeo Vision 9.16" (#54), which are
+  supported.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -229,7 +230,7 @@ do. Unverified.
 | Model id | Size | Resolution (landscape) | Connection | Driver |
 |---|---|---|---|---|
 | `thermalright-trofeo-6.86` | 6.86" | 1280×480 | USB HID (`0416:5302`) | unverified |
-| `thermalright-trofeo-9.16` | 9.16" | 1920×462 | USB (`0416:5408`) | unverified |
+| `thermalright-trofeo-9.16` | 9.16" | 1920×462 | USB (`0416:5408`) | **supported** |
 | `thermalright-trofeo-11.3` | 11.3" | 1920×440 | USB (`0416:5408`) | unverified |
 
 Found by `auto`; the screen says which one it is when it is opened (the 9.16" and the 11.3"
@@ -241,7 +242,9 @@ seconds shows its logo again, so the last picture goes again twice a second. Clo
 On Linux, `libre-panel system-setup --linux` gives your user access to both. The protocol
 comes from the MIT-licensed [turing-smart-screen](https://github.com/usausa/turing-smart-screen)
 (.NET, by usausa) and [InfoPanel](https://github.com/habibrehmansg/infopanel) (GPL-3.0); see
-the [protocol notes](protocol/thermalright.md). Unverified.
+the [protocol notes](protocol/thermalright.md). The 9.16" runs "perfectly right out of the box",
+as its owner reports ([#54](https://github.com/syntensa/libre-panel/issues/54), 0.9.5 on
+Windows); the 6.86" and the 11.3" are unverified.
 
 Not yet: the 9.16" with the LY1 controller (`0416:5409`), which only InfoPanel documents, and
 Thermalright's other screens (Frozen Warframe, Elite Vision, the AIO pump screens and others on
