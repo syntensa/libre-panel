@@ -2797,6 +2797,41 @@ def test_a_round_panel_and_the_strip_its_frame_hides(page):
     assert page.locator(".hidden-strip").count() == 0  # a round panel hides nothing
 
 
+@pytest.mark.parametrize(
+    ("model", "theme", "hidden"),
+    [("majesty-9.16", "arena", 0), ("turing-9.2-usb", "arena", 18), ("turing-9.2-usb", "bar", 17)],
+)
+def test_the_strip_hidden_is_the_one_of_the_panel_the_theme_shows_on(
+    isolated_home, model, theme, hidden
+):
+    """A theme made for the 9.2" bar (1920 x 480), shown on a MAJESTY (1920 x 462), was hatched
+    where the 9.2"'s frame hides its top, though the MAJESTY shows all of it: the strip is the
+    one of the panel the theme shows on, scaled onto a theme of another size (a 1920 x 462 theme
+    on the 9.2": 18 of its 480 rows, 17 of the theme's 462)."""
+    import json
+
+    write_config(isolated_home, theme=theme)
+    config = isolated_home / "config.toml"
+    text = config.read_text(encoding="utf-8")
+    config.write_text(text.replace("[device]\n", f'[device]\nmodel = "{model}"\n'), "utf-8")
+    bar = theme_dict()
+    bar.update(name="bar", display={"model": "majesty-9.16", "width": 1920, "height": 462})
+    (isolated_home / "themes" / "bar").mkdir(parents=True)
+    (isolated_home / "themes" / "bar" / "theme.json").write_text(json.dumps(bar), "utf-8")
+    with running_app() as (app, url), browser_page(url, allow=PICTURE) as page:
+        page.wait_for_function(f"window.libre.store.get().app?.panel?.model === '{model}'")
+        page.wait_for_function(f"window.libre.store.get().doc?.id === '{theme}'")
+        strip = page.locator(".hidden-strip.top")
+        if not hidden:
+            expect(page.locator(".hidden-strip")).to_have_count(0)
+            return
+        expect(strip).to_have_count(1)
+        assert f"{hidden} px" in strip.get_attribute("title")
+        size = js(page, "window.libre.store.get().render.size")
+        zoom = page.locator(".panel-canvas").bounding_box()["width"] / size[0]
+        assert strip.bounding_box()["height"] == pytest.approx(hidden * zoom, abs=1)
+
+
 def test_a_portrait_panel_sits_in_its_frame(page):
     """On end, a bar is narrower than the line under it: the frame holds the panel in the
     middle, as on its side, instead of growing to that line with the panel on its left."""

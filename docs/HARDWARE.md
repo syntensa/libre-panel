@@ -221,6 +221,13 @@ The backlight is the panel's own (0–100). The protocol comes from
 never sends the commands that restart the panel, update its firmware, change its serial number,
 region or screen timeouts, or switch the pump's motor.
 
+The **MAJESTY AIO monitor 9.16"** (`majesty-9.16`, `33c3:7792`, found by `auto`; also sold as
+the Jungle Leopard or TZMRIT 9.16") is the strip of the family on firmware of its own:
+**supported**. It is set up as the maker's MAJESTY AIO MONITOR sets it up (issue #40), its
+backlight kept at 95 and its brightness put into the pictures. Now and then it goes dark by
+itself while it is shown pictures, and says so (`FF`): Libre Panel opens it again then, as a
+change of the brightness would, on a port at most once a minute (issue #54).
+
 ## VMAX 4.6"
 
 The VMAX 4.6" (960×320) is a MacroSilicon MS9132 USB display chip like the JONSBO DS339's and

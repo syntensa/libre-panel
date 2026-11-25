@@ -942,18 +942,19 @@ mod tests {
         assert_eq!(identity.set_up, Some(0x15));
         let frame = lp_pixels::Image::new(lp_pixels::Mode::RGB, 1920, 462, &[200, 40, 40]);
         display.set_brightness(50).unwrap();
-        // what the panel sends unasked is read as it comes, and said for the log
+        // what it said it is, and what it sends unasked, read as it comes: said for the log
         let until = Instant::now() + Duration::from_secs(5);
         let mut notes = Vec::new();
-        while notes.is_empty() && Instant::now() < until {
+        while notes.len() < 2 && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(50));
-            notes = display.notes();
+            notes.extend(display.notes());
         }
         assert_eq!(
             notes,
-            [format!(
-                "the panel on {name} said 11 unasked (7 bytes: 55 AA 07 00 11 17 01)"
-            )]
+            [
+                format!("the panel on {name} calls itself \"MAJESTY\", 462x1920"),
+                format!("the panel on {name} said 11 unasked (7 bytes: 55 AA 07 00 11 17 01)"),
+            ]
         );
         // (a JPEG wants libjpeg, loaded where it runs: LP_LIBJPEG, as the comparisons have it;
         // where there is none the pictures are left to tests/test_rust_devices.py)

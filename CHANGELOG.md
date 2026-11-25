@@ -15,7 +15,6 @@
   Readings*, which shows the usual ones while it is empty. A reading Libre Panel shows elsewhere
   keeps its format there; any other, an MQTT value for one, shows its number with its own unit.
   Until now that took detaching the module into widgets. Asked for in issue #54.
-
 - **Two more panels: AIGO's Xingcanchen case screen and Valkyrie's B360-GT VK cooler
   screen**, both found by `auto`, both written from their owners' captures (issues #68 and
   #69) and not yet seen with Libre Panel: if you have one, how it goes is welcome there. The
@@ -32,6 +31,16 @@
   panel does now, and a video's first frame is read once, not again for each picture. Where
   there is no ffmpeg at all, a theme shows without its videos, with the reason in the log, as
   until 0.8 (0.9 did not draw such a theme at all).
+- **A MAJESTY 9.16" that goes dark by itself comes back by itself.** Now and then the MAJESTY
+  (and the Jungle Leopard / TZMRIT 9.16" on its firmware) turned its backlight off while it
+  was shown pictures, until a change of the brightness set it up again (issue #54). Its owner
+  caught what it says at that moment (`FF`): Libre Panel opens it again then, as the change of
+  brightness did, also while the theme stands still; on a port at most once a minute, with a
+  line in the log each time.
+- **The strip a panel's frame hides, in Design, is the one of the panel the theme shows on.**
+  A theme made for the 9.2" bar showed the 9.2"'s hidden top as hidden while it ran on a
+  MAJESTY, which shows all of it (issue #54); a theme of another size shows the strip of the
+  panel it runs on, scaled onto it.
 
 **Changed**
 - **The Thermalright Trofeo Vision 9.16" is supported**: it "worked perfectly right out of the

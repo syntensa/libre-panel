@@ -2368,6 +2368,11 @@ impl MainLoop {
             }
             self.counted.follow(panel.counters(), panel.bit_rate());
         }
+        // (what went wrong while no frame went: a theme that stands still finds it too)
+        if let Some(why) = self.panel.as_mut().and_then(Display::lost) {
+            self.close_panel();
+            self.failed(&why, started);
+        }
         self.follow_link(false);
         let streams = self.panel.as_ref().is_some_and(Display::streams);
         let fps = self.fps();

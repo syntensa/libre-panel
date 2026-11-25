@@ -925,6 +925,15 @@ impl Display {
         }
     }
 
+    /// What went wrong with the panel while no frame went to it, as its driver's own thread
+    /// found it, taken; None for nothing (the app lets the panel go and opens it again).
+    pub fn lost(&mut self) -> Option<String> {
+        match &mut self.panel {
+            Panel::Hongtai { display, .. } => display.take_fault().map(|why| why.0),
+            _ => None,
+        }
+    }
+
     /// What the panel's driver noted for the log since it was last asked.
     pub fn notes(&mut self) -> Vec<String> {
         let mut notes = std::mem::take(&mut self.notes);

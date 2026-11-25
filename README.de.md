@@ -371,7 +371,7 @@ zur Seite, wenn seine Messwerte fehlen, und kostet nichts, solange kein Theme es
 | **Kipye Qiye** | – | 3,5" | COM-Port |
 | **WeAct Display FS V1** | 0,96" | 3,5" | COM-Port |
 | **VMAX** | – | 4,6" | USB |
-| **Hongtai / Jungle Leopard** | – | Chill Arc 360, MSI EZ Display und mehr | COM-Port |
+| **Hongtai / Jungle Leopard** | MAJESTY 9,16" (auch als Jungle Leopard / TZMRIT 9,16" verkauft) | Chill Arc 360, MSI EZ Display und mehr | COM-Port |
 | **Lian Li** | Universal Screen 8,8" | Universal Screen 9,2", HydroShift II, OLED Curve | USB |
 | **Thermalright** | Trofeo Vision 9,16" | Trofeo Vision 6,86", 11,3" | USB |
 | **BeadaPanel** | – | jedes Modell | USB |

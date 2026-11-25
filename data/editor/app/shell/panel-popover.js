@@ -3,7 +3,7 @@
 // the theme being edited is made for (model, orientation, custom size), which fits the theme to
 // another panel and does not change the panel.
 
-import { adaptPanel } from "../core/actions.js";
+import { adaptPanel, panelState } from "../core/actions.js";
 import { appAction, quitApp } from "../core/app.js";
 import { t } from "../core/i18n.js";
 import { setPref, store, useStore } from "../core/state.js";
@@ -257,3 +257,11 @@ export function PanelChip() {
 }
 
 export const currentModel = () => modelOf(store.get().doc?.theme, store.get().specs?.models || []);
+
+/** The panel the open theme shows on: the model the running app names for the panel chosen,
+ * while the theme is the one that panel shows (its page's); else null. */
+export function shownOnModel(state = store.get()) {
+  if (!state.app?.available || panelState(state) === "other") return null;
+  const id = targetStatus(state)?.model;
+  return (state.specs?.models || []).find((model) => model.id === id) || null;
+}

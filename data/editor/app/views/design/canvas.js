@@ -22,7 +22,7 @@ import { createStore, useSelector } from "../../core/store.js";
 import { html, useEffect, useLayoutEffect, useRef, useState } from "../../lib/preact.js";
 import { Icon } from "../../ui/icons.js";
 import { Popover, Menu } from "../../ui/layer.js";
-import { currentModel } from "../../shell/panel-popover.js";
+import { currentModel, shownOnModel } from "../../shell/panel-popover.js";
 import {
   blockers,
   cellAt,
@@ -156,12 +156,13 @@ const resizable = (widget) => {
 };
 
 export function Canvas() {
-  const { render, selection, rev, prefs, renderError } = useStore((s) => ({
+  const { render, selection, rev, prefs, renderError, shownOn } = useStore((s) => ({
     render: s.render,
     selection: s.selection,
     rev: s.rev,
     prefs: s.prefs,
     renderError: s.renderError,
+    shownOn: shownOnModel(s), // (the panel the theme shows on, as the running app says it)
   }));
   const { zoomMode, interaction, libDrag } = useCanvas((s) => ({ zoomMode: s.zoomMode, interaction: s.interaction, libDrag: s.libDrag }));
   const stage = useRef(null);
@@ -191,7 +192,8 @@ export function Canvas() {
   };
 
   const model = currentModel();
-  const hidden = hiddenEdges(model, render.size);
+  // (what the panel the theme shows on hides: a MAJESTY nothing of a theme made for the 9.2")
+  const hidden = hiddenEdges(model, render.size, shownOn);
   const boxes = shownBoxes(render.boxes, interaction);
   const chosen = new Set(selection);
   const list = widgets();

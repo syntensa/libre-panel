@@ -24,6 +24,11 @@
 //! it; then the live picture. Its brightness goes into the pictures, as that application puts
 //! it there: each is dimmed before it is made a JPEG.
 //!
+//! The MAJESTY goes dark by itself now and then while it is shown pictures, its backlight off
+//! (issue #54): it says FF (55 AA 08 00 FF FF 05 03) the moment it does, and again for each
+//! picture while it stays so. Setting it up again brings it back, so it is opened again then (as
+//! a change of the brightness in the app opens it), on a port at most once a minute.
+//!
 //! Never sent: 01 (restart), 0C (firmware update), 14, 15 (but the MAJESTY's setting up), 20
 //! (the region preset), 23 (the serial number), 25 (the pump's motor), 26.
 
@@ -63,6 +68,11 @@ pub const MAJESTY_MODEL: &str = "majesty-9.16";
 /// What the MAJESTY is set up with (after 15), and the backlight it is kept at.
 pub const MAJESTY_SETUP: [u8; 2] = [0x00, 0x03];
 pub const MAJESTY_LIGHT: u8 = 95;
+/// What the MAJESTY says when it has gone dark by itself (issue #54: 55 AA 08 00 FF FF 05 03,
+/// the moment its backlight went off, then again for each picture while it stays dark).
+pub const CMD_STOPPED: u8 = 0xFF;
+/// The MAJESTY opened again because it went dark: at most this often on a port.
+const REVIVE_EVERY: Duration = Duration::from_secs(60);
 
 /// A frame as the panel takes it: 55 AA, length, command, data, sum. A command never sent is
 /// refused, as is data too long for the length.
@@ -330,6 +340,11 @@ impl Heard {
         }
     }
 
+    /// How many frames of `command` came.
+    fn count(&self, command: u8) -> u64 {
+        self.counts.get(&command).copied().unwrap_or(0)
+    }
+
     fn stray(&mut self, n: usize, port: &str) {
         if self.stray == 0 {
             let said = hex(&self.pending[..n]);
@@ -352,6 +367,22 @@ impl Heard {
         (!parts.is_empty())
             .then(|| format!("the panel on {port} said unasked: {}", parts.join(", ")))
     }
+}
+
+/// Whether the panel on `port` may be opened again now because it went dark: not where it was
+/// within REVIVE_EVERY (a panel that stays dark is not opened again and again).
+fn revive(port: &str) -> bool {
+    static REVIVED: Mutex<BTreeMap<String, Instant>> = Mutex::new(BTreeMap::new());
+    let mut revived = REVIVED.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if revived
+        .get(port)
+        .is_some_and(|at| now.duration_since(*at) < REVIVE_EVERY)
+    {
+        return false;
+    }
+    revived.insert(port.to_string(), now);
+    true
 }
 
 struct Shared<L> {
@@ -443,6 +474,12 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
                 return Err(e);
             }
         };
+        // (for the log: what it calls itself and its size, as it said them)
+        let (w, h) = identity.native;
+        display.shared.lock().heard.notes.push(format!(
+            "the panel on {port} calls itself {:?}, {w}x{h}",
+            identity.name
+        ));
         display.start_keeper();
         Ok((display, identity))
     }
@@ -526,6 +563,7 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
         let every = self.timing.live_every;
         let tick = (every / 2).min(Duration::from_millis(250));
         let live = frame(CMD_LIVE, &[]).expect("(11 is sent)");
+        let kind = self.kind;
         let mut state = self.shared.lock();
         state.stop = false;
         state.last_sent = Instant::now();
@@ -543,6 +581,7 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
                 }
                 // what the panel sent, read (the read takes what came: it does not wait)
                 let State { link, heard, .. } = &mut *state;
+                let stopped = heard.count(CMD_STOPPED);
                 if let Some(link) = link.as_mut() {
                     if let Some(n) = link.waiting().filter(|n| *n > 0) {
                         match link.read(n.min(HEARD_KEPT)) {
@@ -553,6 +592,14 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
                             }
                         }
                     }
+                }
+                // the MAJESTY gone dark by itself: opened again, as a change of the brightness
+                // in the app does, which brings it back (the next picture says so)
+                if kind == Kind::Majesty && heard.count(CMD_STOPPED) > stopped && revive(&port) {
+                    state.fault = Some(DeviceError(format!(
+                        "the panel on {port} went dark (it said FF): it is opened again"
+                    )));
+                    return;
                 }
                 if state.last_sent.elapsed() < every || state.link.is_none() {
                     continue;
@@ -597,8 +644,15 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
     /// panel's size (Lanczos), in RGB, as a JPEG (the MAJESTY's dimmed first). A fault of the
     /// keeping thread comes out here.
     pub fn show(&mut self, image: &Image) -> Result<()> {
-        if self.shared.lock().link.is_none() {
-            return Err(DeviceError("panel not open".into()));
+        {
+            let mut state = self.shared.lock();
+            if state.link.is_none() {
+                return Err(DeviceError("panel not open".into()));
+            }
+            // (a fault known already: before the picture is made for nothing)
+            if let Some(fault) = state.fault.take() {
+                return Err(fault);
+            }
         }
         let (width, height) = self.native;
         let mut image = std::borrow::Cow::Borrowed(image);
@@ -635,6 +689,12 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
     /// What it counted.
     pub fn counters(&self) -> Counters {
         self.shared.lock().counters
+    }
+
+    /// What went wrong while no picture went out (the keeping thread found it: the panel gone,
+    /// the MAJESTY gone dark), taken; None for nothing.
+    pub fn take_fault(&mut self) -> Option<DeviceError> {
+        self.shared.lock().fault.take()
     }
 
     /// What it noted for the log since it was last asked (what the panel sent unasked).
@@ -716,5 +776,111 @@ mod tests {
             Some("the panel on COM6 said unasked: 11 ×2, 7 bytes that were no frame")
         );
         assert_eq!(Heard::default().summary("COM6"), None);
+    }
+}
+
+#[cfg(test)]
+mod gone_dark {
+    use std::collections::VecDeque;
+
+    use super::*;
+
+    /// A panel the tests make up: what was written to it, and what it says (its answer to 06,
+    /// to the MAJESTY's setting up, and what a test puts in).
+    #[derive(Clone, Default)]
+    struct Made {
+        input: Arc<Mutex<VecDeque<u8>>>,
+    }
+
+    impl Link for Made {
+        fn write(&mut self, data: &[u8]) -> Result<()> {
+            let mut input = self.input.lock().unwrap();
+            if data == frame(CMD_INFO, &[]).unwrap() {
+                let said = br#"{"width": 462, "height": 1920, "model": "made up"}"#;
+                input.extend(framed(CMD_INFO, said).unwrap());
+            }
+            if data == majesty_setup() {
+                input.extend([0x55, 0xAA, 0x07, 0x00, 0x15, 0x1B, 0x01]);
+            }
+            Ok(())
+        }
+        fn read(&mut self, size: usize) -> Result<Vec<u8>> {
+            let mut input = self.input.lock().unwrap();
+            let n = size.min(input.len());
+            Ok(input.drain(..n).collect())
+        }
+        fn drain_input(&mut self) {
+            self.input.lock().unwrap().clear();
+        }
+        fn waiting(&mut self) -> Option<usize> {
+            Some(self.input.lock().unwrap().len())
+        }
+        fn close(&mut self) {}
+    }
+
+    /// What the MAJESTY of issue #54 said the moment it went dark.
+    const DARK: [u8; 8] = [0x55, 0xAA, 0x08, 0x00, 0xFF, 0xFF, 0x05, 0x03];
+
+    fn opened(kind: Kind, port: &str) -> (HongtaiDisplay<Made>, Made) {
+        let made = Made::default();
+        let timing = Timing {
+            settle: Duration::from_millis(1),
+            live_every: Duration::from_millis(100),
+            setup_answer: Duration::from_millis(200),
+        };
+        let (mut display, _) =
+            HongtaiDisplay::open(made.clone(), kind, None, port, timing).unwrap();
+        // (what it said it is, for the log)
+        let said = format!("the panel on {port} calls itself \"made up\", 462x1920");
+        assert_eq!(display.notes(), [said]);
+        (display, made)
+    }
+
+    /// The panel's words, once its keeper has read what it said (2 s at most).
+    fn heard(display: &mut HongtaiDisplay<Made>) -> Vec<String> {
+        let until = Instant::now() + Duration::from_secs(2);
+        let mut notes = Vec::new();
+        while notes.is_empty() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(20));
+            notes = display.notes();
+        }
+        notes
+    }
+
+    #[test]
+    fn a_majesty_that_went_dark_is_opened_again_at_most_once_a_minute() {
+        let port = "a port of this test";
+        let frame = Image::new(Mode::RGB, 1920, 462, &[200, 40, 40]);
+        let (mut display, made) = opened(Kind::Majesty, port);
+        made.input.lock().unwrap().extend(DARK);
+        assert_eq!(
+            heard(&mut display),
+            [format!(
+                "the panel on {port} said FF unasked (8 bytes: 55 AA 08 00 FF FF 05 03)"
+            )]
+        );
+        // (the next picture says so, and the app opens it again)
+        let why = display.show(&frame).unwrap_err();
+        assert_eq!(
+            why.0,
+            format!("the panel on {port} went dark (it said FF): it is opened again")
+        );
+        display.close();
+        // dark again at once: not opened again and again
+        let (mut again, made) = opened(Kind::Majesty, port);
+        made.input.lock().unwrap().extend(DARK);
+        assert_eq!(heard(&mut again).len(), 1);
+        assert!(again.shared.lock().fault.is_none());
+        again.close();
+    }
+
+    #[test]
+    fn a_panel_of_the_family_is_not_opened_again_for_what_it_says() {
+        let port = "a port of the family's test";
+        let (mut display, made) = opened(Kind::Family, port);
+        made.input.lock().unwrap().extend(DARK);
+        assert_eq!(heard(&mut display).len(), 1);
+        assert!(display.shared.lock().fault.is_none());
+        display.close();
     }
 }

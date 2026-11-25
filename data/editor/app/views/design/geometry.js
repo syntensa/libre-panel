@@ -105,10 +105,22 @@ export function onStep(value, step, low, high) {
 
 // -- snapping ------------------------------------------------------------------
 
-/** Strips of the frame the panel's bezel hides, when the theme is exactly that panel's size. */
-export function hiddenEdges(model, size) {
+/**
+ * Strips of the frame the panel's bezel hides: those of the panel the theme shows on
+ * (`shownOn`: its own, scaled onto the theme where the theme has another size, as it is fitted
+ * to that panel), else those of the panel the theme is made for, when the theme is exactly
+ * that panel's size.
+ */
+export function hiddenEdges(model, size, shownOn = null) {
   const [w, h] = size || [0, 0];
   const orientation = w > h ? "landscape" : "portrait";
+  const [pw, ph] = shownOn?.[orientation] || [0, 0];
+  if (shownOn?.hidden?.[orientation] && pw > 0 && ph > 0) {
+    const own = shownOn.hidden[orientation];
+    const across = { top: h / ph, right: w / pw, bottom: h / ph, left: w / pw };
+    const edges = Object.fromEntries(Object.entries(own).map(([edge, px]) => [edge, Math.round(px * across[edge])]));
+    return Object.values(edges).some((px) => px > 0) ? edges : null;
+  }
   if (!model?.hidden || model[orientation]?.[0] !== w || model[orientation]?.[1] !== h) return null;
   const edges = model.hidden[orientation];
   return Object.values(edges).some((px) => px > 0) ? edges : null;
