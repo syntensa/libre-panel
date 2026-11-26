@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.9.6 — 2026-11-26
+
+Two more panels, AIGO's Xingcanchen case screen and Valkyrie's B360-GT VK cooler screen;
+readings of your own under a ring; and MQTT messages taken apart all the way. Also fixed: a
+crash on Windows when a theme that shows music came back after a game, the light of Lumen,
+Arena and Encore v2, which showed in steps, Dell's fans where only an administrator may read
+them, the Lian Li 8.8"'s clock while the PC is off, and a MAJESTY 9.16" that went dark by
+itself.
 
 **New**
 - **MQTT takes a JSON message apart all the way.** An object or a list inside a message gives
@@ -64,6 +71,12 @@
   A theme made for the 9.2" bar showed the 9.2"'s hidden top as hidden while it ran on a
   MAJESTY, which shows all of it (issue #54); a theme of another size shows the strip of the
   panel it runs on, scaled onto it.
+- **The Lian Li Universal Screen 8.8"'s clock when the PC is off** counted up from 00:00
+  (issue #65): Libre Panel never told the panel the time. It now tells it each time it opens
+  the panel, as L-Connect does (SetClock with mode 2: the clock is set, and the panel's own
+  choice whether it shows a clock stays as it is; nothing is saved in the panel). Where the
+  panel does not answer, it opens as before. Not yet tried on a panel: if you have one, how it
+  went is welcome in issue #65.
 
 **Changed**
 - **The Thermalright Trofeo Vision 9.16" is supported**: it "worked perfectly right out of the
