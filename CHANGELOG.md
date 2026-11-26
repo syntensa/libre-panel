@@ -25,6 +25,12 @@
   a light heartbeat in between, never the same picture again and again.
 
 **Fixed**
+- **Windows: no crash when a theme with media.* readings comes back after a game.** Where a
+  theme that shows what plays (the title, the cover, the progress) came back after a minute or
+  more without one, a game's theme for instance, Libre Panel could die within the same second
+  (issue #72). Reading what plays stops after a minute in which no theme reads it, and with it
+  Windows let go of the code behind the media controls, which the next start still called.
+  That code is kept now for as long as the app runs.
 - **The light under Lumen v2, Arena v2 and Encore v2 is smooth.** Its faint glow showed as
   rings of steps across the panel, a level of brightness each, their edges jagged in steps of
   eight pixels, and the panel's video made them stand out more. The light is now worked out in

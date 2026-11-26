@@ -21,6 +21,7 @@ use windows::Media::Control::{
 use windows::Storage::Streams::{
     Buffer, DataReader, IRandomAccessStreamReference, InputStreamOptions,
 };
+use windows::Win32::System::Com::CoIncrementMTAUsage;
 use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 
 use crate::media::{
@@ -47,6 +48,26 @@ struct News {
     /// the current session changed: listen to it again
     new_session: bool,
     wake: Option<Arc<dyn Fn() + Send + Sync>>,
+}
+
+/// Keep the process's multi-threaded apartment for as long as the process runs, from the
+/// first look on. The windows crate keeps the factory of the media controls once it has one,
+/// for every later thread; the source's thread ends after a minute in which nobody reads
+/// media.*, and where no thread was left in the apartment then, Windows tore it down and let
+/// go of the code behind that factory. The next thread then called into code that was gone:
+/// an access violation in `sensors-media`, as a theme with media.* readings came back after a
+/// game.
+fn keep_apartment() -> Result<(), String> {
+    static KEPT: Mutex<bool> = Mutex::new(false);
+    let mut kept = KEPT
+        .lock()
+        .map_err(|_| "the apartment is not kept".to_string())?;
+    if !*kept {
+        // SAFETY: a call without arguments; the usage it takes is never given back.
+        unsafe { CoIncrementMTAUsage() }.map_err(|why| why.message())?;
+        *kept = true;
+    }
+    Ok(())
 }
 
 /// A value Windows may not have (a null it gives as an error without a code).
@@ -91,6 +112,7 @@ pub struct Controls {
 
 impl Controls {
     pub fn new() -> Result<Controls, String> {
+        keep_apartment()?;
         // SAFETY: this thread talks to Windows: it joins the multi-threaded apartment (an
         // error says it has joined one already).
         unsafe {
@@ -404,5 +426,53 @@ impl Backend for Controls {
             let _ = manager.RemoveCurrentSessionChanged(token);
         }
         self.session_id = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::channel;
+    use std::time::Duration;
+    use windows::Win32::System::Com::{CoGetApartmentType, APTTYPE, APTTYPEQUALIFIER, APTTYPE_MTA};
+
+    /// `work` in a thread of its own, as the media source runs; its answer once the thread
+    /// has ended, if it gives one within half a minute (where nothing answers it: none).
+    fn in_a_thread<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let (answer, answered) = channel();
+        let thread = std::thread::spawn(move || {
+            let _ = answer.send(work());
+        });
+        let found = answered.recv_timeout(Duration::from_secs(30)).ok()?;
+        thread.join().ok().map(|()| found)
+    }
+
+    fn a_look() {
+        if let Ok(mut controls) = Controls::new() {
+            let _ = controls.poll(true, &|| 0.0); // (nothing may play)
+            controls.close();
+        }
+    }
+
+    /// The source's thread ends after a minute in which nobody reads media.*, and another
+    /// starts when a theme does again: the apartment the first one joined outlasts it, and
+    /// the next ones read what plays again (where the apartment had gone with the thread, the
+    /// next one called into code Windows had let go of).
+    #[test]
+    fn what_plays_is_read_again_by_a_thread_after_the_one_before_ended() {
+        assert_eq!(in_a_thread(|| Controls::new().is_ok()), Some(true));
+        // a thread that joined no apartment is in the process's multi-threaded one, while
+        // there is one
+        let apartment = in_a_thread(|| {
+            let (mut kind, mut qualifier) = (APTTYPE::default(), APTTYPEQUALIFIER::default());
+            // SAFETY: both pointers are to locals of this thread
+            unsafe { CoGetApartmentType(&mut kind, &mut qualifier) }.map(|()| kind)
+        });
+        assert_eq!(apartment.and_then(Result::ok), Some(APTTYPE_MTA));
+        for _ in 0..3 {
+            if in_a_thread(a_look).is_none() {
+                return; // the media controls do not answer on this computer
+            }
+        }
     }
 }
