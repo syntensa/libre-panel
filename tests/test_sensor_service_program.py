@@ -4,8 +4,9 @@ CI while the Python service was there): started by hand (--console) and as a Win
 asked over its named pipe by a client of this file's own, as the protocol says (a length of four
 bytes, little-endian, then a JSON object). Its checks of a request word for word, the rights on its
 pipe, its limits (the length of a request, a message that stops halfway, requests that come
-too fast), one program at the name, and LibreHardwareMonitor read in it. What the Rust app's
-client makes of it: rust/sensors service.rs's tests.
+too fast), one program at the name, LibreHardwareMonitor read in it, and Dell Command | Monitor
+asked in it for a client. What the Rust app's client makes of it: rust/sensors service.rs's
+and dell.rs's tests.
 
 Windows only, where CI built the program (LIBRE_PANEL_SENSOR_HOST: ci.yml, job sensor-host), as
 an administrator, as the runner is one: LibreHardwareMonitor and a service need it."""
@@ -321,6 +322,31 @@ def test_it_reads_librehardwaremonitor_and_says_what_it_holds(host: subprocess.P
     assert parts and all(part[3] >= 0 for part in parts)
     print(f"{len(answer['sensors'])} sensors of {len(parts)} parts; it holds "
           f"{memory['private'] / 2**20:.1f} MB")  # fmt: skip
+
+
+DELL_FIELDS = 6  # ElementName, DeviceID, SensorType, BaseUnits, UnitModifier, CurrentReading
+
+
+def test_it_asks_dell_command_monitor_for_a_client(host: subprocess.Popen) -> None:
+    """Dell's fans as Dell Command | Monitor reports them, which it may tell administrators
+    only, asked by the service for a client (rust/sensors dell.rs asks so where it is turned
+    away): their rows, or why there are none, and the connection goes on. CI's computers have
+    no Dell Command | Monitor: its namespace is not there."""
+    link = connect()
+    try:
+        answer = link.ask({"v": PROTOCOL, "op": "dell"})
+        time.sleep(0.25)
+        assert link.ask({"v": PROTOCOL, "op": "hello"})["ok"] is True
+    finally:
+        link.close()
+    assert answer is not None and answer["v"] == PROTOCOL, answer
+    if answer["ok"]:
+        assert set(answer) == {"v", "ok", "rows"}, answer
+        assert all(len(row) == DELL_FIELDS for row in answer["rows"]), answer
+    else:
+        assert set(answer) == {"v", "ok", "error"}, answer
+        assert answer["error"].startswith("Dell Command | Monitor: "), answer
+    print(answer)
 
 
 def sc(*args: str) -> subprocess.CompletedProcess:

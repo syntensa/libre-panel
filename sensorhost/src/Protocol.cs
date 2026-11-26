@@ -76,6 +76,10 @@ internal static class Protocol
         message.TryGetValue("op", out object? op);
         if (op is "hello")
             return new Request("hello", [], false);
+        // Dell Command | Monitor's sensors, asked for the client (Dell.cs)
+        if (op is "dell")
+            return new Request("dell", [], false);
+        // (the answer to any other is the Python service's, as clients know it)
         if (op is not "read")
             throw new ProtocolError("a request is hello or read");
         object? hardware = message.TryGetValue("hardware", out object? named) ? named : new List<object>();
@@ -116,7 +120,7 @@ internal static class Protocol
 
 internal sealed class Request(string op, string[] hardware, bool everything)
 {
-    public string Op { get; } = op;  // "hello" or "read"
+    public string Op { get; } = op;  // "hello", "read" or "dell"
     public string[] Hardware { get; } = hardware;  // read: the hardware to keep up to date
     public bool Everything { get; } = everything;  // read: update every piece once
 }

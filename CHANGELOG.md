@@ -37,6 +37,11 @@
   sixteenths of a level and made whole levels only pixel by pixel, through a fine pattern that
   stays the same from frame to frame: a step becomes a fade. A frame that does not change
   stays the same to the bit, and the panel's video needs fewer bits for the light, not more.
+- **Dell's fans where Dell Command | Monitor answers administrators only.** On many Dell PCs
+  it tells its fans and temperatures to an administrator alone, and Libre Panel, which runs
+  without those rights, got "access denied" and showed no `fan.dell.*` reading (issue #54).
+  There the sensor service, which the setup or *Unlock all sensors* sets up, now asks it for
+  Libre Panel, and the log says so. The sensor service only reads, as before.
 - **Dell's fans: what the source reads, in the log.** With *Dell fans* on, the log says what
   Dell Command | Monitor gives, each reading by its name (`fan.dell.processor_fan`), and again
   when that changes; or why it gives none: no sensor at all, or the sensors there are with what

@@ -1154,7 +1154,9 @@ temperatures it reports, every `update_s` seconds, and names them as it does: it
 Fan" is `fan.dell.processor_fan` (RPM), its "CPU Temperature" `temp.dell.cpu_temperature`
 (°C), where every fan and temperature of a PC is. Switch it on in *Settings → Sensors → Dell
 fans*, or name it among the sources; a PC without Dell Command | Monitor is said once in the
-log.
+log. On many Dell PCs it answers administrators only, and Libre Panel runs without those
+rights: there the sensor service asks it for Libre Panel (it is set up with Libre Panel's
+setup, or with *Unlock all sensors*), and the log says so.
 
 ```toml
 [sensors]

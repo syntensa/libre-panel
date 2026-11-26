@@ -256,24 +256,28 @@ service instead, which does the same on the same pipe.)
 
 **It only reads.** It opens LibreHardwareMonitor on every kind of hardware it knows (CPU,
 graphics cards, memory, mainboard and its chips, drives, network, fan controllers and pumps,
-power supplies, batteries) and asks its sensors for their values. It never sets a control
+power supplies, batteries) and asks its sensors for their values. On a Dell PC whose Dell
+Command | Monitor answers administrators only, it also asks that program's WMI namespace
+(`root\dcim\sysman`) for its fans and temperatures, for Libre Panel. It never sets a control
 (no fan speed, no pump, no light), changes no setting of the hardware and starts no program.
 Reading some devices means sending them the request they answer (a USB fan controller, a
 power supply), as LibreHardwareMonitor itself does.
 
 **What crosses the pipe.** The service answers on the local named pipe
-`\\.\pipe\LibrePanelSensors`, and understands two requests: *hello* (its version) and *read*
+`\\.\pipe\LibrePanelSensors`, and understands three requests: *hello* (its version), *read*
 (the readings, and which pieces of hardware the client's themes show, which it then reads for
-the next ten seconds). The answer to *read* also says how long each piece's update took in the
-last round and in the last round of all hardware (*Status → Diagnose → Load*); a service older
-than that leaves it out, and the protocol is the same either way. Anything else gets an error
-answer. A message is a JSON object after
-its length, at most 4 KiB in and 4 MiB out; a length out of bounds ends the connection, as
-does a client that says nothing for 30 seconds or takes longer than 5 seconds with a message
-it began; a connection may ask four times a second (after a first eight); four clients are
-served at once. A request never touches the hardware: it is answered from what the service
-read last, so no client can make it read more often than once a second, and while nobody asks
-it reads nothing at all.
+the next ten seconds) and *dell* (Dell Command | Monitor's numeric sensors: one fixed query of
+fixed properties, into which nothing of the request goes; a service older than that turns it
+away like any request it does not know). The answer to *read* also says how long each piece's
+update took in the last round and in the last round of all hardware (*Status → Diagnose →
+Load*); a service older than that leaves it out, and the protocol is the same either way.
+Anything else gets an error answer. A message is a JSON object after its length, at most 4 KiB
+in and 4 MiB out; a length out of bounds ends the connection, as does a client that says
+nothing for 30 seconds or takes longer than 5 seconds with a message it began; a connection may
+ask four times a second (after a first eight); four clients are served at once. No client can
+make it read more often than once a second: *read* is answered from what the service read
+last, and *dell* asks Dell Command | Monitor at most once a second, whoever asks (an answer
+younger than that is given again). While nobody asks, it reads nothing at all.
 
 **Who may talk to it.** The pipe's security descriptor (a protected DACL, set when the
 service makes it):

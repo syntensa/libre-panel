@@ -46,6 +46,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- WMI, for Dell Command | Monitor's sensors (src/Dell.cs): part of the .NET Framework -->
+    <Reference Include="System.Management" />
     <Reference Include="LibreHardwareMonitorLib">
       <HintPath>$(LhmLibs)\LibreHardwareMonitorLib.dll</HintPath>
       <Private>false</Private>

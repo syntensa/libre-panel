@@ -58,6 +58,8 @@ internal sealed class Handler(Reader reader, string version, Func<ServiceMemory?
         }
         if (request.Op == "hello")
             return new HelloAnswer(version);
+        if (request.Op == "dell")
+            return Dell.Answer();
         reader.Ask(request.Hardware, request.Everything);
         Snapshot snapshot = reader.Latest();
         double? age = snapshot.Stamp is double stamp ? Clock.Now() - stamp : null;

@@ -26,6 +26,8 @@ pub const MAX_SENSORS: usize = 10_000;
 pub const MAX_TEXT: usize = 300;
 /// parts one round's times may name
 pub const MAX_TIMED: usize = 256;
+/// Dell Command | Monitor's sensors one answer to `dell` may carry
+pub const MAX_DELL_ROWS: usize = 256;
 /// what the service says it holds is less than this
 pub const MAX_BYTES: u64 = 1 << 48;
 pub const STATES: [&str; 3] = ["starting", "running", "failed"];
@@ -130,6 +132,12 @@ fn request(op: &str) -> Dict {
 
 pub fn hello_request() -> Value {
     Value::Dict(request("hello"))
+}
+
+/// dell_request: Dell Command | Monitor's sensors, which the service asks for this client (it
+/// may answer administrators only).
+pub fn dell_request() -> Value {
+    Value::Dict(request("dell"))
 }
 
 /// read_request: the readings; the service keeps `hardware` up to date for the next few
@@ -409,4 +417,35 @@ pub fn parse_readings(message: &Dict) -> Result<Readings, Error> {
         timing: parse_timing(message.get("timing"))?,
         memory: parse_memory(message.get("memory"))?,
     })
+}
+
+/// parse_dell: the answer to `dell`, checked whole: each of Dell Command | Monitor's sensors
+/// with `fields` (its row's values in their order: a text, a number or none), or why the
+/// service could not ask it (`Error::Service`).
+pub fn parse_dell(message: &Dict, fields: &[&str]) -> Result<Vec<crate::dell::Row>, Error> {
+    checked(message)?;
+    let Some(rows) = message
+        .get("rows")
+        .and_then(Value::as_list)
+        .filter(|rows| rows.len() <= MAX_DELL_ROWS)
+    else {
+        return wrong(format!("rows is a list of at most {MAX_DELL_ROWS}"));
+    };
+    let one = |row: &Value| -> Result<crate::dell::Row, Error> {
+        let Some(values) = row.as_list().filter(|values| values.len() == fields.len()) else {
+            return wrong(format!("a row is a list of {} values", fields.len()));
+        };
+        let mut out = crate::dell::Row::new();
+        for (&field, value) in fields.iter().zip(values) {
+            let value = match value {
+                Value::Str(_) => Value::Str(text(Some(value), field, true)?),
+                Value::Int(_) | Value::None => value.clone(),
+                Value::Float(f) if f.is_finite() => value.clone(),
+                _ => return wrong(format!("{field} is a text, a number or null")),
+            };
+            out.insert(field.to_string(), value);
+        }
+        Ok(out)
+    };
+    rows.iter().map(one).collect()
 }

@@ -6,7 +6,9 @@
 //! Fan" is `fan.dell.processor_fan`), where every fan and temperature of a PC is.
 //!
 //! It is asked every `update_s` seconds in a thread of its own; a PC without Dell Command |
-//! Monitor is said once and asked again only a minute later. What it reads is said when it
+//! Monitor is said once and asked again only a minute later. Where it turns Libre Panel away
+//! (on many PCs it answers administrators only), the sensor service asks it instead: the
+//! service is the system, and it makes the same query for Libre Panel (`dell` on its pipe). What it reads is said when it
 //! first answers and again when that changes (each reading's name, or why there is none: the
 //! sensors it gave and what they are), so that an owner finds the names in the log. A reading
 //! that does not come again keeps its last value for three times `update_s`, then it goes.
@@ -37,6 +39,11 @@ pub const FIELDS: [&str; 6] = [
 ];
 /// a namespace that is not there is asked again after this long
 const ABSENT_S: f64 = 60.0;
+/// a request through the sensor service, its query of Dell's sensors included
+#[cfg(windows)]
+const SERVICE_SECONDS: f64 = 15.0;
+/// what a sensor service of before `dell` says to it
+pub const OLD_SERVICE: &str = "a request is hello or read";
 
 /// CIM_NumericSensor's SensorType: a temperature, a fan (its tachometer)
 const TEMPERATURE: i64 = 2;
@@ -48,6 +55,35 @@ const RPM: i64 = 19;
 /// One sensor as WMI gives it: its properties by name, a number or a text (none where WMI
 /// gives none, as a sensor gives none that has no reading).
 pub type Row = IndexMap<String, Value>;
+
+/// Why Dell Command | Monitor gave nothing: what was said, and whether it turned this process
+/// away (as it does where it answers administrators only).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Failure {
+    pub why: String,
+    pub denied: bool,
+}
+
+impl Failure {
+    fn of(why: impl Into<String>) -> Failure {
+        Failure {
+            why: why.into(),
+            denied: false,
+        }
+    }
+}
+
+/// service_said: why the sensor service gave no sensors of Dell's, for the log.
+pub fn service_said(error: &crate::protocol::Error) -> String {
+    match error {
+        crate::protocol::Error::Service(why) if why == OLD_SERVICE => {
+            "the sensor service is of a version before this app's and cannot ask it: Unlock all \
+             sensors (or the setup) brings it up to date"
+                .into()
+        }
+        other => other.to_string(),
+    }
+}
 
 /// `[sensors.dell]`.
 #[derive(Clone, Debug, PartialEq)]
@@ -164,7 +200,7 @@ pub fn gives(rows: &[Row], readings: &Readings) -> String {
 /// WMI on Windows: a query's rows in a namespace, each with the properties asked for.
 #[cfg(windows)]
 pub mod wmi {
-    use super::Row;
+    use super::{Failure, Row};
     use lp_py::Value;
     use windows::core::{BSTR, PCWSTR};
     use windows::Win32::System::Com::{
@@ -185,9 +221,15 @@ pub mod wmi {
     const AUTHZ_NONE: u32 = 0;
     /// how long the next row is waited for, in milliseconds
     const ROW_WAIT_MS: i32 = 5000;
+    /// WBEM_E_ACCESS_DENIED and E_ACCESSDENIED: this process may not ask
+    const DENIED: [u32; 2] = [0x8004_1003, 0x8007_0005];
 
-    fn said(why: windows::core::Error) -> String {
-        format!("{} (0x{:08X})", why.message(), why.code().0 as u32)
+    fn said(why: windows::core::Error) -> Failure {
+        let code = why.code().0 as u32;
+        Failure {
+            why: format!("{} (0x{code:08X})", why.message()),
+            denied: DENIED.contains(&code),
+        }
     }
 
     /// A connection to a namespace of this PC's WMI, on a thread of the multithreaded
@@ -197,7 +239,7 @@ pub mod wmi {
     }
 
     impl Wmi {
-        pub fn connect(namespace: &str) -> Result<Wmi, String> {
+        pub fn connect(namespace: &str) -> Result<Wmi, Failure> {
             // SAFETY: COM calls with their documented arguments; what they give is checked.
             unsafe {
                 // (S_FALSE where the thread has it already; the thread is the source's own)
@@ -233,7 +275,7 @@ pub mod wmi {
 
         /// The rows of a WQL query, each with `fields` (a number where WMI gives one, a text
         /// where it gives a text, none where it gives none).
-        pub fn rows(&self, query: &str, fields: &[&str]) -> Result<Vec<Row>, String> {
+        pub fn rows(&self, query: &str, fields: &[&str]) -> Result<Vec<Row>, Failure> {
             let mut out = Vec::new();
             // SAFETY: COM calls with their documented arguments; each VARIANT is cleared.
             unsafe {
@@ -312,26 +354,80 @@ pub mod wmi {
     }
 }
 
+/// How Dell Command | Monitor is asked: by this process, until it turns this process away;
+/// then through the sensor service, for as long as the source runs.
+#[derive(Default)]
+struct Asking {
+    #[cfg(windows)]
+    direct: Option<wmi::Wmi>,
+    #[cfg(windows)]
+    link: Option<Box<dyn crate::service::Link>>,
+    through_service: bool,
+}
+
 /// The rows of Dell Command | Monitor's numeric sensors; why there are none.
 #[cfg(windows)]
-fn fetch(connection: &mut Option<wmi::Wmi>) -> Result<Vec<Row>, String> {
-    if connection.is_none() {
-        *connection = Some(wmi::Wmi::connect(NAMESPACE)?);
+fn fetch(asking: &mut Asking) -> Result<Vec<Row>, Failure> {
+    if asking.through_service {
+        return through_service(&mut asking.link);
     }
-    let rows = connection.as_ref().map(|wmi| wmi.rows(QUERY, &FIELDS));
+    if asking.direct.is_none() {
+        asking.direct = Some(wmi::Wmi::connect(NAMESPACE)?);
+    }
+    let rows = asking.direct.as_ref().map(|wmi| wmi.rows(QUERY, &FIELDS));
     match rows {
         Some(Ok(rows)) => Ok(rows),
         Some(Err(why)) => {
-            *connection = None; // (connected anew the next time)
+            asking.direct = None; // (connected anew the next time)
             Err(why)
         }
         None => Ok(Vec::new()),
     }
 }
 
+/// The rows as the sensor service asked them (its pipe, as LibreHardwareMonitor's readings
+/// come); the connection stays for the next round, and is made anew after a failure.
+#[cfg(windows)]
+fn through_service(link: &mut Option<Box<dyn crate::service::Link>>) -> Result<Vec<Row>, Failure> {
+    if link.is_none() {
+        *link = Some(crate::winlink::open_link().map_err(|why| Failure::of(why.0))?);
+    }
+    let Some(open) = link.as_mut() else {
+        return Ok(Vec::new());
+    };
+    let asked = match open.request(&crate::protocol::dell_request(), SERVICE_SECONDS) {
+        Ok(answer) => {
+            crate::protocol::parse_dell(&answer, &FIELDS).map_err(|why| service_said(&why))
+        }
+        Err(why) => Err(why.0),
+    };
+    if asked.is_err() {
+        *link = None;
+    }
+    asked.map_err(Failure::of)
+}
+
 #[cfg(not(windows))]
-fn fetch(_connection: &mut Option<()>) -> Result<Vec<Row>, String> {
-    Err("Dell Command | Monitor is a Windows program".into())
+fn fetch(_asking: &mut Asking) -> Result<Vec<Row>, Failure> {
+    Err(Failure::of("Dell Command | Monitor is a Windows program"))
+}
+
+/// moved_note: Dell Command | Monitor turned this process away, and the sensor service asks it.
+fn moved_note(why: &str) -> String {
+    format!(
+        "dell: Dell Command | Monitor answers administrators only ({why}): the sensor service \
+         asks it for Libre Panel"
+    )
+}
+
+/// failed_note: why Dell Command | Monitor gives nothing, by this process or through the
+/// sensor service.
+fn failed_note(why: &str, through_service: bool) -> String {
+    if through_service {
+        format!("dell: the sensor service cannot ask Dell Command | Monitor ({why})")
+    } else {
+        format!("dell: no Dell Command | Monitor to ask ({why})")
+    }
 }
 
 #[derive(Default)]
@@ -348,16 +444,26 @@ struct Shared {
 }
 
 fn run(shared: &Shared, every: Duration) {
-    let mut connection = None;
+    let mut asking = Asking::default();
     // said once, until it answers again
     let mut failed = false;
     // the readings' names said last (what it reads is said again when they change)
     let mut said: Option<Vec<String>> = None;
     loop {
-        let found = fetch(&mut connection);
+        let mut found = fetch(&mut asking);
+        let mut moved = None;
+        if let (Err(failure), false) = (&found, asking.through_service) {
+            if failure.denied {
+                // (it answers administrators only: the sensor service asks it from now on)
+                moved = Some(moved_note(&failure.why));
+                asking.through_service = true;
+                found = fetch(&mut asking);
+            }
+        }
         let Ok(mut state) = shared.state.lock() else {
             return;
         };
+        state.notes.extend(moved);
         let mut wait = every;
         match found {
             Ok(rows) => {
@@ -374,11 +480,12 @@ fn run(shared: &Shared, every: Duration) {
                 }
                 state.got = Some((Instant::now(), readings));
             }
-            Err(why) => {
+            Err(failure) => {
                 if !failed {
                     failed = true;
-                    let note = format!("dell: no Dell Command | Monitor to ask ({why})");
-                    state.notes.push(note);
+                    state
+                        .notes
+                        .push(failed_note(&failure.why, asking.through_service));
                 }
                 wait = wait.max(Duration::from_secs_f64(ABSENT_S));
             }
@@ -612,6 +719,113 @@ mod tests {
             "dell: Dell Command | Monitor answers, but none of its 2 sensors is a fan or a \
              temperature with a reading (Root/MainSystemChassis/FanObj: type 5, units none, \
              reading none; CPU Voltage: type 3, units 5, reading 1100)"
+        );
+    }
+
+    fn answer(json: &str) -> lp_py::Dict {
+        match lp_py::json::loads(json) {
+            Ok(Value::Dict(answer)) => answer,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// Where Dell Command | Monitor answers administrators only, the sensor service asks it:
+    /// its rows are the rows WMI gives this process elsewhere, and make the same readings.
+    #[test]
+    fn the_sensor_services_rows_are_read_as_wmis() {
+        let given = answer(
+            r#"{"v": 1, "ok": true, "rows": [
+                ["Processor Fan", "Root/MainSystemChassis/FanObj", 5, 19, 0, 2345],
+                ["CPU Temperature", null, 2, 2, -1, 523],
+                ["CPU Voltage", "Root/MainSystemChassis/VoltObj", 3, 5, 0, 1100.0]]}"#,
+        );
+        let rows = crate::protocol::parse_dell(&given, &FIELDS).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(
+            rows[0].keys().collect::<Vec<_>>(),
+            FIELDS.iter().collect::<Vec<_>>()
+        );
+        assert_eq!(rows[1]["DeviceID"], Value::None);
+        let read = readings_from_rows(&rows);
+        let seen: Vec<(&str, &Value)> = read.iter().map(|(k, r)| (k.as_str(), &r.value)).collect();
+        assert_eq!(
+            seen,
+            [
+                ("fan.dell.processor_fan", &Value::Float(2345.0)),
+                ("temp.dell.cpu_temperature", &Value::Float(52.3)),
+            ]
+        );
+        // (no sensor at all is no error)
+        let none = answer(r#"{"v": 1, "ok": true, "rows": []}"#);
+        assert_eq!(crate::protocol::parse_dell(&none, &FIELDS), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn an_answer_not_as_the_protocol_has_it_is_none() {
+        use crate::protocol::{parse_dell, Error};
+        let refused = answer(
+            r#"{"v": 1, "ok": false, "error": "Dell Command | Monitor: Invalid namespace"}"#,
+        );
+        assert_eq!(
+            parse_dell(&refused, &FIELDS),
+            Err(Error::Service(
+                "Dell Command | Monitor: Invalid namespace".into()
+            ))
+        );
+        for wrong in [
+            r#"{"v": 1, "ok": true}"#,
+            r#"{"v": 1, "ok": true, "rows": {}}"#,
+            r#"{"v": 1, "ok": true, "rows": [["Processor Fan", null, 5, 19, 0]]}"#,
+            r#"{"v": 1, "ok": true, "rows": [["Processor Fan", null, 5, 19, 0, [2345]]]}"#,
+            r#"{"v": 1, "ok": true, "rows": [["Processor Fan", null, 5, 19, true, 2345]]}"#,
+            r#"{"v": 2, "ok": true, "rows": []}"#,
+        ] {
+            assert!(
+                matches!(parse_dell(&answer(wrong), &FIELDS), Err(Error::Protocol(_))),
+                "{wrong}"
+            );
+        }
+        let long = "x".repeat(crate::protocol::MAX_TEXT + 1);
+        let too_long =
+            format!(r#"{{"v": 1, "ok": true, "rows": [["{long}", null, 5, 19, 0, 1]]}}"#);
+        assert!(matches!(
+            parse_dell(&answer(&too_long), &FIELDS),
+            Err(Error::Protocol(_))
+        ));
+        let row = r#"["Fan", null, 5, 19, 0, 1]"#;
+        let rows = vec![row; crate::protocol::MAX_DELL_ROWS + 1].join(",");
+        let too_many = format!(r#"{{"v": 1, "ok": true, "rows": [{rows}]}}"#);
+        assert!(matches!(
+            parse_dell(&answer(&too_many), &FIELDS),
+            Err(Error::Protocol(_))
+        ));
+    }
+
+    #[test]
+    fn the_log_says_who_asks_and_why_nothing_comes() {
+        use crate::protocol::Error;
+        assert_eq!(
+            moved_note("Access denied (0x80041003)"),
+            "dell: Dell Command | Monitor answers administrators only (Access denied \
+             (0x80041003)): the sensor service asks it for Libre Panel"
+        );
+        assert_eq!(
+            failed_note("the sensor service is not installed", true),
+            "dell: the sensor service cannot ask Dell Command | Monitor (the sensor service is \
+             not installed)"
+        );
+        assert_eq!(
+            failed_note("Invalid namespace (0x8004100E)", false),
+            "dell: no Dell Command | Monitor to ask (Invalid namespace (0x8004100E))"
+        );
+        // (a sensor service of before: it is brought up to date)
+        assert!(service_said(&Error::Service(OLD_SERVICE.into()))
+            .starts_with("the sensor service is of a version before this app's"));
+        assert_eq!(
+            service_said(&Error::Service(
+                "Dell Command | Monitor: Invalid namespace".into()
+            )),
+            "Dell Command | Monitor: Invalid namespace"
         );
     }
 
