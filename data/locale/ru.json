@@ -2461,6 +2461,7 @@
     "The community themes cannot be reached right now.": "Темы сообщества сейчас недоступны.",
     "The download is not the file the community's list names (its checksum differs): nothing was installed.": "Загруженный файл — не тот, что указан в списке сообщества (контрольная сумма отличается): ничего не установлено.",
     "The file is larger than {size} MB: a shared theme may be at most that.": "Файл больше {size} МБ: общая тема может быть не больше этого.",
+    "“{file}” is larger than {size} MB, the most a theme takes of such a file.": "«{file}» больше {size} МБ — это предел, который тема принимает для такого файла.",
     "The files of “{name}” come to more than {size} MB: too much to share as one file.": "Файлы «{name}» занимают больше {size} МБ: слишком много для одного файла.",
     "The theme could not be downloaded: {reason}": "Не удалось загрузить тему: {reason}",
     "The theme's files come to more than {size} MB unpacked: a shared theme may be at most that.": "Файлы темы в распакованном виде занимают больше {size} МБ: общая тема может быть не больше этого.",

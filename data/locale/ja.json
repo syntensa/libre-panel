@@ -2461,6 +2461,7 @@
     "The community themes cannot be reached right now.": "現在、コミュニティのテーマに接続できません。",
     "The download is not the file the community's list names (its checksum differs): nothing was installed.": "ダウンロードしたファイルは、コミュニティの一覧に記載されたファイルと一致しません（チェックサムが異なります）。何もインストールされていません。",
     "The file is larger than {size} MB: a shared theme may be at most that.": "ファイルが{size} MBを超えています。共有できるテーマは最大でこのサイズです。",
+    "“{file}” is larger than {size} MB, the most a theme takes of such a file.": "「{file}」は{size} MBを超えています。テーマがこの種類のファイルで受け付けるのはここまでです。",
     "The files of “{name}” come to more than {size} MB: too much to share as one file.": "「{name}」のファイルの合計が{size} MBを超えており、1つのファイルとして共有するには大きすぎます。",
     "The theme could not be downloaded: {reason}": "テーマをダウンロードできませんでした：{reason}",
     "The theme's files come to more than {size} MB unpacked: a shared theme may be at most that.": "テーマのファイルは展開すると{size} MBを超えます。共有できるテーマは最大でこのサイズです。",

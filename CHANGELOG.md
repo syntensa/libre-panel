@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- **Pictures, fonts and videos of your own go into a theme again.** Choosing a file for a
+  picture, a video or a font in *Design* said "Invalid JSON", or the connection was cut off,
+  and nothing was added (issue #74): the Rust app's server had no way for a file to come into
+  a theme and took it for the theme itself. The file goes into the theme's `assets` folder
+  again, as it did before 0.9.0, up to 10 MB (a video up to 64 MB); a larger one is refused
+  before it is sent, its size in the message.
+
 ## 0.9.6 — 2026-11-26
 
 Two more panels, AIGO's Xingcanchen case screen and Valkyrie's B360-GT VK cooler screen;

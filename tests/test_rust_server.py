@@ -1918,6 +1918,78 @@ def test_the_themes_are_listed_and_read_as_server_py_reads_them(servers: Any) ->
     assert seen["HTTP/1.0 403 Forbidden"] >= 3, seen
 
 
+def _asset(theme: str, name: str, body: bytes, length: int | None = None) -> bytes:
+    """A file added to a theme as the app sends it (api.js uploadAsset): its bytes the body."""
+    lines = [f"POST /api/themes/{theme}/assets?name={name} HTTP/1.1", "Host: {host}", WITH,
+             "Content-Type: application/octet-stream",
+             f"Content-Length: {len(body) if length is None else length}"]  # fmt: skip
+    return "\r\n".join(lines).encode("utf-8") + b"\r\n\r\n" + body
+
+
+def test_a_picture_a_font_or_a_video_is_added_to_a_theme_as_server_py_added_it(
+    tmp_path: Path,
+) -> None:
+    """A file added to a theme of one's own (server.py's _upload_asset, which the Rust app's
+    server lacked: issue 74, where it took the file for a theme to save and said "invalid
+    JSON"): into the theme's assets folder, its path told, then listed and read as the theme's
+    other files. Refused: a theme not saved, a name or a kind it does not take, no name, a
+    theme's name that is none, and a file larger than such a file may be (10 MB, a video 64 MB:
+    said before its bytes are read)."""
+    shutil.copytree(DATA / "themes" / "slate", tmp_path / "themes" / "mine")
+    (tmp_path / "config.toml").write_text(
+        'theme = "mine"\nlanguage = "en"\n[device]\ndriver = "virtual"\n'
+        "[sensors]\nproviders = []\n",
+        encoding="utf-8",
+    )
+    env = {**os.environ, "LIBRE_PANEL_HOME": str(tmp_path), "LIBRE_PANEL_DATA": str(DATA),
+           **_libraries()}  # fmt: skip
+    picture, video, font = b"\x89PNG new picture", b"\0\0\0\x18ftypmp42 clip", b"\0\1\0\0font"
+    requests = [
+        _asset("mine", "logo.png", picture), _asset("mine", "clip.mp4", video),
+        _asset("mine", "Face.TTF", font), _asset("mine", "logo.png", picture[:5]),
+        _asset("nothing", "logo.png", picture), _asset("mine", "notes.txt", b"notes"),
+        _asset("mine", ".hidden.png", picture), _asset("mine", "a%2Fb.png", picture),
+        _asset("mine", "", picture), _asset("Bad%20Name", "logo.png", picture),
+        _asset("mine", "big.png", b"", length=10 * 2**20 + 1),
+        _asset("mine", "big.mp4", b"", length=64 * 2**20 + 1),
+        _get("/api/themes/mine/assets", WITH).encode(),
+        _get("/api/themes/mine/assets/assets/clip.mp4", WITH).encode(),
+    ]  # fmt: skip
+    told = []
+    with subprocess.Popen([str(_program()), "editor", "--port", "0"], env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8") as program:  # fmt: skip
+        try:
+            assert program.stdout is not None
+            address = program.stdout.readline().split(" running at ")[1].split()[0]
+            port, token = int(address.split(":")[2].split("/")[0]), address.split("#token=")[1]
+            for request in requests:
+                request = request.replace(b"{host}", f"localhost:{port}".encode())
+                status, _, body = _asked(port, request.replace(b"{token}", token.encode()))
+                told.append((status.split()[1], body))
+        finally:
+            program.send_signal(signal.SIGINT) if os.name == "posix" else program.terminate()
+            program.communicate(timeout=30)
+    said = [(status, json.loads(body)) for status, body in told[:-1]]
+    assert said[:4] == [("200", {"ok": True, "path": f"assets/{name}"})
+                        for name in ("logo.png", "clip.mp4", "Face.TTF", "logo.png")]  # fmt: skip
+    assert [status for status, _ in said[4:10]] == ["400"] * 6, said
+    assert said[4][1] == {"error": "save the theme before adding images or fonts"}
+    assert said[5][1]["error"].startswith("asset must be one of: .gif, .jpeg, .jpg, .m4v,")
+    assert said[9][1] == {"error": "invalid theme name"}
+    assert [status for status, _ in said[10:12]] == ["413"] * 2, said
+    assert said[10][1]["error"] == (
+        "“big.png” is larger than 10 MB, the most a theme takes of such a file."
+    )
+    assert said[11][1]["error"].startswith("“big.mp4” is larger than 64 MB,"), said[11]
+    assert {"assets/logo.png", "assets/clip.mp4", "assets/Face.TTF"} <= set(said[12][1])
+    assert told[13] == ("200", video)
+    assets = tmp_path / "themes" / "mine" / "assets"
+    assert sorted(p.name for p in assets.iterdir()) == ["Face.TTF", "clip.mp4", "logo.png"]
+    assert (assets / "logo.png").read_bytes() == picture[:5]
+    assert not (tmp_path / "themes" / "nothing").exists()
+
+
 def test_the_readings_and_the_sensors_are_told_as_server_py_tells_them(servers: Any) -> None:
     """The readings for the app's pickers (all of them, or those asked for, with the history
     of some) and every key a theme can show: the demo's where the computer gives none, each

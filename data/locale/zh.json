@@ -2460,6 +2460,7 @@
     "The community themes cannot be reached right now.": "暂时无法访问社区主题。",
     "The download is not the file the community's list names (its checksum differs): nothing was installed.": "下载的文件不是社区列表所指的文件（校验和不同）：未安装任何内容。",
     "The file is larger than {size} MB: a shared theme may be at most that.": "文件超过 {size} MB：分享的主题最多只能这么大。",
+    "“{file}” is larger than {size} MB, the most a theme takes of such a file.": "“{file}”超过 {size} MB，这是主题对此类文件允许的上限。",
     "The files of “{name}” come to more than {size} MB: too much to share as one file.": "“{name}”的文件合计超过 {size} MB：太大，无法作为一个文件分享。",
     "The theme could not be downloaded: {reason}": "无法下载该主题：{reason}",
     "The theme's files come to more than {size} MB unpacked: a shared theme may be at most that.": "解压后主题的文件超过 {size} MB：分享的主题最多只能这么大。",

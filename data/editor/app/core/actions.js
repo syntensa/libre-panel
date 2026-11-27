@@ -362,6 +362,12 @@ export async function uploadAsset(accept, file) {
   const chosen = file || (await pickFile(accept));
   if (!chosen) return null;
   const name = chosen.name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "");
+  // (what the server takes of one file, said before it is sent: server.rs MAX_VIDEO, MAX_ASSET)
+  const most = /\.(mp4|webm|mov|m4v|mkv)$/i.test(name) ? 64 : 10;
+  if (chosen.size > most * 1024 * 1024) {
+    toast(t("“{file}” is larger than {size} MB, the most a theme takes of such a file.", { file: chosen.name, size: most }), { kind: "error" });
+    return null;
+  }
   try {
     const data = await endpoints.uploadAsset(doc.id, name, await chosen.arrayBuffer());
     await refreshAssets();

@@ -27,6 +27,16 @@ use crate::settings::{Answer, Settings};
 /// the port the app's server takes where it is free
 pub const PORT: u16 = 8765;
 const MAX_JSON: u64 = 2 * 1024 * 1024;
+/// a picture or a font added to a theme (editor/server.py's MAX_ASSET), and a video for an
+/// image widget (MAX_VIDEO)
+const MAX_ASSET: u64 = 10 * 1024 * 1024;
+const MAX_VIDEO: u64 = 64 * 1024 * 1024;
+/// what a theme takes as a file of its own: pictures, fonts and videos (ASSET_EXTENSIONS)
+const ASSET_SUFFIXES: [&str; 12] = [
+    ".gif", ".jpeg", ".jpg", ".m4v", ".mkv", ".mov", ".mp4", ".otf", ".png", ".ttf", ".webm",
+    ".webp",
+];
+const VIDEO_SUFFIXES: [&str; 5] = [".m4v", ".mkv", ".mov", ".mp4", ".webm"];
 /// the tables of a language the app's pages read
 const EDITOR_TABLES: [&str; 5] = ["messages", "fields", "widgets", "enums", "icons"];
 
@@ -595,6 +605,9 @@ const ROUTES: &[Route] = &[
     }),
     private("POST", "/api/scenes", |s, x, _, _| {
         settings_with(s, x, |told, asked| told.set_scene(asked))
+    }),
+    private("POST", "/api/themes/{theme}/assets", |s, x, m, u| {
+        upload_asset(s, x, m[0], u)
     }),
     private("POST", "/api/themes/import", |s, x, _, u| {
         // (a theme named "import" saved: its body is JSON, an import's a zip)
@@ -1272,6 +1285,62 @@ fn assets(state: &State, exchange: &mut Exchange, theme_id: &str) {
     files.sort_by(|a, b| a.chars().cmp(b.chars()));
     let files = files.into_iter().map(Value::Str).collect();
     exchange.json(&Value::List(files), 200);
+}
+
+/// _ASSET_NAME: the name of a file added to a theme, `^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$`.
+fn asset_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && name.len() <= 81
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+/// _upload_asset: `POST /api/themes/{theme}/assets?name=` with a picture, a font or a video
+/// as the body, into the assets folder of a theme of the person's that is saved.
+fn upload_asset(state: &State, exchange: &mut Exchange, theme_id: &str, url: &Url) {
+    let query = crate::http::parse_qs(&url.query);
+    let name = query
+        .get("name")
+        .and_then(|v| v.first())
+        .cloned()
+        .unwrap_or_default();
+    if !lp_theme::model::valid_theme_name(theme_id) {
+        return exchange.error("invalid theme name", 400, "");
+    }
+    let kind = suffix(&name).to_lowercase();
+    if !asset_name(&name) || !ASSET_SUFFIXES.contains(&kind.as_str()) {
+        let why = format!("asset must be one of: {}", ASSET_SUFFIXES.join(", "));
+        return exchange.error(&why, 400, "");
+    }
+    let folder = state.home.places().user.join(theme_id);
+    if !folder.join("theme.json").is_file() {
+        return exchange.error("save the theme before adding images or fonts", 400, "");
+    }
+    let limit = match VIDEO_SUFFIXES.contains(&kind.as_str()) {
+        true => MAX_VIDEO,
+        false => MAX_ASSET,
+    };
+    let too_large = lp_i18n::t_format(
+        "“{file}” is larger than {size} MB, the most a theme takes of such a file.",
+        &[
+            ("file", Value::Str(name.clone())),
+            ("size", Value::int((limit / (1024 * 1024)) as i64)),
+        ],
+    )
+    .unwrap_or_else(|why| why.msg);
+    let Some(body) = exchange.read_body(limit, &too_large) else {
+        return;
+    };
+    let assets = folder.join("assets");
+    if let Err(why) =
+        std::fs::create_dir_all(&assets).and_then(|()| std::fs::write(assets.join(&name), &body))
+    {
+        return failed(exchange, &why.to_string());
+    }
+    let mut told = Dict::default();
+    told.insert("ok".into(), Value::Bool(true));
+    told.insert("path".into(), Value::Str(format!("assets/{name}")));
+    exchange.json(&Value::Dict(told), 200);
 }
 
 /// _asset_file: an image or font of a theme, for the library of pictures and their
@@ -3487,6 +3556,24 @@ mod tests {
             Some("p|")
         );
         assert!(app_path("views/design/main.js") && app_path("a/b/c/d/e.js"));
+        // (a file added to a theme: one name in its assets folder, never a path)
+        assert!(asset_name("logo.png") && asset_name("A_b-c.2.mp4") && asset_name(&"x".repeat(81)));
+        for name in [
+            "",
+            ".png",
+            "-a.png",
+            "a/b.png",
+            "a b.png",
+            "ä.png",
+            "..",
+            &"x".repeat(82),
+        ] {
+            assert!(!asset_name(name), "{name}");
+        }
+        assert_eq!(
+            of("/api/themes/{theme}/assets", "/api/themes/a/assets").as_deref(),
+            Some("a")
+        );
         assert!(
             !app_path("a/b/c/d/e/f.js")
                 && !app_path(".hidden")

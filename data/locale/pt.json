@@ -2460,6 +2460,7 @@
     "The community themes cannot be reached right now.": "Os temas da comunidade não podem ser acessados agora.",
     "The download is not the file the community's list names (its checksum differs): nothing was installed.": "O download não é o arquivo que a lista da comunidade indica (a soma de verificação é diferente): nada foi instalado.",
     "The file is larger than {size} MB: a shared theme may be at most that.": "O arquivo tem mais de {size} MB: um tema compartilhado pode ter no máximo isso.",
+    "“{file}” is larger than {size} MB, the most a theme takes of such a file.": "“{file}” tem mais de {size} MB, o máximo que um tema aceita para um arquivo assim.",
     "The files of “{name}” come to more than {size} MB: too much to share as one file.": "Os arquivos de “{name}” somam mais de {size} MB: demais para compartilhar como um só arquivo.",
     "The theme could not be downloaded: {reason}": "Não foi possível baixar o tema: {reason}",
     "The theme's files come to more than {size} MB unpacked: a shared theme may be at most that.": "Descompactados, os arquivos do tema somam mais de {size} MB: um tema compartilhado pode ter no máximo isso.",
