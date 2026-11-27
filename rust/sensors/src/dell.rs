@@ -224,10 +224,18 @@ pub mod wmi {
     /// WBEM_E_ACCESS_DENIED and E_ACCESSDENIED: this process may not ask
     const DENIED: [u32; 2] = [0x8004_1003, 0x8007_0005];
 
+    /// The failure as Windows words it, with its code (the code alone where Windows has no
+    /// words for it: WMI's own codes often have none, issue #54).
     fn said(why: windows::core::Error) -> Failure {
         let code = why.code().0 as u32;
+        let message = why.message();
+        let message = message.trim();
         Failure {
-            why: format!("{} (0x{code:08X})", why.message()),
+            why: if message.is_empty() {
+                format!("0x{code:08X}")
+            } else {
+                format!("{message} (0x{code:08X})")
+            },
             denied: DENIED.contains(&code),
         }
     }
@@ -350,6 +358,28 @@ pub mod wmi {
         match VariantToInt32(value) {
             Ok(n) => Value::int(i64::from(n)),
             Err(_) => Value::None,
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::said;
+        use windows::core::{Error, HRESULT};
+
+        /// A failure Windows has no words for is said by its code alone (issue #54: the log
+        /// said "( (0x80041003))"); one with words, by them and its code after them.
+        #[test]
+        fn a_failure_is_said_by_its_words_and_its_code() {
+            for code in [0x8004_1003_u32, 0x8004_100E, 0x8007_0005] {
+                let why = said(Error::from_hresult(HRESULT(code as i32))).why;
+                let tail = format!("0x{code:08X}");
+                assert!(
+                    why == tail || why.ends_with(&format!(" ({tail})")),
+                    "{why:?}"
+                );
+                assert!(!why.starts_with([' ', '(']), "{why:?}");
+            }
+            assert!(said(Error::from_hresult(HRESULT(0x8004_1003_u32 as i32))).denied);
         }
     }
 }

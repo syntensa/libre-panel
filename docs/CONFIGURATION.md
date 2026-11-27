@@ -1152,11 +1152,14 @@ other program, LibreHardwareMonitor included. Where Dell Command | Monitor is in
 (Dell's own program for its PCs, from Dell's support site), Libre Panel reads the fans and
 temperatures it reports, every `update_s` seconds, and names them as it does: its "Processor
 Fan" is `fan.dell.processor_fan` (RPM), its "CPU Temperature" `temp.dell.cpu_temperature`
-(°C), where every fan and temperature of a PC is. Switch it on in *Settings → Sensors → Dell
-fans*, or name it among the sources; a PC without Dell Command | Monitor is said once in the
-log. On many Dell PCs it answers administrators only, and Libre Panel runs without those
-rights: there the sensor service asks it for Libre Panel (it is set up with Libre Panel's
-setup, or with *Unlock all sensors*), and the log says so.
+(°C), where every fan and temperature of a PC is; the names differ from PC to PC, and the log
+says which there are (`dell: Dell Command | Monitor gives fan.dell.fan_speed_sensor_fan_cpu
+(Fan Speed Sensor:FAN CPU), …`). Switch it on in *Settings → Sensors → Dell fans*, or name it
+among the sources; a PC without Dell Command | Monitor is said once in the log. On many Dell
+PCs it answers administrators only, and Libre Panel runs without those rights: there the
+sensor service asks it for Libre Panel (it is set up with Libre Panel's setup, or with *Unlock
+all sensors*), and the log says so. Tried on a Dell 3431, a 3240 USFF and an ECS1250 (issue
+#54).
 
 ```toml
 [sensors]

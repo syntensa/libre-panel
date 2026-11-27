@@ -421,8 +421,8 @@ counting from 00:00 (issue #65). Mode 2 sets the clock only: the panel's own cho
 draws one stays as it is, and nothing is saved in it. Where the panel does not answer the
 time, it is opened as before. From the same
 [protocol reference](https://github.com/immortalbob/lian-li-universal-screen-protocol) as the
-light ring below; not yet tried on a panel. The 9.2" and the HydroShift screens are not told
-the time: nothing is known of their clock.
+light ring below; its owner saw it keep the time on an 8.8" (issue #65). The 9.2" and the
+HydroShift screens are not told the time: nothing is known of their clock.
 
 **The light ring around the Universal Screen** (its 60 ARGB LEDs, a USB device of its own,
 `0416:8050`) is a service: *Settings → Services → Light ring*. It lights the ring in one
