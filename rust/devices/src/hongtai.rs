@@ -29,8 +29,18 @@
 //! picture while it stays so. Setting it up again brings it back, so it is opened again then (as
 //! a change of the brightness in the app opens it), on a port at most once a minute.
 //!
+//! The 9.16" V2 (issue #70) has the MAJESTY's USB ids and firmware 5 (it says "5.3", the
+//! MAJESTY "3.1"; it answers 06 with its account under "data"). It is driven as its maker's
+//! Jungle Leopard Display 1.0.97 drives it (a USB capture of its owner's): FF D9 FF D9 and
+//! 00 00 00 00 as two writes (the MAJESTY's opening is written so too), 06, then 26 with 0A
+//! (answered 26 01) where the MAJESTY is set up with 15; a while later the backlight at 95, a
+//! while later 11. Its pictures are the strip's portrait (462x1920) without the end marker, up
+//! to about 120 KB (that application sends it up to 121 951 bytes); 11 goes out on its own,
+//! between them, once a second. Its brightness goes into its pictures as the MAJESTY's does.
+//!
 //! Never sent: 01 (restart), 0C (firmware update), 14, 15 (but the MAJESTY's setting up), 20
-//! (the region preset), 23 (the serial number), 25 (the pump's motor), 26.
+//! (the region preset), 23 (the serial number), 25 (the pump's motor), 26 (but the V2's setting
+//! up).
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -68,6 +78,14 @@ pub const MAJESTY_MODEL: &str = "majesty-9.16";
 /// What the MAJESTY is set up with (after 15), and the backlight it is kept at.
 pub const MAJESTY_SETUP: [u8; 2] = [0x00, 0x03];
 pub const MAJESTY_LIGHT: u8 = 95;
+/// The V2's setting up (26 with V2_SETUP), never sent to another panel.
+pub const CMD_V2_SETUP: u8 = 0x26;
+pub const V2_SETUP: [u8; 1] = [0x0A];
+/// The firmware from which a panel of the MAJESTY's USB ids is the V2 (the first number of the
+/// version it says).
+pub const V2_FIRMWARE: i64 = 5;
+/// The V2's JPEGs at most (its maker's application sends it up to 121 951 bytes).
+pub const V2_MAX_JPEG: usize = 119 * 1024;
 /// What the MAJESTY says when it has gone dark by itself (issue #54: 55 AA 08 00 FF FF 05 03,
 /// the moment its backlight went off, then again for each picture while it stays dark).
 pub const CMD_STOPPED: u8 = 0xFF;
@@ -100,6 +118,11 @@ pub fn majesty_setup() -> Vec<u8> {
     framed(CMD_SETUP, &MAJESTY_SETUP).expect("(two bytes of data)")
 }
 
+/// The V2's setting up: 26 with 0A (the one 26 that is sent).
+pub fn v2_setup() -> Vec<u8> {
+    framed(CMD_V2_SETUP, &V2_SETUP).expect("(one byte of data)")
+}
+
 /// A JPEG in its envelope, with the end marker.
 pub fn picture(jpeg: &[u8]) -> Result<Vec<u8>> {
     let size = u32::try_from(jpeg.len())
@@ -112,13 +135,26 @@ pub fn picture(jpeg: &[u8]) -> Result<Vec<u8>> {
     Ok(sized)
 }
 
+/// A JPEG in the V2's envelope: its size, the JPEG and the sum of both, no end marker.
+pub fn v2_picture(jpeg: &[u8]) -> Result<Vec<u8>> {
+    let mut sized = picture(jpeg)?;
+    sized.truncate(sized.len() - END.len());
+    Ok(sized)
+}
+
 /// The picture as a JPEG the firmware takes: the best quality that keeps within MAX_JPEG (the
 /// lowest where none does).
 pub fn jpeg(native: &Image) -> Result<Vec<u8>> {
+    jpeg_within(native, MAX_JPEG)
+}
+
+/// The picture as a JPEG of the best quality that keeps within `most` bytes (the lowest where
+/// none does).
+pub fn jpeg_within(native: &Image, most: usize) -> Result<Vec<u8>> {
     let mut data = Vec::new();
     for quality in QUALITIES {
         data = lp_decode::save_jpeg(native, quality)?;
-        if data.len() <= MAX_JPEG {
+        if data.len() <= most {
             break;
         }
     }
@@ -202,9 +238,35 @@ fn int_of(info: &Dict, key: &str) -> Result<i64> {
     }
 }
 
+/// What the panel said of `key`: in its answer, or in the account under "data" where the answer
+/// has no such key (the V2's).
+fn said<'a>(info: &'a Dict, key: &str) -> Option<&'a Value> {
+    info.get(key).or_else(|| match info.get("data") {
+        Some(Value::Dict(data)) => data.get(key),
+        _ => None,
+    })
+}
+
+/// The firmware's version as the panel says it (its first 16 characters, for the log), where
+/// it says one.
+fn version_of(info: &Dict) -> Option<String> {
+    let version = match said(info, "version")? {
+        Value::Str(s) => s.trim().to_string(),
+        Value::Int(n) => n.to_string(),
+        Value::Float(x) if x.is_finite() => x.to_string(),
+        _ => return None,
+    };
+    Some(version.chars().take(16).collect()).filter(|v: &String| !v.is_empty())
+}
+
+/// The first number of a firmware's version ("5.3": 5).
+fn major_of(version: &str) -> Option<i64> {
+    version.split('.').next()?.trim().parse().ok()
+}
+
 /// str() of what the panel calls itself, its first 40 characters (for the log).
 fn name_of(info: &Dict) -> String {
-    let name = match info.get("model") {
+    let name = match said(info, "model") {
         None => "?".to_string(),
         Some(Value::Str(s)) => s.clone(),
         Some(other) => other.repr(),
@@ -217,7 +279,8 @@ fn name_of(info: &Dict) -> String {
 pub enum Kind {
     /// on the family's own firmware (33c3:7788)
     Family,
-    /// the MAJESTY 9.16" (33c3:7792): set up first, its brightness in its pictures
+    /// the MAJESTY 9.16" (33c3:7792): set up first, its brightness in its pictures; on
+    /// firmware 5 the 9.16" V2, set up and sent its pictures in its own way
     Majesty,
 }
 
@@ -239,7 +302,8 @@ pub struct Timing {
     pub settle: Duration,
     /// 11 again while nothing went out (LIVE_EVERY_S)
     pub live_every: Duration,
-    /// the MAJESTY's answer to its setting up, waited for
+    /// the MAJESTY's answer to its setting up, waited for (and the V2's: a while after it, the
+    /// backlight; a while later, 11)
     pub setup_answer: Duration,
 }
 
@@ -258,16 +322,23 @@ pub struct Identity {
     pub native: (i64, i64),
     /// what it calls itself, for the log
     pub name: String,
+    /// its firmware's version, where it says one (for the log)
+    pub version: Option<String>,
+    /// the 9.16" V2: the MAJESTY's USB ids on firmware 5
+    pub v2: bool,
     /// the model of the family its size names, where it names one (BY_SIZE; the MAJESTY is
     /// its own)
     pub named: Option<&'static str>,
-    /// the command of the MAJESTY's answer to its setting up, None where none came in time
+    /// the command of the answer to its setting up (the MAJESTY's, the V2's), None where none
+    /// came in time
     pub set_up: Option<u8>,
 }
 
 struct State<L> {
     link: Option<L>,
     last_sent: Instant,
+    /// when 11 last went out on its own (the V2's, between its pictures)
+    last_live: Instant,
     fault: Option<DeviceError>,
     stop: bool,
     counters: Counters,
@@ -423,12 +494,14 @@ impl<L: Link> State<L> {
 pub struct HongtaiDisplay<L: Link + 'static> {
     shared: Arc<Shared<L>>,
     kind: Kind,
+    /// the 9.16" V2 (as it said when it was opened)
+    v2: bool,
     timing: Timing,
     /// the panel's size as it lies
     pub native: (i64, i64),
     /// the brightness last set (None: never)
     pub brightness: Option<i64>,
-    /// the MAJESTY's last picture as it went out before it was dimmed
+    /// the MAJESTY's (the V2's) last picture as it went out before it was dimmed
     last: Option<Image>,
     keeper: Option<thread::JoinHandle<()>>,
     /// its port, for the log
@@ -450,6 +523,7 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
             state: Mutex::new(State {
                 link: Some(link),
                 last_sent: Instant::now(),
+                last_live: Instant::now(),
                 fault: None,
                 stop: false,
                 counters: Counters::default(),
@@ -460,6 +534,7 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
         let mut display = HongtaiDisplay {
             shared,
             kind,
+            v2: false,
             timing,
             native: native.unwrap_or((480, 960)),
             brightness: None,
@@ -474,10 +549,14 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
                 return Err(e);
             }
         };
-        // (for the log: what it calls itself and its size, as it said them)
+        // (for the log: what it calls itself, its size and its firmware, as it said them)
         let (w, h) = identity.native;
+        let firmware = match &identity.version {
+            Some(version) => format!(", firmware {version}"),
+            None => String::new(),
+        };
         display.shared.lock().heard.notes.push(format!(
-            "the panel on {port} calls itself {:?}, {w}x{h}",
+            "the panel on {port} calls itself {:?}, {w}x{h}{firmware}",
             identity.name
         ));
         display.start_keeper();
@@ -485,12 +564,19 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
     }
 
     /// identify: FF D9 FF D9 to clear the panel's reader, then 06 and its answer; the
-    /// MAJESTY's setting up after it.
+    /// MAJESTY's (the V2's) setting up after it.
     fn identify(&mut self, port: &str) -> Result<Identity> {
         thread::sleep(self.timing.settle);
         let mut state = self.shared.lock();
         let link = state.link.as_mut().expect("(open)");
-        link.write(&RESET)?;
+        match self.kind {
+            Kind::Family => link.write(&RESET)?,
+            // (as the V2's maker's application writes it: the end marker, then a size of none)
+            Kind::Majesty => {
+                link.write(&RESET[..END.len()])?;
+                link.write(&RESET[END.len()..])?;
+            }
+        }
         drop(state);
         thread::sleep(self.timing.settle);
         let mut state = self.shared.lock();
@@ -506,6 +592,17 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
         if width != 0 && height != 0 {
             self.native = (width, height);
         }
+        let version = version_of(&info);
+        self.v2 = self.kind == Kind::Majesty
+            && version
+                .as_deref()
+                .and_then(major_of)
+                .is_some_and(|n| n >= V2_FIRMWARE);
+        if self.v2 {
+            // (the strip's portrait, as its maker's application sends it its pictures)
+            let (w, h) = self.native;
+            self.native = (w.min(h), w.max(h));
+        }
         let (w, h) = self.native;
         let named = match self.kind {
             Kind::Family => BY_SIZE
@@ -517,6 +614,8 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
         let mut identity = Identity {
             native: self.native,
             name: name_of(&info),
+            version,
+            v2: self.v2,
             named,
             set_up: None,
         };
@@ -527,14 +626,22 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
     }
 
     /// The MAJESTY set up: 15 with 00 03, its answer waited for (up to Timing.setup_answer),
-    /// the backlight at 95, the live picture on. (Part of opening, as the asking is: not
-    /// counted.)
+    /// the backlight at 95, the live picture on. The V2 is set up with 26 and 0A, and given a
+    /// while (Timing.settle) before the backlight and before 11, as its maker's application
+    /// gives it. (Part of opening, as the asking is: not counted.)
     fn set_up(&self, state: &mut State<L>) -> Result<Option<u8>> {
         let link = state.link.as_mut().expect("(open)");
-        link.write(&majesty_setup())?;
+        link.write(&if self.v2 { v2_setup() } else { majesty_setup() })?;
         let answered = Self::answer_frame(link, Instant::now() + self.timing.setup_answer)?;
+        if self.v2 {
+            thread::sleep(self.timing.settle);
+        }
         link.write(&frame(CMD_LIGHT, &[MAJESTY_LIGHT])?)?;
+        if self.v2 {
+            thread::sleep(self.timing.settle);
+        }
         link.write(&frame(CMD_LIVE, &[])?)?;
+        state.last_live = Instant::now();
         Ok(answered)
     }
 
@@ -567,6 +674,7 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
         let mut state = self.shared.lock();
         state.stop = false;
         state.last_sent = Instant::now();
+        state.last_live = Instant::now();
         drop(state);
         let spawned = thread::Builder::new()
             .name("hongtai-live".into())
@@ -608,12 +716,13 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
                     state.fault = Some(e);
                     return;
                 }
+                state.last_live = Instant::now();
             });
         self.keeper = spawned.ok();
     }
 
-    /// set_brightness: 0 to 100. The family's backlight is set at once; the MAJESTY's
-    /// picture on show goes out again at the new brightness.
+    /// set_brightness: 0 to 100. The family's backlight is set at once; the MAJESTY's (the
+    /// V2's) picture on show goes out again at the new brightness.
     pub fn set_brightness(&mut self, percent: i64) -> Result<()> {
         let percent = percent.clamp(0, 100);
         self.brightness = Some(percent);
@@ -625,24 +734,39 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
             Kind::Family => state.write(&frame(CMD_LIGHT, &[percent as u8])?),
             Kind::Majesty => match &self.last {
                 Some(native) => {
-                    let data = Self::picture_of(native, percent)?;
-                    state.write(&data)
+                    let data = self.picture_of(native, percent)?;
+                    self.send(&mut state, &data)
                 }
                 None => Ok(()),
             },
         }
     }
 
-    /// 11 and the picture at `percent` of its brightness.
-    fn picture_of(native: &Image, percent: i64) -> Result<Vec<u8>> {
+    /// 11 and the picture at `percent` of its brightness; the V2's picture alone (its 11 goes
+    /// out on its own: send).
+    fn picture_of(&self, native: &Image, percent: i64) -> Result<Vec<u8>> {
+        let native = dimmed(native, percent)?;
+        if self.v2 {
+            return v2_picture(&jpeg_within(&native, V2_MAX_JPEG)?);
+        }
         let mut data = frame(CMD_LIVE, &[])?;
-        data.extend(picture(&jpeg(&dimmed(native, percent)?)?)?);
+        data.extend(picture(&jpeg(&native)?)?);
         Ok(data)
     }
 
+    /// A picture's `data` out; before it, the V2's 11 on its own where it last went out
+    /// Timing.live_every ago (its maker's application sends it so, between its pictures).
+    fn send(&self, state: &mut State<L>, data: &[u8]) -> Result<()> {
+        if self.v2 && state.last_live.elapsed() >= self.timing.live_every {
+            state.write(&frame(CMD_LIVE, &[])?)?;
+            state.last_live = Instant::now();
+        }
+        state.write(data)
+    }
+
     /// show: `image` turned into the panel's way round where it lies the other way, made the
-    /// panel's size (Lanczos), in RGB, as a JPEG (the MAJESTY's dimmed first). A fault of the
-    /// keeping thread comes out here.
+    /// panel's size (Lanczos), in RGB, as a JPEG (the MAJESTY's and the V2's dimmed first). A
+    /// fault of the keeping thread comes out here.
     pub fn show(&mut self, image: &Image) -> Result<()> {
         {
             let mut state = self.shared.lock();
@@ -674,16 +798,18 @@ impl<L: Link + 'static> HongtaiDisplay<L> {
                 data.extend(picture(&jpeg(&native)?)?);
                 data
             }
-            Kind::Majesty => Self::picture_of(&native, self.brightness.unwrap_or(100))?,
+            Kind::Majesty => self.picture_of(&native, self.brightness.unwrap_or(100))?,
         };
         let mut state = self.shared.lock();
         if let Some(fault) = state.fault.take() {
             return Err(fault);
         }
+        let sent = self.send(&mut state, &data);
+        drop(state);
         if self.kind == Kind::Majesty {
             self.last = Some(native);
         }
-        state.write(&data)
+        sent
     }
 
     /// What it counted.
@@ -882,5 +1008,226 @@ mod gone_dark {
         assert_eq!(heard(&mut display).len(), 1);
         assert!(display.shared.lock().fault.is_none());
         display.close();
+    }
+}
+
+#[cfg(test)]
+mod v2 {
+    use super::*;
+
+    /// What the V2 of issue #70 answered 06 (from its owner's USB capture).
+    const INFO: &str = r#"{"cmd":"info","data":{"uid":"0043C0720C49405A080214840F149D10","width":1920,"height":462,"diplay_on":true,"brightness":100,"i_blocks":0,"i_block_size":0,"i_block_free":0,"i_path":"","e_blocks":0,"e_block_size":0,"e_block_free":0,"e_path":"","model":"AW_F101-NOR-FL7707N-9.16inch-hor","version":"5.3","region":"colinbao_v1","angle":270,"quality":1}}"#;
+
+    /// A panel of the MAJESTY's USB ids the test makes up: each write as it was written, and
+    /// its answers as the V2 gave them (06 with `info`; 26, 03 and 11 with 00 or 01).
+    #[derive(Clone)]
+    struct Made {
+        info: String,
+        writes: Arc<Mutex<Vec<Vec<u8>>>>,
+        input: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl Made {
+        fn new(info: &str) -> Made {
+            Made {
+                info: info.to_string(),
+                writes: Arc::default(),
+                input: Arc::default(),
+            }
+        }
+    }
+
+    impl Link for Made {
+        fn write(&mut self, data: &[u8]) -> Result<()> {
+            self.writes.lock().unwrap().push(data.to_vec());
+            let mut input = self.input.lock().unwrap();
+            if data == frame(CMD_INFO, &[]).unwrap() {
+                input.extend(framed(CMD_INFO, self.info.as_bytes()).unwrap());
+            } else if data == v2_setup() {
+                input.extend([0x55, 0xAA, 0x08, 0x00, 0x26, 0x01, 0x2E, 0x01]);
+            } else if data == majesty_setup() {
+                input.extend([0x55, 0xAA, 0x07, 0x00, 0x15, 0x1B, 0x01]);
+            } else if data == frame(CMD_LIGHT, &[MAJESTY_LIGHT]).unwrap() {
+                input.extend([0x55, 0xAA, 0x08, 0x00, 0x03, 0x00, 0x0A, 0x01]);
+            } else if data == frame(CMD_LIVE, &[]).unwrap() {
+                input.extend([0x55, 0xAA, 0x08, 0x00, 0x11, 0x00, 0x18, 0x01]);
+            }
+            Ok(())
+        }
+        fn read(&mut self, size: usize) -> Result<Vec<u8>> {
+            let mut input = self.input.lock().unwrap();
+            let n = size.min(input.len());
+            Ok(input.drain(..n).collect())
+        }
+        fn drain_input(&mut self) {
+            self.input.lock().unwrap().clear();
+        }
+        fn waiting(&mut self) -> Option<usize> {
+            Some(self.input.lock().unwrap().len())
+        }
+        fn close(&mut self) {}
+    }
+
+    const TIMING: Timing = Timing {
+        settle: Duration::from_millis(1),
+        live_every: Duration::from_millis(300),
+        setup_answer: Duration::from_millis(500),
+    };
+
+    /// A picture as the V2 was sent it: its size, a JPEG of the strip's portrait, the sum of
+    /// both; no end marker. The JPEG's size (from its frame header).
+    fn jpeg_size_of(data: &[u8]) -> (usize, usize) {
+        let size = u32::from_le_bytes(data[..4].try_into().unwrap()) as usize;
+        assert_eq!(data.len(), 4 + size + 2, "its size, the JPEG, the sum");
+        let sum = data[..4 + size].iter().map(|&b| u64::from(b)).sum::<u64>() as u16;
+        assert_eq!(data[4 + size..], sum.to_le_bytes());
+        let jpeg = &data[4..4 + size];
+        assert!(jpeg.starts_with(&[0xFF, 0xD8]) && jpeg.ends_with(&[0xFF, 0xD9]));
+        assert!(size <= V2_MAX_JPEG);
+        let at = jpeg
+            .windows(2)
+            .position(|w| w == [0xFF, 0xC0])
+            .expect("a frame header");
+        let h = usize::from(u16::from_be_bytes([jpeg[at + 5], jpeg[at + 6]]));
+        let w = usize::from(u16::from_be_bytes([jpeg[at + 7], jpeg[at + 8]]));
+        (w, h)
+    }
+
+    #[test]
+    fn the_v2_is_opened_and_sent_its_pictures_as_its_makers_application_does() {
+        let made = Made::new(INFO);
+        let port = "the V2's port";
+        let (mut display, identity) =
+            HongtaiDisplay::open(made.clone(), Kind::Majesty, Some((462, 1920)), port, TIMING)
+                .unwrap();
+        assert_eq!(identity.name, "AW_F101-NOR-FL7707N-9.16inch-hor");
+        assert_eq!(identity.version.as_deref(), Some("5.3"));
+        assert!(identity.v2);
+        assert_eq!(identity.native, (462, 1920)); // (it said 1920x462: the strip lies upright)
+        assert_eq!(identity.set_up, Some(0x26));
+        assert_eq!(
+            display.notes(),
+            [format!(
+                "the panel on {port} calls itself \"AW_F101-NOR-FL7707N-9.16inch-hor\", \
+                 462x1920, firmware 5.3"
+            )]
+        );
+        // the opening as the capture has it, write by write: FF D9 FF D9, 00 00 00 00, 06,
+        // 26 0A, 03 5F, 11 (and never 15)
+        let opening: Vec<Vec<u8>> = vec![
+            vec![0xFF, 0xD9, 0xFF, 0xD9],
+            vec![0, 0, 0, 0],
+            vec![0x55, 0xAA, 0x07, 0x00, 0x06, 0x0C, 0x01],
+            vec![0x55, 0xAA, 0x08, 0x00, 0x26, 0x0A, 0x37, 0x01],
+            vec![0x55, 0xAA, 0x08, 0x00, 0x03, 0x5F, 0x69, 0x01],
+            vec![0x55, 0xAA, 0x07, 0x00, 0x11, 0x17, 0x01],
+        ];
+        assert_eq!(*made.writes.lock().unwrap(), opening);
+        let jpegs = lp_decode::save_jpeg(&Image::new(Mode::RGB, 8, 8, &[0, 0, 0]), 90).is_ok();
+        if !jpegs {
+            // (a JPEG wants libjpeg, loaded where it runs: LP_LIBJPEG; where there is none the
+            // pictures are left to the pty's test)
+            display.close();
+            return;
+        }
+        let red = Image::new(Mode::RGB, 1920, 462, &[200, 40, 40]);
+        display.show(&red).unwrap();
+        display.set_brightness(40).unwrap();
+        // pictures one after the other, a while longer than Timing.live_every (the keeper's 11
+        // is not needed then): 11 goes out on its own between them, before a picture
+        let until = Instant::now() + TIMING.live_every * 4;
+        let mut shown = 2;
+        while Instant::now() < until {
+            display.show(&red).unwrap();
+            shown += 1;
+            thread::sleep(Duration::from_millis(20));
+        }
+        display.close();
+        let writes = made.writes.lock().unwrap().split_off(opening.len());
+        let live = frame(CMD_LIVE, &[]).unwrap();
+        let close = frame(CMD_CLOSE, &[]).unwrap();
+        let pictures: Vec<&Vec<u8>> = writes.iter().filter(|w| w.len() > 64).collect();
+        assert_eq!(
+            pictures.len(),
+            shown,
+            "each picture, the one dimmed among them"
+        );
+        for picture in &pictures {
+            assert_eq!(jpeg_size_of(picture), (462, 1920));
+            assert!(!picture.ends_with(&END));
+        }
+        // (the second dimmed to 40 %)
+        assert_ne!(pictures[0], pictures[1]);
+        // 11 only on its own, never with a picture; between the pictures, and each followed by
+        // one
+        assert!(
+            writes
+                .iter()
+                .all(|w| w.len() > 64 || *w == live || *w == close),
+            "{writes:?}"
+        );
+        let alone: Vec<usize> = (0..writes.len()).filter(|&n| writes[n] == live).collect();
+        assert!(alone.len() >= 2, "11 went out {} times", alone.len());
+        assert!(alone.iter().all(|&n| writes[n + 1].len() > 64), "{alone:?}");
+        assert_eq!(writes.last(), Some(&close));
+        assert!(!writes.iter().any(|w| *w == majesty_setup()));
+    }
+
+    #[test]
+    fn the_majesty_on_firmware_3_is_set_up_as_before() {
+        let said = r#"{"status": 200, "model": "MAJESTY", "width": 462, "height": 1920, "version": "3.1"}"#;
+        for info in [said.to_string(), said.replace(r#", "version": "3.1""#, "")] {
+            let made = Made::new(&info);
+            let (mut display, identity) =
+                HongtaiDisplay::open(made.clone(), Kind::Majesty, None, "COM9", TIMING).unwrap();
+            assert!(!identity.v2);
+            assert_eq!(identity.set_up, Some(0x15));
+            assert_eq!(identity.native, (462, 1920));
+            display.close();
+            let writes = made.writes.lock().unwrap();
+            assert!(writes.contains(&majesty_setup()));
+            assert!(!writes.contains(&v2_setup()));
+        }
+    }
+
+    #[test]
+    fn the_family_is_never_taken_for_the_v2() {
+        let made = Made::new(INFO);
+        let (mut display, identity) =
+            HongtaiDisplay::open(made.clone(), Kind::Family, None, "COM8", TIMING).unwrap();
+        assert!(!identity.v2 && identity.set_up.is_none());
+        assert_eq!(identity.version.as_deref(), Some("5.3")); // (for the log)
+        display.close();
+        let writes = made.writes.lock().unwrap();
+        assert_eq!(writes[0], RESET); // (one write, as Python's driver writes it)
+        assert!(!writes.contains(&v2_setup()) && !writes.contains(&majesty_setup()));
+    }
+
+    #[test]
+    fn a_firmware_s_first_number_is_read_from_what_it_says() {
+        assert_eq!(major_of("5.3"), Some(5));
+        assert_eq!(major_of(" 12 .0"), Some(12));
+        assert_eq!(major_of("v5"), None);
+        assert_eq!(major_of(""), None);
+        let info = |text: &str| match lp_py::json::loads(text) {
+            Ok(Value::Dict(info)) => info,
+            _ => unreachable!(),
+        };
+        assert_eq!(version_of(&info(r#"{"version": 5}"#)).as_deref(), Some("5"));
+        assert_eq!(
+            version_of(&info(r#"{"version": 5.25}"#)).as_deref(),
+            Some("5.25")
+        );
+        assert_eq!(version_of(&info(r#"{"version": " "}"#)), None);
+        assert_eq!(version_of(&info(r#"{"version": [5]}"#)), None);
+        assert_eq!(
+            version_of(&info(r#"{"data": {"version": "6.0"}}"#)).as_deref(),
+            Some("6.0")
+        );
+        assert_eq!(version_of(&info(r#"{"data": 5}"#)), None);
+        assert_eq!(
+            version_of(&info(&format!(r#"{{"version": "{}"}}"#, "9".repeat(40)))).map(|v| v.len()),
+            Some(16)
+        );
     }
 }

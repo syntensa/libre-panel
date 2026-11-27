@@ -221,6 +221,11 @@ fn session(case: &Value) -> Result<Value, String> {
     let written = Arc::new(Mutex::new(Vec::new()));
     let mut replies = vec![
         (hongtai::RESET.to_vec(), bytes_of(&case["stale"])?),
+        // (the MAJESTY's opening in two writes: what came before is there after the second)
+        (
+            hongtai::RESET[hongtai::END.len()..].to_vec(),
+            bytes_of(&case["stale"])?,
+        ),
         (
             hongtai::frame(hongtai::CMD_INFO, &[]).map_err(error_of)?,
             bytes_of(&case["answer"])?,

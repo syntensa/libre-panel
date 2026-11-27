@@ -203,14 +203,21 @@ fn test(args: &[String]) -> Result<(), String> {
         HongtaiDisplay::open(port, kind, native, &device, Timing::PANEL).map_err(|e| e.0)?;
     let (nw, nh) = identity.native;
     println!(
-        "opened in {:.1} s: it calls itself {:?}, {nw}x{nh}",
+        "opened in {:.1} s: it calls itself {:?}, {nw}x{nh}, firmware {}",
         started.elapsed().as_secs_f64(),
-        identity.name
+        identity.name,
+        identity.version.as_deref().unwrap_or("not said")
     );
     if kind == Kind::Majesty {
+        let (asked, what) = if identity.v2 {
+            ("26", "the 9.16\" V2 (firmware 5)")
+        } else {
+            ("15", "the MAJESTY")
+        };
+        println!("set up as {what}");
         match identity.set_up {
-            Some(command) => println!("set up: it answered 15 with a frame of {command:#04x}"),
-            None => println!("set up: no answer to 15 within 3 s (went on)"),
+            Some(command) => println!("set up: it answered {asked} with a frame of {command:#04x}"),
+            None => println!("set up: no answer to {asked} within 3 s (went on)"),
         }
     }
     let (w, h) = (nw.max(nh).max(1) as usize, nw.min(nh).max(1) as usize);

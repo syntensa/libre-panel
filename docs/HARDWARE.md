@@ -228,6 +228,13 @@ backlight kept at 95 and its brightness put into the pictures. Now and then it g
 itself while it is shown pictures, and says so (`FF`): Libre Panel opens it again then, as a
 change of the brightness would, on a port at most once a minute (issue #54).
 
+The **Jungle Leopard 9.16" V2** has the same USB ids and firmware 5 (it says `5.3`, the MAJESTY
+`3.1`): Libre Panel tells them apart by the firmware the panel names when it is opened, and
+drives the V2 as the maker's Jungle Leopard Display 1.0.97 drives it, from its owner's USB
+capture (issue #70): set up its own way, its pictures without the end marker the MAJESTY
+takes, up to about 120 KB. Not yet seen with Libre Panel. The log says what the panel calls
+itself and its firmware (`the panel on COM3 calls itself …, firmware 5.3`).
+
 ## VMAX 4.6"
 
 The VMAX 4.6" (960×320) is a MacroSilicon MS9132 USB display chip like the JONSBO DS339's and

@@ -3,6 +3,14 @@
 ## Unreleased
 
 **Fixed**
+- **The Jungle Leopard 9.16" V2.** It has the MAJESTY 9.16"'s USB ids and was driven as the
+  MAJESTY: it said what it is, then stayed on its own video, and Windows refused the next
+  write ("The device does not recognize the command", issue #70). It runs firmware 5 (the
+  MAJESTY 3), and its maker's Jungle Leopard Display sets it up another way and sends its
+  pictures without the MAJESTY's end marker. Libre Panel now tells the two apart by the
+  firmware the panel names when it is opened, and drives the V2 as that application does,
+  from its owner's USB capture; the log names the firmware. Not yet seen with Libre Panel: if
+  you have one, how it goes is welcome in the issue.
 - **Pictures, fonts and videos of your own go into a theme again.** Choosing a file for a
   picture, a video or a font in *Design* said "Invalid JSON", or the connection was cut off,
   and nothing was added (issue #74): the Rust app's server had no way for a file to come into
