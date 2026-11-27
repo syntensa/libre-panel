@@ -1204,6 +1204,7 @@ pub fn default_items(kind: &str) -> String {
         ),
         ("fans", format!("gpu.fan = {}\nfan.*", t("GPU fan"))),
         ("drives", "disk.*.load".to_string()),
+        ("cores", "cpu.core.*.load".to_string()),
         ("cards", DEFAULT_CARDS.to_string()),
         (
             "world",

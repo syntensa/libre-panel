@@ -649,12 +649,17 @@ function ModuleInspector({ widget }) {
           : null}
         ${items}
         ${widget.module === "cores"
-          ? html`<${Field} label=${t("Every thread")} hint=${t("off: a bar for each core, its threads together, where the processor says which they are")}>
-              <${Toggle} label=${t("Every thread")} checked=${Boolean(widget.threads)} onChange=${change("threads")} />
-            <//>
+          ? html`${String(widget.items || "").trim()
+              ? null /* (the readings named above are shown, every thread or not) */
+              : html`<${Field} label=${t("Every thread")} hint=${t("off: a bar for each core, its threads together, where the processor says which they are")}>
+                  <${Toggle} label=${t("Every thread")} checked=${Boolean(widget.threads)} onChange=${change("threads")} />
+                <//>`}
             <${Field} label=${t("Whole processor")} hint=${t("its load beside the title, and its history where there is room; off where the screen beside it shows them")}>
               <${Toggle} label=${t("Whole processor")} checked=${widget.total !== false} onChange=${change("total")} />
-            <//>`
+            <//>
+            ${widget.total !== false
+              ? html`<${FieldRow} widget=${widget} name="sensor" kind="sensor" value=${widget.sensor} onChange=${change("sensor")} />`
+              : null}`
           : null}
         ${widget.module === "game"
           ? html`<${Field} label=${t("Graph up to")} hint=${t("the frame rate's course from 0 to this many frames a second, its scale fixed; 0: a top of its own, in steps of 30")}>

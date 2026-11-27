@@ -249,6 +249,39 @@ def test_a_ring_shows_a_reading_of_one_s_own_from_its_start_to_its_end() -> None
     assert (cpu["sensor"], cpu["min"], cpu["max"]) == ("cpu.load", 0, 100)
 
 
+def test_the_cpu_cores_are_another_computer_s_where_the_module_names_them() -> None:
+    """The CPU cores module of one's own readings (issue 54): its columns show the lines of
+    `items` that name readings, as a list does, its `sensor` the whole processor's load beside
+    the title and in its history; a module that names none shows this PC's cores as before,
+    and one that names only the cores keeps this PC's whole load."""
+    cores = "\n".join(["mqtt.proxmox.cpu.core.* = Core", "!mqtt.proxmox.cpu.core.7", "# mine",
+                       "assets/photo.jpg", "Asia/Tokyo = Tokyo", "forecast for 2.5m"])  # fmt: skip
+    whole = "mqtt.proxmox.cpu.load"
+    modules = [
+        {"id": "p", "module": "cores", "items": cores, "sensor": whole, "cols": 2, "rows": 2},
+        {"id": "o", "module": "cores", "items": cores},
+        {"id": "c", "module": "cores"},
+    ]  # fmt: skip
+    theme = {
+        "format": THEME_FORMAT, "name": "Own cores",
+        "display": {"model": "custom", "orientation": "landscape", "width": 1920, "height": 480},
+        "grid": {"columns": 4, "rows": 2},
+        "widgets": [{"type": "module", "col": c, "row": 0, **m}
+                    for c, m in zip([0, 2, 3], modules, strict=True)],
+    }  # fmt: skip
+    case = {"op": "theme_expand", "fonts_dir": str(fonts.FONT_DIR), "locale": str(i18n.LOCALE_DIR)}
+    [ours] = run([{**case, "themes": [{"data": json.dumps(theme), "light": False,
+                                       "language": "en"}]}])  # fmt: skip
+    parts = {w["id"]: w for w in json.loads(ours["answers"][0]["widgets"])}
+    named = "mqtt.proxmox.cpu.core.* = Core\n!mqtt.proxmox.cpu.core.7"
+    assert parts["p/cores"]["items"] == named and "p/threads" not in parts
+    assert parts["p/value"]["sensor"] == whole and parts["p/history"]["sensor"] == whole
+    assert parts["o/cores"]["items"] == named and parts["o/value"]["sensor"] == "cpu.load"
+    assert parts["c/cores"]["items"] == "cpu.pcore.*.load"
+    assert parts["c/threads"]["items"] == "cpu.core.*.load"
+    assert parts["c/value"]["sensor"] == "cpu.load"
+
+
 CARD_LINES = [
     "playback", "forecast for 5m", "bogus", " net if net.up ", "# c", "ring for 2h if x",
     "download\u2028", "clock for 90s # a comment", "cards", "netcard", "instrument for 4s",

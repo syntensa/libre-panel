@@ -3656,6 +3656,32 @@ def test_a_ring_of_one_s_own_reading(page):
     expect(maximum).to_have_count(0)
 
 
+def test_the_cpu_cores_of_one_s_own_readings(page):
+    """The CPU cores module of another computer (issue 54): its cores under Readings, the
+    whole processor's load under Sensor while the module shows it; with readings named,
+    Every thread is gone, as they are shown either way."""
+    new_theme_from_a_layout(page)
+    first = js(page, "window.libre.doc.widgets().find(window.libre.doc.isModule).id")
+    js(page, f"window.libre.doc.setSelection([{first!r}])")
+    inspector = page.locator(".inspector")
+    inspector.locator("select[aria-label='Module']").select_option("cores")
+    labels = inspector.locator(".field-label")
+    sensor = labels.filter(has_text=re.compile(r"^Sensor$"))
+    threads = labels.filter(has_text=re.compile(r"^Every thread$"))
+    expect(sensor).to_have_count(1)
+    expect(threads).to_have_count(1)
+    readings = inspector.get_by_role("textbox", name="Readings", exact=True)
+    assert readings.get_attribute("placeholder") == "cpu.core.*.load"
+    readings.fill("mqtt.proxmox.cpu.core.*")
+    readings.blur()
+    page.wait_for_function(
+        f"window.libre.doc.widgetById({first!r}).items === 'mqtt.proxmox.cpu.core.*'"
+    )
+    expect(threads).to_have_count(0)
+    inspector.get_by_role("switch", name="Whole processor").click()
+    expect(sensor).to_have_count(0)
+
+
 def test_a_time_modules_settings(page):
     new_theme_from_a_layout(page)
     first = js(page, "window.libre.doc.widgets().find(window.libre.doc.isModule).id")

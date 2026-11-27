@@ -4,7 +4,9 @@
 //! object is taken apart: `{"temperature": 21.5, "humidity": 40}` on `zigbee2mqtt/sensor`
 //! gives `mqtt.zigbee2mqtt.sensor.temperature` and `...humidity`; an object or a list in it
 //! too, each to its own reading: `{"memory": {"percent": 83}}` gives `...memory.percent`,
-//! `{"volumes": [{"used": 40}]}` `...volumes.0.used` (sensors/mqtt.py took one level).
+//! `{"volumes": [{"used": 40}]}` `...volumes.0.used` (sensors/mqtt.py took one level). An
+//! empty message takes a topic's readings away, as an empty retained one clears the topic on
+//! the broker: for what comes and goes, a virtual machine that stops (issue #54).
 //!
 //! The broker is spoken to here as the Python app's client (paho) speaks to it: MQTT 3.1.1,
 //! a clean session, the topics subscribed at quality 0, a ping every minute, and after a
@@ -321,7 +323,37 @@ struct State {
     /// the broker took the topics, or the first try failed
     settled: bool,
     latest: Readings,
+    /// the topic each of them came with
+    topic_of: std::collections::HashMap<String, String>,
     notes: Vec<String>,
+}
+
+/// What a message brought: its topic and its readings, none where it was empty.
+type Message = (String, Option<Readings>);
+
+impl State {
+    /// take_in: the messages that came, in turn; a topic's empty one takes away what it gave.
+    /// No new key past `MAX_KEYS` (a message of keys there are still counts).
+    fn take_in(&mut self, messages: Vec<Message>) {
+        for (topic, found) in messages {
+            let Some(found) = found else {
+                let topic_of = &mut self.topic_of;
+                self.latest
+                    .retain(|key, _| topic_of.get(key).is_none_or(|of| *of != topic));
+                topic_of.retain(|_, of| *of != topic);
+                continue;
+            };
+            let known = found.keys().all(|key| self.latest.contains_key(key));
+            if self.latest.len() < MAX_KEYS || known {
+                for key in found.keys() {
+                    if self.topic_of.get(key) != Some(&topic) {
+                        self.topic_of.insert(key.clone(), topic.clone());
+                    }
+                }
+                self.latest.extend(found);
+            }
+        }
+    }
 }
 
 struct Shared {
@@ -366,7 +398,7 @@ fn session(shared: &Shared, options: &Options, client: &str) -> Result<(), Strin
     let mut heard = Instant::now();
     let mut data: Vec<u8> = Vec::new();
     let mut buffer = [0u8; 4096];
-    let mut pending: Option<Readings> = None;
+    let mut pending: Vec<Message> = Vec::new();
     loop {
         if shared.stopped() {
             let _ = stream.write_all(&[0xe0, 0]); // DISCONNECT
@@ -412,18 +444,19 @@ fn session(shared: &Shared, options: &Options, client: &str) -> Result<(), Strin
                     return Err(format!("the broker refused the connection ({code})"));
                 }
                 Incoming::Message(topic, payload) => {
-                    let found = readings_from_message(&topic, &payload, &options.units);
-                    pending.get_or_insert_with(Readings::new).extend(found);
+                    let found = if lp_py::strip(&String::from_utf8_lossy(&payload)).is_empty() {
+                        None
+                    } else {
+                        Some(readings_from_message(&topic, &payload, &options.units))
+                    };
+                    pending.push((topic, found));
                 }
                 Incoming::Other => {}
             }
         }
-        if let Some(found) = pending.take() {
+        if !pending.is_empty() {
             if let Ok(mut state) = shared.state.lock() {
-                let known = found.keys().all(|key| state.latest.contains_key(key));
-                if state.latest.len() < MAX_KEYS || known {
-                    state.latest.extend(found);
-                }
+                state.take_in(std::mem::take(&mut pending));
             }
         }
         if subscribed {
@@ -712,5 +745,43 @@ mod tests {
             vec![row("mqtt.a.b_c_d", Value::Float(21.5), "V", "a/b c.d")]
         );
         assert!(read("a", "null", &[]).is_empty());
+    }
+
+    #[test]
+    fn an_empty_message_takes_its_topics_readings_away_and_none_of_another_topic() {
+        let message = |topic: &str, payload: &str| -> Message {
+            let found = (!payload.is_empty())
+                .then(|| readings_from_message(topic, payload.as_bytes(), &IndexMap::new()));
+            (topic.to_string(), found)
+        };
+        let mut state = State::default();
+        state.take_in(vec![
+            message("pve/vm/101", r#"{"name": "web", "cpu": 12}"#),
+            message("pve/vm/102", r#"{"name": "db", "cpu": 30}"#),
+            message("pve/vm", r#"{"101": {"disk": 4}}"#),
+        ]);
+        let keys = |state: &State| state.latest.keys().cloned().collect::<Vec<_>>();
+        state.take_in(vec![message("pve/vm/101", "")]);
+        assert_eq!(
+            keys(&state),
+            [
+                "mqtt.pve.vm.102.name",
+                "mqtt.pve.vm.102.cpu",
+                "mqtt.pve.vm.101.disk"
+            ]
+        );
+        // (in turn: what comes after an empty one stays, what came before it goes)
+        state.take_in(vec![
+            message("pve/vm/101", r#"{"cpu": 5}"#),
+            message("pve/vm/102", ""),
+            message("pve/vm/101", ""),
+            message("pve/vm/101", r#"{"cpu": 7}"#),
+        ]);
+        assert_eq!(
+            keys(&state),
+            ["mqtt.pve.vm.101.disk", "mqtt.pve.vm.101.cpu"]
+        );
+        assert_eq!(state.latest["mqtt.pve.vm.101.cpu"].value, Value::Float(7.0));
+        assert_eq!(state.topic_of.len(), 2);
     }
 }

@@ -957,7 +957,10 @@ name as `_`: `{"memory": {"percent": 83.0}}` on `macos/mac-studio/memory` gives
 `mqtt.macos.mac-studio.memory.memory.percent`, and `{"volumes": [{"used": 40}]}` on
 `nas/storage` gives `mqtt.nas.storage.volumes.0.used`. `units` gives the topics a pattern
 matches a unit; a pattern can also name a field, as if it were a topic of its own
-(`macos/+/memory/memory/percent`). The first pattern that matches counts.
+(`macos/+/memory/memory/percent`). The first pattern that matches counts. An empty message
+takes a topic's readings away, as an empty retained message clears the topic on the broker.
+That suits what comes and goes: give each virtual machine a topic of its own (`pve/vm/101`),
+empty it when the machine stops, and the machine leaves a list of them.
 
 ```toml
 [sensors]
@@ -1159,7 +1162,8 @@ among the sources; a PC without Dell Command | Monitor is said once in the log. 
 PCs it answers administrators only, and Libre Panel runs without those rights: there the
 sensor service asks it for Libre Panel (it is set up with Libre Panel's setup, or with *Unlock
 all sensors*), and the log says so. Tried on a Dell 3431, a 3240 USFF and an ECS1250 (issue
-#54).
+#54); on the 3431 and the 3240 USFF the setup of Dell Command | Monitor says the PC is not
+supported, and it runs there all the same.
 
 ```toml
 [sensors]

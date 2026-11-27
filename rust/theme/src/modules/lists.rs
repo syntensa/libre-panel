@@ -212,8 +212,26 @@ pub fn build_temps(b: &mut Build, _src: &Source) -> Result<()> {
     Ok(())
 }
 
+/// The lines of `items` that name readings: a key or a pattern (one has a dot, and no slash or
+/// space), with a name or not, or one left out ("!"); comments and another kind's lines (a
+/// time zone, a picture, a card) are none.
+fn reading_lines(items: &str) -> String {
+    let mut lines = Vec::new();
+    for line in lp_py::splitlines(items) {
+        let line = lp_py::strip(line);
+        let key = lp_py::strip(line.split_once('=').map_or(line, |(key, _)| key));
+        let key = key.strip_prefix('!').unwrap_or(key);
+        if key.contains('.') && !key.contains(|c: char| c == '/' || c.is_whitespace()) {
+            lines.push(line);
+        }
+    }
+    lines.join("\n")
+}
+
 /// build_cores: the load of every core, columns side by side or tiles; the whole
-/// processor's beside the title and its history when big, unless `total` is off.
+/// processor's beside the title and its history when big, unless `total` is off. `items`
+/// names the cores' readings of one's own and `sensor` the whole one's: another computer's,
+/// an MQTT agent's (issue #54); else this PC's.
 pub fn build_cores(b: &mut Build, _src: &Source) -> Result<()> {
     b.card(true)?;
     let color = b.tint("cpu");
@@ -221,11 +239,20 @@ pub fn build_cores(b: &mut Build, _src: &Source) -> Result<()> {
     let ts = b.ts as f64;
     let title = or(b.ms("title"), || t("CPU cores"));
     let top = b.head("cpu", &title, &color, ts * 3.6)?;
+    let own = reading_lines(&b.ms("items"));
+    let (whole, whole_fmt) = match b.ms("sensor") {
+        s if !s.is_empty() && s != "cpu.load" => {
+            let fmt = super::cards::known_row(&s)
+                .map_or_else(|| super::cards::OWN_FORMAT.to_string(), |(f, _)| f);
+            (s, fmt)
+        }
+        _ => ("cpu.load".to_string(), "{value:.0f}%".to_string()),
+    };
     if total {
         b.value(
             "value",
-            "cpu.load",
-            "{value:.0f}%",
+            &whole,
+            &whole_fmt,
             (b.ix + b.iw) as f64,
             b.iy as f64,
             ts * 1.6,
@@ -244,8 +271,10 @@ pub fn build_cores(b: &mut Build, _src: &Source) -> Result<()> {
         b.ih as f64 - top,
     );
     // the physical cores where the processor says which threads are one, else the threads;
-    // every thread where the module asks for them
-    let shown: &[(&str, &str, &str)] = if b.m("threads").truthy() {
+    // every thread where the module asks for them; the readings it names where it names them
+    let shown: &[(&str, &str, &str)] = if !own.is_empty() {
+        &[("cores", own.as_str(), "")]
+    } else if b.m("threads").truthy() {
         &[("cores", "cpu.core.*.load", "")]
     } else {
         &[
@@ -275,7 +304,7 @@ pub fn build_cores(b: &mut Build, _src: &Source) -> Result<()> {
         let gh = (b.iy + b.ih) as f64 - gy;
         b.graph(
             "history",
-            "cpu.load",
+            &whole,
             x,
             gy,
             w,

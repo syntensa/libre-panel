@@ -921,6 +921,7 @@
     "sqrt/log keep small values visible (network rates)": "sqrt/logは小さい値も見えるようにします（ネットワーク速度向け）",
     "empty: as high as the highest value it shows (a rate or a speed has no fixed top)": "空欄: 表示している最大の値に合わせます（転送速度や回転数には決まった上限がありません）",
     "the value at which the ring is empty (empty: 0)": "リングが空になる値（空欄: 0）",
+    "the whole processor's load, another computer's for one (an MQTT value), with its cores under Readings; empty: this PC's": "プロセッサー全体の負荷。別のコンピューターのもの（MQTTの値）も指定でき、そのコアは「測定値」に書きます。空欄: このPCのもの",
     "the value at which the ring is full (empty: 100)": "リングが満ちる値（空欄: 100）",
     "starting": "起動中",
     "stopped": "停止",

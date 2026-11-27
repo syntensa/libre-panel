@@ -297,7 +297,7 @@ export function setModuleArea(widget, [col, row, cols, rows]) {
 // What a module's `items` are, by its kind: another kind's mean something else to it (a world
 // clock's time zones are no readings), so they go when the kind changes to one of another.
 const ITEMS_ARE = {
-  temps: "readings", drives: "readings", values: "readings", instrument: "readings",
+  temps: "readings", drives: "readings", values: "readings", instrument: "readings", cores: "readings",
   world: "places", image: "pictures", cards: "cards", netcard: "cards",
 };
 

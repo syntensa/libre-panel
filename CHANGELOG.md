@@ -15,6 +15,14 @@
   you like. The number in it shows as Libre Panel shows that reading elsewhere, else with the
   unit it comes with; an instrument's rows are those you name under *Readings*. Until now a
   ring showed only the load of the CPU, the GPU, the RAM or a drive. Asked for in issue #54.
+- **The CPU cores of another computer.** The CPU cores module shows the cores you name under
+  *Readings* instead of this PC's, an MQTT agent's for one (`mqtt.proxmox.cpu.core.*`), and
+  under *Sensor* the whole processor's load beside the title and in its history; left empty,
+  this PC's as before. Asked for in issue #54.
+- **An empty MQTT message takes its topic's readings away**, as an empty retained message
+  clears the topic on the broker, so a list of what comes and goes (the virtual machines that
+  run, one topic each) loses what is gone. Until now a reading stayed until Libre Panel was
+  restarted, and an empty message was an empty text.
 
 **Fixed**
 - **The Jungle Leopard 9.16" V2.** It has the MAJESTY 9.16"'s USB ids and was driven as the

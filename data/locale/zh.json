@@ -921,6 +921,7 @@
     "sqrt/log keep small values visible (network rates)": "平方根/对数可让小数值保持可见（网络速率）",
     "empty: as high as the highest value it shows (a rate or a speed has no fixed top)": "留空：以所显示的最高值为上限（速率和转速没有固定的上限）",
     "the value at which the ring is empty (empty: 0)": "圆环为空时的数值（留空：0）",
+    "the whole processor's load, another computer's for one (an MQTT value), with its cores under Readings; empty: this PC's": "整个处理器的负载，也可以是另一台计算机的（MQTT 值），其核心写在“读数”中；留空：本机的",
     "the value at which the ring is full (empty: 100)": "圆环填满时的数值（留空：100）",
     "starting": "正在启动",
     "stopped": "已停止",
