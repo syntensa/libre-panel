@@ -459,7 +459,8 @@ jobs:
         if: runner.os == 'Linux' && !inputs.quick && !cancelled()
         env:
           LP_GOLDEN_OUT: ${{ runner.temp }}/golden
-          LP_GOLDEN: ${{ inputs.answers && 'record' || '' }}
+          # (not with "answers": the server's tape is kept in the repository, not in the run's
+          # files, and recorded only where the change is made)
         run: python -m pytest -q -rfE --durations=20 tests/test_rust_server.py tests/test_rust_wayland.py
       # the app's pages in a real browser on the Rust app's server: what one of them cannot do
       # here is skipped, each with its reason; and the README's pictures and clips, which the

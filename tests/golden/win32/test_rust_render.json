@@ -1,7 +1,7 @@
 {
 "test_a_calendar_s_dot_as_python_rounds_its_side": [
 [
-"4eeaf39e1343"
+"2504f788b87e"
 ]
 ],
 "test_a_clock_s_digits_at_the_edges_of_their_time_as_python_shows_them": [
@@ -107,7 +107,7 @@
 ],
 "test_a_lit_text_s_light_in_float32_as_numpy_works_it_out": [
 [
-"3f116c2d85a1"
+"93a4498a7e69"
 ]
 ],
 "test_a_muted_volume_whose_number_glides_past_its_value_as_python_shows_it": [
@@ -150,7 +150,7 @@
 ],
 "test_agents_signs_that_move_as_python_draws_them": [
 [
-"c24cb17782f0"
+"d17d869478b0"
 ]
 ],
 "test_an_animation_at_its_frames_ends_at_any_speed_and_back_in_time": [
@@ -235,17 +235,17 @@
 ],
 "test_clocks_of_no_zone_warn_as_python_warns": [
 [
-"e8e7df1b4e40"
+"48bf8b2b3d68"
 ]
 ],
 "test_clocks_whose_digits_roll_or_fade_as_python_shows_them": [
 [
-"9ae7d9bbe995"
+"5bc8b412c559"
 ]
 ],
 "test_clocks_whose_second_hand_glides_or_goes_round_as_python_draws_them": [
 [
-"68e6944e8b74"
+"af3fade36d3e"
 ]
 ],
 "test_clocks_whose_second_hand_moves_with_their_glow_and_shadow_within_a_level": [
@@ -275,7 +275,7 @@
 ],
 "test_downloads_frame_after_frame_as_python_keeps_them": [
 [
-"d477be7ec79a"
+"1f58d79588b6"
 ]
 ],
 "test_downloads_read_as_download_py_reads_them": [
@@ -285,7 +285,7 @@
 ],
 "test_downloads_whose_light_runs_frame_after_frame_as_python_draws_them": [
 [
-"9f352617b982"
+"819d7497c2c6"
 ]
 ],
 "test_each_finish_as_python_draws_it": [
@@ -942,7 +942,7 @@
 "5682d2a7cc01",
 "61e87d66213f",
 "16b43e69359d",
-"9ed03cc7a8cc",
+"4f1bc10ace38",
 "e9974f4d8cff",
 "90a55c1ea21a",
 "6b10e706e66c",
@@ -977,7 +977,7 @@
 "7fdf018f6061",
 "9a6c3625a00c",
 "e18dd61d3fca",
-"04f148b49c06",
+"47fa25ebde24",
 "5b8f0c3d84a2",
 "a56dae388421",
 "edc53516fe38",
@@ -1065,7 +1065,7 @@
 "97f1dfa7e4a0",
 "d523117fbc3b",
 "ef083c85ebf2",
-"267ae0abd022",
+"f46a7fda22dd",
 "ccdb0cd99281",
 "c0963bbd8ae8",
 "cbb9a4c7fc4a",
@@ -1134,7 +1134,7 @@
 "88184314d6e8",
 "fa382e549746",
 "e6f8a84e0093",
-"292c94289c99",
+"6d6f2b651492",
 "dfcf4f674f9c",
 "e58a4d4db4ab",
 "1f4430a03323",
@@ -1170,12 +1170,12 @@
 ],
 "test_fans_in_what_the_person_chose_as_python_draws_them": [
 [
-"17a8f4abc6be"
+"2391b3ae21a7"
 ]
 ],
 "test_fans_in_what_the_person_chose_turning_as_python_turns_them": [
 [
-"1421b46c3f5b"
+"4dafd134888d"
 ]
 ],
 "test_fans_on_one_beat_through_pauses_and_back_in_time_as_python_turns_them": [
@@ -1195,13 +1195,13 @@
 ],
 "test_fans_that_turn_as_python_turns_them": [
 [
-"a90266f6b8a8"
+"78a521978016"
 ]
 ],
 "test_fans_the_engine_lays_are_drawn_here_as_before_where_a_frame_asks": [
 [
-"6b2d14c97678",
-"277edc3b15aa"
+"ee691ffccc4c",
+"dee937f50be7"
 ]
 ],
 "test_fans_with_glow_and_shadow_within_a_level": [
@@ -1216,12 +1216,12 @@
 ],
 "test_frames_of_agents_signs_as_python_draws_them": [
 [
-"a824b9f51a48"
+"90c00ac2f158"
 ]
 ],
 "test_frames_of_analog_clocks_as_python_draws_them": [
 [
-"9cc4d97990a2"
+"0b36c11a78cd"
 ]
 ],
 "test_frames_of_animations_pillow_fails_at_after_their_first_frame": [
@@ -1231,7 +1231,7 @@
 ],
 "test_frames_of_bars_as_python_draws_them": [
 [
-"0a85c952c952"
+"7d9d15378eed"
 ]
 ],
 "test_frames_of_bars_with_glow_within_a_level": [
@@ -1241,24 +1241,24 @@
 ],
 "test_frames_of_calendars_as_python_draws_them": [
 [
-"2ad2d6c16dbe"
+"9793184fe3a2"
 ]
 ],
 "test_frames_of_calendars_in_other_languages_as_python_draws_them": [
 [
-"56e8607f6ecc"
+"0ceed1ca22cc"
 ],
 [
-"ea0618e4c54c"
+"def4516a89e0"
 ],
 [
-"31ab63de3548"
+"7cbab78aca36"
 ],
 [
-"f0c3dfab7505"
+"81fb52c9020e"
 ],
 [
-"a52bba98e7e9"
+"9365a81ffe15"
 ]
 ],
 "test_frames_of_card_slots_as_python_draws_them": [
@@ -1278,12 +1278,12 @@
 ],
 "test_frames_of_clocks_as_python_draws_them": [
 [
-"ac236e89c57c"
+"abe24872e571"
 ]
 ],
 "test_frames_of_clocks_in_german_as_python_draws_them": [
 [
-"3d7eadf44871"
+"e4363777b711"
 ]
 ],
 "test_frames_of_download_modules_as_python_draws_them": [
@@ -1293,22 +1293,22 @@
 ],
 "test_frames_of_downloads_as_python_draws_them": [
 [
-"25af2a122dc4"
+"c09ac457f6cb"
 ]
 ],
 "test_frames_of_facet_bars_as_python_draws_them": [
 [
-"4fae2290cecc"
+"bd7119baf292"
 ]
 ],
 "test_frames_of_facet_gauges_as_python_draws_them": [
 [
-"aa522356244f"
+"0d6799314db4"
 ]
 ],
 "test_frames_of_facet_graphs_as_python_draws_them": [
 [
-"a3e9606fcf19"
+"dded38d39129"
 ]
 ],
 "test_frames_of_facet_graphs_with_glow_within_a_level": [
@@ -1318,17 +1318,17 @@
 ],
 "test_frames_of_fan_lists_as_python_draws_them": [
 [
-"79aaad670b61"
+"6cdcf6d96fa9"
 ]
 ],
 "test_frames_of_fans_as_python_draws_them": [
 [
-"c5cfd10dcad5"
+"472fa915da68"
 ]
 ],
 "test_frames_of_gauges_as_python_draws_them": [
 [
-"c3a1d3102f0d"
+"361fc9bc0fe0"
 ]
 ],
 "test_frames_of_gauges_with_glow_within_a_level": [
@@ -1338,47 +1338,47 @@
 ],
 "test_frames_of_graphs_as_python_draws_them": [
 [
-"d1a1a7e20e69"
+"285ad2afc97f"
 ]
 ],
 "test_frames_of_icons_as_python_draws_them": [
 [
-"aac40bc095bb"
+"a8b077645400"
 ]
 ],
 "test_frames_of_lettered_texts_as_python_draws_them": [
 [
-"5be9c8a4d35e"
+"f9ec214482e8"
 ]
 ],
 "test_frames_of_lists_as_python_draws_them": [
 [
-"1db60ecfc2fe"
+"b1a0e5804cdc"
 ]
 ],
 "test_frames_of_lit_bars_within_a_level": [
 [
-"9021a31e31ca"
+"4b9f80569415"
 ]
 ],
 "test_frames_of_lit_gauges_within_a_level": [
 [
-"670ccebc6fae"
+"b1dac3c32976"
 ]
 ],
 "test_frames_of_lit_texts_and_readings_as_python_draws_them": [
 [
-"1348ac8239d4"
+"68301c31f0bb"
 ]
 ],
 "test_frames_of_lit_texts_with_shadows_within_a_level": [
 [
-"31c4f57e8d25"
+"dd29210b36e1"
 ]
 ],
 "test_frames_of_live_pictures_as_python_draws_them": [
 [
-"4b88870fb34f"
+"3e2b63510d1f"
 ]
 ],
 "test_frames_of_metal_lettering_mirroring_the_theme_s_sky": [
@@ -1393,7 +1393,7 @@
 ],
 "test_frames_of_moons_as_python_draws_them": [
 [
-"5ca66caf74b8"
+"ba084fd0d163"
 ]
 ],
 "test_frames_of_pictures_pillow_fails_at_as_python_draws_them": [
@@ -1403,47 +1403,47 @@
 ],
 "test_frames_of_readings_shown_as_texts_as_python_draws_them": [
 [
-"044247524a4a"
+"ba348902ffbe"
 ]
 ],
 "test_frames_of_texts_as_python_draws_them": [
 [
-"97ea462b295e"
+"8ccfaa172f41"
 ]
 ],
 "test_frames_of_texts_that_just_fit_as_python_fits_them": [
 [
-"80b9394a7d09"
+"0a454758eca9"
 ]
 ],
 "test_frames_of_the_earth_as_python_draws_them": [
 [
-"7485798251d0"
+"a1f6bb50b35f"
 ]
 ],
 "test_frames_of_the_sun_s_way_as_python_draws_them": [
 [
-"47ca21c45ce6"
+"1db13a701d08"
 ]
 ],
 "test_frames_of_the_theme_s_pictures_as_python_draws_them": [
 [
-"047043b88d3e"
+"32c07b556f09"
 ]
 ],
 "test_frames_of_the_weather_and_countdowns_as_python_draws_them": [
 [
-"bba0f8203052"
+"7c76fcd9769c"
 ]
 ],
 "test_frames_of_the_weather_and_countdowns_in_german_as_python_draws_them": [
 [
-"fae1375dab64"
+"626849b6d8f4"
 ]
 ],
 "test_frames_of_weather_symbols_as_python_draws_them": [
 [
-"57990e16dff4"
+"dd50dfcc09b5"
 ]
 ],
 "test_frames_with_the_grid_look_as_python_draws_them": [
@@ -1453,12 +1453,12 @@
 ],
 "test_globes_that_turn_as_python_draws_them": [
 [
-"ba5dc652103a"
+"1e69bb861c14"
 ]
 ],
 "test_glowing_graphs_in_video_mode_with_readings_between_samples_within_a_level": [
 [
-"7ab3f5ad8677"
+"304a3a19861b"
 ]
 ],
 "test_glowing_graphs_in_video_mode_within_a_level": [
@@ -1478,32 +1478,32 @@
 ],
 "test_graphs_in_video_mode_as_python_draws_them": [
 [
-"627880e9e99d"
+"808dfa6b2970"
 ]
 ],
 "test_graphs_in_video_mode_with_readings_between_samples_as_python_draws_them": [
 [
-"d530c55ec1d7"
+"bf9ce42113ab"
 ]
 ],
 "test_graphs_through_points_that_are_no_numbers": [
 [
-"a12776fe07c2"
+"96c520730a80"
 ]
 ],
 "test_graphs_whose_own_range_glides_as_python_draws_them": [
 [
-"3c479575c9dc"
+"2e183b6aa0ee"
 ]
 ],
 "test_graphs_whose_own_range_glides_with_their_glow_within_a_level": [
 [
-"b898aa39f6b6"
+"d433a6cf865c"
 ]
 ],
 "test_lists_across_their_widths": [
 [
-"3cad185349ab"
+"adad9edf164f"
 ]
 ],
 "test_lists_rust_does_not_draw_yet": [
@@ -1513,7 +1513,7 @@
 ],
 "test_lists_whose_bars_glide_as_python_draws_them": [
 [
-"e9f1b98afd4c"
+"ee666ee3533a"
 ]
 ],
 "test_lists_whose_largest_value_fills_their_bars_glide_as_python_draws_them": [
@@ -1528,8 +1528,8 @@
 ],
 "test_lit_bars_the_engine_makes_are_drawn_here_as_before_where_a_frame_asks": [
 [
-"2f9ed9ba2bb2",
-"4c28a34f443e"
+"f61a184e6511",
+"3eb7dc52a42c"
 ]
 ],
 "test_lit_rings_the_engine_makes_are_drawn_here_as_before_where_a_frame_asks": [
@@ -1555,22 +1555,22 @@
 ],
 "test_moons_whose_halo_breathes_as_python_draws_them": [
 [
-"1b546dc63eda"
+"7e52f48a17d2"
 ]
 ],
 "test_moving_frames_of_bars_and_rings_as_python_draws_them": [
 [
-"9be1370fb894"
+"ed7b7814d7ba"
 ]
 ],
 "test_moving_frames_of_lit_bars_and_rings_within_a_level": [
 [
-"1f8a547f7349"
+"110194598e1d"
 ]
 ],
 "test_moving_frames_of_metrics_as_python_draws_them": [
 [
-"24d3573f76a5"
+"1c00aaf78dbf"
 ]
 ],
 "test_moving_light_as_python_draws_it": [
@@ -3221,12 +3221,12 @@
 ],
 "test_pictures_that_move_frame_after_frame_as_python_shows_them[False]": [
 [
-"dfa170369c77"
+"d7695d360c2f"
 ]
 ],
 "test_pictures_that_move_frame_after_frame_as_python_shows_them[True]": [
 [
-"ebe691ad1cc7"
+"fcb3a9f0d9e4"
 ]
 ],
 "test_points_and_boxes_turned_as_python_turns_them": [
@@ -3269,7 +3269,7 @@
 ],
 "test_slideshows_of_still_pictures_as_python_shows_them": [
 [
-"8a2b406829b1"
+"2b7f1fedd07f"
 ]
 ],
 "test_slideshows_whose_rounds_count_near_a_whole_as_python_counts_them": [
@@ -3800,6 +3800,9 @@
 "67a6f88abf61",
 "cbb5d8fb4df7",
 "2d5d9823c402",
+"dc882c13ff87",
+"92b438598d5f",
+"ef33d7efa605",
 "0d39dd757af5",
 "c845fb6cebe6",
 "52bda12dae26",
@@ -3921,7 +3924,7 @@
 ],
 "test_turned_lists_whose_text_comes_near_their_bars_as_python_draws_them": [
 [
-"1fa5c99c9149"
+"7f1c64c5937a"
 ]
 ],
 "test_turned_modules_and_card_slots_as_python_draws_them": [
@@ -3931,37 +3934,37 @@
 ],
 "test_turned_widgets_as_python_draws_them[agents]": [
 [
-"ddfcd49e9653"
+"65ea07ac5216"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[analog clocks]": [
 [
-"0b2f40e9be1d"
+"be64ddcbef5a"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[bars]": [
 [
-"19ca9c9143fb"
+"f49fab2f54e8"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[calendars]": [
 [
-"16f510cfd3c6"
+"3561461d1bf3"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[clocks]": [
 [
-"a464cd8eb559"
+"91479a4ca641"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[downloads]": [
 [
-"069666101321"
+"d0e87cd67712"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[fan lists]": [
 [
-"6c3f1692f7bd"
+"7a8f43d99ddd"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[fans]": [
@@ -3971,7 +3974,7 @@
 ],
 "test_turned_widgets_as_python_draws_them[gauges]": [
 [
-"c7bf4f60242e"
+"44c02090c7f2"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[graphs]": [
@@ -3981,42 +3984,42 @@
 ],
 "test_turned_widgets_as_python_draws_them[icons]": [
 [
-"943f847d7cf7"
+"01e7574801b2"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[lettered]": [
 [
-"0a4ff5753cf2"
+"8c88b8615b87"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[lists]": [
 [
-"58c4baad34c5"
+"8092202fe3f9"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[lit]": [
 [
-"3bcf1b3cfcb5"
+"1569286b8aed"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[metrics]": [
 [
-"4d419bc1f911"
+"4869967f7479"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[moons]": [
 [
-"fc15c60cb707"
+"c32b42138e61"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[pictures]": [
 [
-"22d0733c3467"
+"a35b60c9caff"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[sun's ways]": [
 [
-"d0b4dde68620"
+"cbb03ef2c917"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[symbols]": [
@@ -4026,7 +4029,7 @@
 ],
 "test_turned_widgets_as_python_draws_them[texts]": [
 [
-"7455c2780d9c"
+"6e5aa3076fe0"
 ]
 ],
 "test_turned_widgets_as_python_draws_them[theme pictures]": [
@@ -4036,12 +4039,12 @@
 ],
 "test_turned_widgets_as_python_draws_them[weather]": [
 [
-"adaff69f2452"
+"29c6010e7227"
 ]
 ],
 "test_turned_widgets_frame_after_frame_as_python_draws_them": [
 [
-"7e82ed0d7832"
+"9c03f4b0c71a"
 ]
 ],
 "test_turning_globes_as_python_turns_them": [
@@ -4056,12 +4059,12 @@
 ],
 "test_weather_symbols_that_move_as_python_draws_them": [
 [
-"90c64c616c9f"
+"98a9164e68a1"
 ]
 ],
 "test_widgets_left_out_where_their_reading_is_missing_as_python_leaves_them_out": [
 [
-"da54771a28a9"
+"81ac664d23b7"
 ]
 ]
 }
