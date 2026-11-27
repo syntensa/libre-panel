@@ -207,6 +207,48 @@ def test_modules_laid_out_as_python_lays_them_out() -> None:
     assert [a["error"] for a in answers[-2:]] == ["float division by zero", "division by zero"]
 
 
+@no_freetype
+def test_a_ring_shows_a_reading_of_one_s_own_from_its_start_to_its_end() -> None:
+    """A ring and an instrument of one's own reading (issue 54): the ring spans `min` to `max`
+    (0 to 100 where they are none), the number in it is in the format Libre Panel shows that
+    reading in elsewhere, else with the unit it comes with, the name under it Libre Panel's
+    or the last part of the key; an instrument has the rows one names and none of a part's.
+    A ring of the CPU is as it was."""
+    key, fan = "mqtt.mac.system.temperature.cpu_celsius", "fan.dell.fan_speed_sensor_fan_cpu"
+    modules = [
+        {"id": "r", "module": "ring", "source": "sensor", "sensor": key, "min": 20, "max": 95.5},
+        {"id": "i", "module": "instrument", "source": "sensor", "sensor": fan, "max": 3000,
+         "min": None, "rows": 2},
+        {"id": "k", "module": "instrument", "source": "sensor", "sensor": "cpu.temp",
+         "items": "cpu.power = Power", "rows": 2},
+        {"id": "c", "module": "ring", "source": "cpu"},
+    ]  # fmt: skip
+    theme = {
+        "format": THEME_FORMAT, "name": "Own",
+        "display": {"model": "custom", "orientation": "landscape", "width": 1920, "height": 480},
+        "grid": {"columns": 4, "rows": 2},
+        "widgets": [{"type": "module", "col": n, "row": 0, **m} for n, m in enumerate(modules)],
+    }  # fmt: skip
+    case = {"op": "theme_expand", "fonts_dir": str(fonts.FONT_DIR), "locale": str(i18n.LOCALE_DIR)}
+    [ours] = run([{**case, "themes": [{"data": json.dumps(theme), "light": False,
+                                       "language": "en"}]}])  # fmt: skip
+    parts = {w["id"]: w for w in json.loads(ours["answers"][0]["widgets"])}
+    ring = parts["r/ring"]
+    assert (ring["sensor"], ring["min"], ring["max"]) == (key, 20, 95.5)
+    assert parts["r/value"]["format"] == "{value:auto} {unit}"
+    assert parts["r/label"]["text"].lower() == "cpu celsius"  # (in capitals, as the look has it)
+    gauge = parts["i/ring"]
+    assert (gauge["sensor"], gauge["min"], gauge["max"]) == (fan, 0, 3000)
+    assert (parts["i/value"]["format"], parts["i/unit"]["format"]) == ("{value:auto}", "{unit}")
+    assert parts["i/title"]["text"].lower() == "fan speed sensor fan cpu"
+    assert not [n for n in parts if n.startswith("i/r") and n[3:4].isdigit()]  # (no part's rows)
+    assert parts["k/ring"]["sensor"] == "cpu.temp" and parts["k/value"]["format"] == "{value:.0f}"
+    assert parts["k/unit"]["text"] == "°C" and parts["k/r0"]["sensor"] == "cpu.power"
+    assert "k/r1" not in parts
+    cpu = parts["c/ring"]
+    assert (cpu["sensor"], cpu["min"], cpu["max"]) == ("cpu.load", 0, 100)
+
+
 CARD_LINES = [
     "playback", "forecast for 5m", "bogus", " net if net.up ", "# c", "ring for 2h if x",
     "download\u2028", "clock for 90s # a comment", "cards", "netcard", "instrument for 4s",

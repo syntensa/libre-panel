@@ -37,6 +37,8 @@ export function hintFor(widget, key, kind) {
   if (key === "format" && widget?.type === "clock") return t("strftime, e.g. {examples}", { examples: "%H:%M · %H:%M:%S · %A %d %B" });
   if (key === "scale") return t("sqrt/log keep small values visible (network rates)");
   if (key === "max" && widget?.type === "graph") return t("empty: as high as the highest value it shows (a rate or a speed has no fixed top)");
+  if (key === "min" && widget?.type === "module") return t("the value at which the ring is empty (empty: 0)");
+  if (key === "max" && widget?.type === "module") return t("the value at which the ring is full (empty: 100)");
   if (key === "hide_if_missing") return t("hide when the sensor has no value (e.g. weather off)");
   if (key === "needs") return t("show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none");
   if (key === "hide_unused") return t("fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays");

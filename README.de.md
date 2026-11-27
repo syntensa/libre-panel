@@ -378,7 +378,7 @@ zur Seite, wenn seine Messwerte fehlen, und kostet nichts, solange kein Theme es
 | **NZXT Kraken** | – | mit LCD | USB |
 | **Thermaltake** | – | 6"-LCD | USB |
 | **AIGO** | – | Gehäusedisplay des Xingcanchen | USB |
-| **Valkyrie** | – | Kühlerdisplay des B360-GT VK | USB |
+| **Valkyrie** | – | Kühlerdisplay des B360-GT VK, VK03 6,2" | USB |
 
 **Noch nicht unterstützt:** GUITION 3,5", Fuldho 3,5", AX206-Bilderrahmen sowie TL LCD,
 Galahad II LCD und Lancool 207 von Lian Li.

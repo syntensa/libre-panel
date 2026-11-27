@@ -546,6 +546,8 @@ pub static WIDGETS: &[(&str, &[Field])] = &[
         f("source", "enum:cpu|gpu|mem|disk|net|sensor|fan", Given::Str("cpu")),
         f("sensor", "sensor", Given::Str("")),
         f("format", "format", Given::Str("")),
+        f("min", "number?", Given::Int(0)),
+        f("max", "number?", Given::Int(100)),
         f("title", "string", Given::Str("")),
         f("text", "text", Given::Str("")),
         f("color", "color?", Given::None),

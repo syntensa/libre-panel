@@ -385,6 +385,7 @@ the catalog yet.
 | Model id | Size | Resolution | Connection | Driver |
 |---|---|---|---|---|
 | `valkyrie-b360gt-vk` | 2.8" | 480×480 | USB (`374a:a005`, WinUSB) | unverified |
+| `valkyrie-vk03-6.2` | 6.2" | 960×360 | USB (`345f:9132`, MacroSilicon MS9132) | unverified |
 
 The screen of Valkyrie's B360-GT VK cooler (瓦尔基里), found by `auto`: its USB product calls
 itself `Vk-Copl-08`. Libre Panel checks what the screen says of itself (480×480, 16-bit
@@ -399,9 +400,21 @@ The protocol comes from its owner's captures of Myth.Cool
 ([#69](https://github.com/syntensa/libre-panel/issues/69)) and the notes on the same family in
 [msdisplay](https://github.com/codehz/msdisplay) (the BoWei screens, VID `374a`) and
 [InfoPanel-linux](https://github.com/emaspa/InfoPanel-linux) (GPL-3.0, its notes on the Valkyrie
-MC360); see the [protocol notes](protocol/valkyrie.md). Unverified: the owner tries it. Its
-other screens (the MC360's 640×480 on `374a:a021`, and those built on a MacroSilicon chip) are
-not in the catalog yet.
+MC360); see the [protocol notes](protocol/valkyrie.md). Unverified: the owner tries it. The
+MC360 (640×480, `374a:a021`) is not in the catalog yet.
+
+The **VK03 6.2"** stands as 360×960 in its chip and is mounted the long way. It is a
+MacroSilicon MS9132 USB display chip, as the [DS339](#jonsbo-ds916-and-ds339) is, so `auto`
+does not open it (USB-to-HDMI adapters have the same chip): choose `valkyrie-vk03-6.2` in
+*Settings → Panel*. Libre Panel starts it as its owner found it on the panel
+([#75](https://github.com/syntensa/libre-panel/issues/75)), from a cold start: power and
+source, its flash's serial number (`…0360*0960…` names its size), its registers and its EDID;
+then its size and timing with its pixels as UYVY. After the first picture its output goes on,
+and while it runs its state is asked at least every 250 ms, a picture or not. The brightness
+goes into the pixels. On Windows both of its USB interfaces need the WinUSB driver, set once
+with [Zadig](https://zadig.akeo.ie) as for the DS339: interface 3 (the video) and interface 0
+(Windows' HID driver has it first). On Linux, `libre-panel system-setup --linux` gives your
+user access to it. Close Myth.Cool first. Unverified: its owner tries it.
 
 ## Lian Li and others
 

@@ -984,11 +984,11 @@ type Row = (String, String, String);
 
 /// The format of a row of one's own whose reading Libre Panel shows nowhere of its own: the
 /// number as it comes, and the reading's own unit beside it.
-const OWN_FORMAT: &str = "{value:auto} {unit}";
+pub(super) const OWN_FORMAT: &str = "{value:auto} {unit}";
 
 /// The format and the name Libre Panel gives a reading where it shows it somewhere of its own:
 /// under a ring, as a part's main reading or among its details.
-fn known_row(sensor: &str) -> Option<(String, String)> {
+pub(super) fn known_row(sensor: &str) -> Option<(String, String)> {
     for role in ["cpu", "gpu", "mem"] {
         let rows = rows_of(role).unwrap_or_default();
         if let Some((_, fmt, name)) = rows.into_iter().find(|(s, _, _)| s == sensor) {
@@ -1004,6 +1004,15 @@ fn known_row(sensor: &str) -> Option<(String, String)> {
         }
     }
     None
+}
+
+/// A reading's name where Libre Panel gives it none: the last part of its key, its "_" spaces.
+pub(super) fn name_of_key(sensor: &str) -> String {
+    sensor
+        .rsplit('.')
+        .next()
+        .unwrap_or(sensor)
+        .replace('_', " ")
 }
 
 /// The rows under a ring that `items` names, a reading a line and a name if one likes
@@ -1031,11 +1040,7 @@ pub fn own_rows(items: &str) -> Vec<Row> {
             .map_or_else(|| OWN_FORMAT.to_string(), |(fmt, _)| fmt.clone());
         let name = match (name, known) {
             ("", Some((_, known))) => known,
-            ("", None) => sensor
-                .rsplit('.')
-                .next()
-                .unwrap_or(sensor)
-                .replace('_', " "),
+            ("", None) => name_of_key(sensor),
             (name, _) => name.to_string(),
         };
         rows.push((sensor.to_string(), fmt, name));
@@ -1155,10 +1160,12 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
     }
     let color = b.tint(src.role);
     b.card(true)?;
-    // (the person's own, where `items` names them; else the part's)
+    // (the person's own, where `items` names them; else the part's, and none under a reading
+    // of one's own)
     let own = own_rows(&b.ms("items"));
     let rows: Vec<Row> = match own.is_empty() {
         false => own,
+        true if src.own => Vec::new(),
         true => rows_of(src.role).unwrap_or_else(|| {
             src.details
                 .iter()
@@ -1222,9 +1229,9 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
         ("y", round(top).into()),
         ("w", (d as i64).into()),
         ("h", (d as i64).into()),
-        ("sensor", src.load.into()),
-        ("min", src.low.unwrap_or(0).into()),
-        ("max", src.high.unwrap_or(100).into()),
+        ("sensor", src.load.as_str().into()),
+        ("min", src.low.unwrap_or(N::I(0)).value()),
+        ("max", src.high.unwrap_or(N::I(100)).value()),
         ("start_angle", (-90).into()),
         ("end_angle", 270.into()),
         ("thickness", 3.max(round(10.0 * u)).into()),
@@ -1240,14 +1247,27 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
     let (size, small) = (8.max(round(50.0 * u)) as f64, 7.max(round(22.0 * u)) as f64);
     let (text_font, display_font) = (b.st("text_font"), b.st("display_font"));
     let digits = b.width_per_size(&display_font, "00")? * size;
-    let (number_fmt, unit) = unit_of(src.fmt);
-    let sign = b.width_per_size(&text_font, if unit.is_empty() { "%" } else { &unit })? * small;
+    // (a reading's own unit, as it comes with it, where the format says `{unit}`: as wide as
+    // the widest of the rings', as in the rows)
+    let (number_fmt, unit, live) = match src.fmt.strip_suffix(" {unit}") {
+        Some(number) => (number.to_string(), String::new(), true),
+        None => {
+            let (number, unit) = unit_of(&src.fmt);
+            (number, unit, false)
+        }
+    };
+    let measured = match (live, unit.is_empty()) {
+        (true, _) => "MHz",
+        (false, true) => "%",
+        (false, false) => unit.as_str(),
+    };
+    let sign = b.width_per_size(&text_font, measured)? * small;
     let gap = 4.0 * u;
     let pair = digits + gap + sign;
     let baseline = top + d / 2.0 + 0.11 * d;
     b.value(
         "value",
-        src.load,
+        &src.load,
         &number_fmt,
         cx + pair / 2.0 - sign - gap,
         baseline - CAP * size,
@@ -1259,7 +1279,23 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
         true,
         Vec::new(),
     )?;
-    if !unit.is_empty() {
+    if live {
+        let color = Some(b.c("text3"));
+        b.value(
+            "unit",
+            &src.load,
+            "{unit}",
+            round(cx + pair / 2.0 - sign) as f64,
+            baseline - CAP * small,
+            small,
+            color,
+            "left",
+            sign * 1.2,
+            "text_font",
+            false,
+            vec![("hide_if_missing", true.into())],
+        )?;
+    } else if !unit.is_empty() {
         let mut fields: Fields = vec![
             ("text", unit.clone().into()),
             ("x", round(cx + pair / 2.0 - sign).into()),
@@ -1470,10 +1506,10 @@ pub fn build_instrument(b: &mut Build, src: &Source) -> Result<()> {
         };
         let gy = (b.iy + b.ih) as f64 - history;
         let gh = (b.y + b.h - edge) as f64 - radius as f64 / 2.0 - gy;
-        let (low, high) = (src.low.unwrap_or(0), src.high.unwrap_or(100));
+        let (low, high) = (src.low.unwrap_or(N::I(0)), src.high.unwrap_or(N::I(100)));
         b.graph(
             "history",
-            src.load,
+            &src.load,
             (b.x + edge) as f64,
             gy,
             (b.w - 2 * edge) as f64,

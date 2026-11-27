@@ -610,6 +610,10 @@ function ModuleInspector({ widget }) {
         ${widget.source === "sensor" && info.sources.length
           ? html`<${FieldRow} widget=${widget} name="format" kind="format" value=${widget.format} onChange=${change("format")} />`
           : null}
+        ${widget.source === "sensor" && (widget.module === "ring" || widget.module === "instrument")
+          ? html`<${FieldRow} widget=${widget} name="min" kind="number?" value=${widget.min} onChange=${change("min")} />
+            <${FieldRow} widget=${widget} name="max" kind="number?" value=${widget.max} onChange=${change("max")} />`
+          : null}
         <${NameFields} widget=${widget} />
         ${widget.module === "weather"
           ? html`<${Field} label=${t("Forecast")} hint=${t("shown when the module is large enough: wider or taller shows more")}>

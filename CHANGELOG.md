@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+**New**
+- **Another panel: Valkyrie's VK03 6.2"** (960×360, `345f:9132`), a MacroSilicon MS9132 USB
+  display chip, started as its owner found it on the panel (issue #75) and not yet seen with
+  Libre Panel: if you have one, how it goes is welcome there. `auto` does not open the chip,
+  which USB-to-HDMI adapters have too: choose it in *Settings → Panel*. On Windows both of
+  its USB interfaces need the WinUSB driver, set once with Zadig (the hardware guide says
+  how).
+- **A ring of your own reading.** The Ring and the instrument show any reading in their ring,
+  an MQTT value for one, from a start and an end you give: *Design → Shows → Any sensor*,
+  then the reading, its *Minimum* and *Maximum* (0 and 100 if you give none), and a format if
+  you like. The number in it shows as Libre Panel shows that reading elsewhere, else with the
+  unit it comes with; an instrument's rows are those you name under *Readings*. Until now a
+  ring showed only the load of the CPU, the GPU, the RAM or a drive. Asked for in issue #54.
+
 **Fixed**
 - **The Jungle Leopard 9.16" V2.** It has the MAJESTY 9.16"'s USB ids and was driven as the
   MAJESTY: it said what it is, then stayed on its own video, and Windows refused the next

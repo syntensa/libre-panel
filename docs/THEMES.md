@@ -266,7 +266,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `top`, `moving`, `hold`, `change`, `slide`, `order`, `turn`, `transition`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `min`, `max`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `top`, `moving`, `hold`, `change`, `slide`, `order`, `turn`, `transition`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -603,7 +603,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `date` | a calendar sheet: day, weekday, month; the month's days beside or under it when large | |
 | `weather` | symbol, temperature, sky; feels-like, humidity and wind; a forecast when there is room: as columns when long (3 × 1) or big, as rows when tall; days and hours together on a big wide one (4 × 2); a calendar while the weather is off | `fallback` (`none`: it says that no weather is set up instead of showing the date, for a screen beside one with the date) |
 | `outlook` | the next days, today first, at most a week: each with its name, a symbol that moves, the high and the low and the chance of rain; side by side when long, one under the other when tall or big; while the weather is off, a line that says where it is set. Lit by itself, as the cards | |
-| `ring` | a ring with the load; details, the hardware's name and a history graph as it grows | `cpu`, `gpu`, `mem`, `disk` |
+| `ring` | a ring with the load; details, the hardware's name and a history graph as it grows | `cpu`, `gpu`, `mem`, `disk`, or `sensor`: a reading of your own, see below |
 | `stat` | a large number; a bar, a history graph and details as it grows | as `ring`, `net`, or `sensor` with `sensor` and `format` |
 | `huge` | one reading as large as the card allows, its name small above it; orange from 80 °C and red from 90 °C (a share: 85 and 95 %), as High Contrast shows the temperatures | as `stat` |
 | `graph` | a history graph under its name and value | as `stat` |
@@ -638,7 +638,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `playback` | the playback card of SPUR II's Studio screen: cover, state, title, artist, app and progress ([Cards](#cards)); the music module where it is small | |
 | `forecast` | the weather card of the Studio screen: a moving symbol, the temperature and the day's range, the details, the rain and the sun, the next hours ([Cards](#cards)); the weather module where it is small | |
 | `download` | the download card: the Studio's inset for a download ([Cards](#cards)); "No download running" otherwise | |
-| `instrument` | a ring with its number inside and the readings of the part beside or below it, or a fan with its speed ([Cards](#cards)) | `cpu`, `gpu`, `mem`, `disk`, `fan` (with `sensor`) |
+| `instrument` | a ring with its number inside and the readings of the part beside or below it, or a fan with its speed ([Cards](#cards)) | `cpu`, `gpu`, `mem`, `disk`, `fan` (with `sensor`), or `sensor`: a reading of your own |
 | `cards` | a slot that shows one of several cards (`items`) and changes with the ignition line ([Cards](#cards)) | `items` |
 | `netcard` | a slot of a download card and the network card ([Cards](#cards)) | |
 
@@ -646,6 +646,12 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
   module that would reach past the grid is moved in.
 - `title` replaces the module's own name, `color` (a colour or `@palette`
   entry) the look's colour for its source.
+- `source` `sensor` on a `ring` or an `instrument`: the ring shows `sensor`, any reading (an
+  MQTT value, `fan.dell.*`), from `min` (empty: 0) at its start to `max` (empty: 100) when it
+  is full; the number in it in `format`, else as Libre Panel shows the reading elsewhere, else
+  with the unit it comes with; under it the reading's name, `title` if you give one. A ring
+  module shows its history as it grows, an instrument the rows `items` names (none of a
+  part's). In Design: *Shows → Any sensor*.
 - `fallback`: what a module shows when its source has no readings. `auto`
   shows the disk instead of a missing GPU; `none` leaves the cells empty; or
   name a source. The weather module's `none` says that no weather is set up

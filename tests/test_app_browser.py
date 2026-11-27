@@ -2222,20 +2222,21 @@ def test_every_widget_type_has_a_name_in_both_languages(page):
 
 def test_every_source_of_a_module_has_a_name_in_both_languages(page):
     """The fan instrument can show a fan; its chip read "fan" (the names were kept in two
-    places, the toolbar's and the inspector's, and neither had it)."""
+    places, the toolbar's and the inspector's, and neither had it). A reading of one's own is
+    the last (issue 54)."""
     page.locator('.tile[data-item="module:instrument"]').click()
     assert js(page, "window.libre.doc.single().module") == "instrument"
     chips = page.locator(".inspector .chips .chip")
     for language, names in (
-        ("en", ["CPU", "GPU", "Memory", "Disk", "Fan"]),
-        ("de", ["CPU", "GPU", "Arbeitsspeicher", "Laufwerk", "Lüfter"]),
+        ("en", ["CPU", "GPU", "Memory", "Disk", "Fan", "Any sensor"]),
+        ("de", ["CPU", "GPU", "Arbeitsspeicher", "Laufwerk", "Lüfter", "Beliebiger Sensor"]),
     ):
         js(page, f"window.libre.commands.runCommand('language.{language}')")
         page.wait_for_function(f"document.documentElement.lang === '{language}'")
         assert chips.all_inner_texts() == names
-        chips.last.click()  # its source is the fan: the toolbar says so as well
+        chips.nth(4).click()  # its source is the fan: the toolbar says so as well
         assert js(page, "window.libre.doc.single().source") == "fan"
-        expect(page.locator(".floating-toolbar .tool-sensor")).to_have_text(names[-1])
+        expect(page.locator(".floating-toolbar .tool-sensor")).to_have_text(names[4])
         chips.first.click()
 
 
@@ -3624,6 +3625,35 @@ def test_an_instruments_own_readings(page):
     )
     chips.filter(has_text="Fan").first.click()
     expect(page.locator(".inspector .field", has_text="Readings")).to_have_count(0)
+
+
+def test_a_ring_of_one_s_own_reading(page):
+    """A ring's source of one's own (issue 54): Any sensor gives a ring and an instrument the
+    range their ring spans, its start and its end; another source has the range of its part."""
+    new_theme_from_a_layout(page)
+    first = js(page, "window.libre.doc.widgets().find(window.libre.doc.isModule).id")
+    js(page, f"window.libre.doc.setSelection([{first!r}])")
+    inspector = page.locator(".inspector")
+    inspector.locator("select[aria-label='Module']").select_option("ring")
+    chips = page.locator(".inspector .chips .chip")
+    minimum = inspector.get_by_label(re.compile(r"^min(imum)?$", re.IGNORECASE))
+    maximum = inspector.get_by_label(re.compile(r"^max(imum)?$", re.IGNORECASE))
+    chips.filter(has_text="CPU").first.click()
+    expect(minimum).to_have_count(0)
+    chips.filter(has_text="Any sensor").first.click()
+    page.wait_for_function(f"window.libre.doc.widgetById({first!r}).source === 'sensor'")
+    minimum.fill("20")
+    minimum.press("Enter")
+    maximum.fill("95.5")
+    maximum.press("Enter")
+    page.wait_for_function(
+        f"window.libre.doc.widgetById({first!r}).min === 20 && "
+        f"window.libre.doc.widgetById({first!r}).max === 95.5"
+    )
+    inspector.locator("select[aria-label='Module']").select_option("instrument")
+    expect(maximum).to_have_count(1)
+    inspector.locator("select[aria-label='Module']").select_option("stat")
+    expect(maximum).to_have_count(0)
 
 
 def test_a_time_modules_settings(page):

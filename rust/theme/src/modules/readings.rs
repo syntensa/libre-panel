@@ -11,8 +11,8 @@ fn ring_inside(b: &mut Build, src: &Source, cx: f64, cy: f64, d: f64, color: &st
     let top = cy - total / 2.0;
     b.value(
         "value",
-        src.load,
-        src.fmt,
+        &src.load,
+        &src.fmt,
         cx,
         top,
         value_size,
@@ -58,7 +58,7 @@ pub fn build_ring(b: &mut Build, src: &Source) -> Result<()> {
         let gy = iy + top_h + pad;
         b.graph(
             "history",
-            src.load,
+            &src.load,
             ix,
             gy,
             iw,
@@ -76,7 +76,7 @@ pub fn build_ring(b: &mut Build, src: &Source) -> Result<()> {
     } else if a <= 0.72 {
         // tall: ring on top, details below
         let d = iw;
-        b.ring("ring", src.load, ix, iy, d, &color, src.low, src.high)?;
+        b.ring("ring", &src.load, ix, iy, d, &color, src.low, src.high)?;
         ring_inside(b, src, ix + d / 2.0, iy + d / 2.0, d, &color)?;
         let room = ih - d - pad;
         if room > b.ts as f64 * 3.0 {
@@ -85,7 +85,7 @@ pub fn build_ring(b: &mut Build, src: &Source) -> Result<()> {
             if graph_h != 0.0 {
                 b.graph(
                     "history",
-                    src.load,
+                    &src.load,
                     ix,
                     iy + ih - graph_h,
                     iw,
@@ -103,7 +103,7 @@ pub fn build_ring(b: &mut Build, src: &Source) -> Result<()> {
         // compact
         let d = fmin(iw, ih);
         let (x, y) = (ix + (iw - d) / 2.0, iy + (ih - d) / 2.0);
-        b.ring("ring", src.load, x, y, d, &color, src.low, src.high)?;
+        b.ring("ring", &src.load, x, y, d, &color, src.low, src.high)?;
         ring_inside(b, src, x + d / 2.0, y + d / 2.0, d, &color)?;
     }
     Ok(())
@@ -123,7 +123,7 @@ fn ring_wide(
 ) -> Result<()> {
     let d = h;
     let pad = b.pad as f64;
-    b.ring("ring", src.load, x, y, d, color, src.low, src.high)?;
+    b.ring("ring", &src.load, x, y, d, color, src.low, src.high)?;
     ring_inside(b, src, x + d / 2.0, y + d / 2.0, d, color)?;
     let rest = w - d - pad;
     if rest < b.ts as f64 * 5.0 {
@@ -145,7 +145,7 @@ fn ring_wide(
         )?;
         b.graph(
             "history",
-            src.load,
+            &src.load,
             x + d + column + 2.0 * pad,
             y + h * 0.12,
             graph_w,
@@ -162,7 +162,7 @@ fn ring_wide(
         detail_rows(b, src, x + d + pad, y, rest, h * 0.6, color, true)?;
         b.graph(
             "history",
-            src.load,
+            &src.load,
             x + d + pad,
             y + h * 0.66,
             rest,
@@ -425,7 +425,11 @@ pub fn build_bars(b: &mut Build, _src: &Source) -> Result<()> {
     for (i, src) in order.iter().take(count as usize).enumerate() {
         let color = b.c(src.role);
         let top = iy + i as f64 * row;
-        let needs = if src.role == "gpu" { src.load } else { "" };
+        let needs = if src.role == "gpu" {
+            src.load.as_str()
+        } else {
+            ""
+        };
         let size = fmin(row * if wide { 0.42 } else { 0.3 }, ts * 1.6);
         let bar_h = 3.max(super::round(fmin(row * 0.14, b.u as f64 * 0.03))) as f64;
         if wide {
@@ -444,20 +448,20 @@ pub fn build_bars(b: &mut Build, _src: &Source) -> Result<()> {
             )?;
             b.bar(
                 &format!("r{i}-bar"),
-                src.load,
+                &src.load,
                 ix + label_w,
                 mid - bar_h / 2.0,
                 iw - label_w - value_w - pad,
                 bar_h,
                 &color,
-                Some(0),
-                Some(100),
+                Some(N::I(0)),
+                Some(N::I(100)),
                 "linear",
             )?;
             b.value(
                 &format!("r{i}-value"),
-                src.load,
-                src.fmt,
+                &src.load,
+                &src.fmt,
                 ix + iw,
                 mid - CAP * size / 2.0,
                 size,
@@ -481,8 +485,8 @@ pub fn build_bars(b: &mut Build, _src: &Source) -> Result<()> {
             )?;
             b.value(
                 &format!("r{i}-value"),
-                src.load,
-                src.fmt,
+                &src.load,
+                &src.fmt,
                 ix + iw,
                 top + row * 0.12,
                 size,
@@ -495,14 +499,14 @@ pub fn build_bars(b: &mut Build, _src: &Source) -> Result<()> {
             )?;
             b.bar(
                 &format!("r{i}-bar"),
-                src.load,
+                &src.load,
                 ix,
                 top + row * 0.12 + CAP * size + row * 0.16,
                 iw,
                 bar_h,
                 &color,
-                Some(0),
-                Some(100),
+                Some(N::I(0)),
+                Some(N::I(100)),
                 "linear",
             )?;
         }
@@ -587,7 +591,7 @@ pub fn build_network(b: &mut Build, _src: &Source) -> Result<()> {
         gw,
         gh,
         &color,
-        Some(0),
+        Some(N::I(0)),
         None,
         "sqrt",
         true,
@@ -601,7 +605,7 @@ pub fn build_network(b: &mut Build, _src: &Source) -> Result<()> {
         gw,
         gh,
         &up_color,
-        Some(0),
+        Some(N::I(0)),
         None,
         "sqrt",
         false,

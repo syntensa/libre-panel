@@ -281,8 +281,8 @@ pub fn build_cores(b: &mut Build, _src: &Source) -> Result<()> {
             w,
             gh,
             &color,
-            Some(0),
-            Some(100),
+            Some(N::I(0)),
+            Some(N::I(100)),
             "linear",
             true,
             N::I(0),
@@ -512,7 +512,7 @@ pub fn build_netinfo(b: &mut Build, _src: &Source) -> Result<()> {
             w,
             gh,
             &color,
-            Some(0),
+            Some(N::I(0)),
             None,
             "linear",
             true,
@@ -597,7 +597,7 @@ fn history(b: &mut Build, sensor: &str, color: &str, x: f64, y: f64, w: f64, h: 
         w,
         h,
         color,
-        Some(0),
+        Some(N::I(0)),
         None,
         "linear",
         true,
@@ -794,7 +794,16 @@ pub fn build_timer(b: &mut Build, _src: &Source) -> Result<()> {
     let d = pmax(8, fmin(h, w * if wide { 0.5 } else { 1.0 })).f();
     let rx = if wide { x } else { x + (w - d) / 2.0 };
     let ry = y + (h - d) / 2.0;
-    b.ring("ring", "timer.share", rx, ry, d, &color, Some(0), Some(1))?;
+    b.ring(
+        "ring",
+        "timer.share",
+        rx,
+        ry,
+        d,
+        &color,
+        Some(N::I(0)),
+        Some(N::I(1)),
+    )?;
     let (size, small) = (d * 0.22, pmax(7, d * 0.08).f());
     let gap = d * 0.05;
     let cap = ry + (d - (CAP * size + gap + CAP * small)) / 2.0;

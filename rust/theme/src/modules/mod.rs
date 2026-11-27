@@ -243,13 +243,14 @@ pub fn counts(fmt: &str) -> bool {
     false
 }
 
-/// A source of readings a module shows (CPU, GPU, RAM, disk, network, a fan).
+/// A source of readings a module shows (CPU, GPU, RAM, disk, network, a fan, or a reading of
+/// one's own: own_source).
 #[derive(Clone, Debug)]
 pub struct Source {
     pub label: String,
     /// the main reading and its format
-    pub load: &'static str,
-    pub fmt: &'static str,
+    pub load: String,
+    pub fmt: String,
     pub icon: &'static str,
     /// palette role of its colour
     pub role: &'static str,
@@ -257,30 +258,27 @@ pub struct Source {
     pub details: Vec<(&'static str, &'static str, String)>,
     /// the hardware's name, if the sensors report one
     pub name: &'static str,
-    pub low: Option<i64>,
-    pub high: Option<i64>,
+    pub low: Option<N>,
+    pub high: Option<N>,
     pub scale: &'static str,
+    /// a reading of one's own (own_source): no rows of a part's
+    pub own: bool,
 }
 
 impl Source {
-    fn new(
-        label: String,
-        load: &'static str,
-        fmt: &'static str,
-        icon: &'static str,
-        role: &'static str,
-    ) -> Source {
+    fn new(label: String, load: &str, fmt: &str, icon: &'static str, role: &'static str) -> Source {
         Source {
             label,
-            load,
-            fmt,
+            load: load.to_string(),
+            fmt: fmt.to_string(),
             icon,
             role,
             details: Vec::new(),
             name: "",
-            low: Some(0),
-            high: Some(100),
+            low: Some(N::I(0)),
+            high: Some(N::I(100)),
             scale: "linear",
+            own: false,
         }
     }
 }
@@ -330,6 +328,40 @@ pub fn sources() -> Vec<(&'static str, Source)> {
         ("net", net),
         ("fan", fan),
     ]
+}
+
+/// own_source: a reading of one's own as the source of a ring or an instrument (issue #54):
+/// the module's `sensor` (the CPU's load where it names none) from `min` to `max` (0 and 100
+/// where one is no number); in its `format`, else in the format Libre Panel shows the reading
+/// in where it shows it of its own, else as its number and its own unit; named as Libre Panel
+/// names it, else by the last part of its key; in the CPU's colour, and no part's rows.
+pub fn own_source(module: &Dict) -> Source {
+    let text = |key: &str| module.get(key).map(Value::str).unwrap_or_default();
+    let sensor = match text("sensor") {
+        s if !s.is_empty() => s,
+        _ => "cpu.load".to_string(),
+    };
+    let known = cards::known_row(&sensor);
+    let fmt = match text("format") {
+        f if !f.is_empty() => f,
+        _ => known
+            .as_ref()
+            .map_or_else(|| cards::OWN_FORMAT.to_string(), |(f, _)| f.clone()),
+    };
+    let name = match known {
+        Some((_, name)) => name,
+        None => cards::name_of_key(&sensor),
+    };
+    let end = |key: &str, or: i64| match module.get(key) {
+        Some(Value::Float(x)) if x.is_finite() => N::F(*x),
+        Some(v @ Value::Int(_)) => N::of(v),
+        _ => N::I(or),
+    };
+    let mut src = Source::new(name, &sensor, &fmt, "cpu", "cpu");
+    src.low = Some(end("min", 0));
+    src.high = Some(end("max", 100));
+    src.own = true;
+    src
 }
 
 fn source_of(name: &str) -> Option<Source> {
@@ -715,8 +747,8 @@ impl<'a> Build<'a> {
         y: f64,
         d: f64,
         color: &str,
-        low: Option<i64>,
-        high: Option<i64>,
+        low: Option<N>,
+        high: Option<N>,
     ) -> Result<()> {
         let d = round(d);
         let deep = self.deep(color)?;
@@ -726,8 +758,8 @@ impl<'a> Build<'a> {
             ("w", d.into()),
             ("h", d.into()),
             ("sensor", sensor.into()),
-            ("min", low.unwrap_or(0).into()),
-            ("max", high.unwrap_or(100).into()),
+            ("min", low.unwrap_or(N::I(0)).value()),
+            ("max", high.unwrap_or(N::I(100)).value()),
             ("thickness", 3.max(round(d as f64 * 0.08)).into()),
             ("color", deep.into()),
             ("color2", color.into()),
@@ -752,8 +784,8 @@ impl<'a> Build<'a> {
         w: f64,
         h: f64,
         color: &str,
-        low: Option<i64>,
-        high: Option<i64>,
+        low: Option<N>,
+        high: Option<N>,
         scale: &str,
     ) -> Result<()> {
         let h = 2.max(round(h));
@@ -764,8 +796,8 @@ impl<'a> Build<'a> {
             ("w", 4.max(round(w)).into()),
             ("h", h.into()),
             ("sensor", sensor.into()),
-            ("min", low.unwrap_or(0).into()),
-            ("max", high.unwrap_or(100).into()),
+            ("min", low.unwrap_or(N::I(0)).value()),
+            ("max", high.unwrap_or(N::I(100)).value()),
             ("scale", scale.into()),
             ("color", deep.into()),
             ("color2", color.into()),
@@ -790,23 +822,22 @@ impl<'a> Build<'a> {
         w: f64,
         h: f64,
         color: &str,
-        low: Option<i64>,
-        high: Option<i64>,
+        low: Option<N>,
+        high: Option<N>,
         scale: &str,
         fill: bool,
         unit: N,
     ) -> Result<()> {
         let (w, h) = (8.max(round(w)), 8.max(round(h)));
         let u = if unit.f() != 0.0 { unit } else { N::I(self.u) };
-        let opt_int = |v: Option<i64>| v.map_or(Value::None, Value::int);
         let fields = vec![
             ("x", round(x).into()),
             ("y", round(y).into()),
             ("w", w.into()),
             ("h", h.into()),
             ("sensor", sensor.into()),
-            ("min", opt_int(low)),
-            ("max", opt_int(high)),
+            ("min", low.map_or(Value::None, N::value)),
+            ("max", high.map_or(Value::None, N::value)),
             ("scale", scale.into()),
             ("history", 30.max(300.min(w.div_euclid(3))).into()),
             ("color", color.into()),
@@ -1093,8 +1124,11 @@ pub struct KindOf {
 }
 
 const READINGS: &[&str] = &["cpu", "gpu", "mem", "disk", "net", "sensor"];
-const RINGS: &[&str] = &["cpu", "gpu", "mem", "disk"];
-const INSTRUMENTS: &[&str] = &["cpu", "gpu", "mem", "disk", "fan"];
+const RINGS: &[&str] = &["cpu", "gpu", "mem", "disk", "sensor"];
+const INSTRUMENTS: &[&str] = &["cpu", "gpu", "mem", "disk", "fan", "sensor"];
+/// The kinds whose source of one's own is a reading with a range of its own (own_source); the
+/// others show it in their own way.
+const OWN_RANGE: &[&str] = &["ring", "instrument"];
 
 /// kinds(): the module kinds this crate builds.
 pub fn kind_of(name: &str) -> Option<KindOf> {
@@ -1238,7 +1272,11 @@ pub fn build_module(
     if !kind.sources.is_empty() && !kind.sources.contains(&source.as_str()) {
         source = kind.sources[0].to_string();
     }
-    let src = source_of(&source).unwrap_or_else(|| source_of("cpu").expect("cpu"));
+    let src = if source == "sensor" && OWN_RANGE.contains(&name.as_str()) {
+        own_source(&module)
+    } else {
+        source_of(&source).unwrap_or_else(|| source_of("cpu").expect("cpu"))
+    };
     let known = source_of(&source).is_some();
     let back = if !kind.sources.is_empty() && known {
         fallback(&module)

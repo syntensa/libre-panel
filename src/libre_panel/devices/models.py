@@ -430,6 +430,17 @@ MODELS: tuple[PanelModel, ...] = (
         notes="a USB display chip (MS9132), not found by auto: choose the model",
     ),
     PanelModel(
+        "valkyrie-vk03-6.2",
+        "Valkyrie",
+        "Valkyrie VK03",
+        6.2,
+        360,
+        960,
+        "usb-ms9132",
+        usb_ids=((0x345F, 0x9132),),
+        notes="a USB display chip (MS9132), not found by auto: choose the model",
+    ),
+    PanelModel(
         "hongtai-480x960",
         "Hongtai",
         "Hongtai cooler screen",
@@ -854,6 +865,10 @@ _LIMITS = {
     ),
     "jonsbo-ds339": _MS9132,
     "vmax-4.6": f"{_UNSEEN} {_MS9132}",
+    "valkyrie-vk03-6.2": (
+        f"{_UNSEEN} {_MS9132.removesuffix(' No smooth motion.')} Close Myth.Cool while Libre "
+        "Panel runs."
+    ),
     "hongtai-480x960": _JPEG_SERIAL,
     "hongtai-1920x462": _JPEG_SERIAL,
     "majesty-9.16": (

@@ -300,8 +300,8 @@ fn song(b: &mut Build, x: f64, y: f64, w: f64, h: f64, color: &str, mut state: b
             w,
             bar_h,
             color,
-            Some(0),
-            Some(1),
+            Some(N::I(0)),
+            Some(N::I(1)),
             "linear",
         )?;
         set_last(b, "hide_if_missing", true.into());
@@ -980,7 +980,7 @@ pub fn build_game(b: &mut Build, _src: &Source) -> Result<()> {
             gw,
             gh,
             &color,
-            Some(0),
+            Some(N::I(0)),
             None,
             "linear",
             true,
