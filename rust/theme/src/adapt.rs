@@ -500,7 +500,10 @@ fn py_parent(path: &Path) -> PathBuf {
 }
 
 /// versions_of: the versions of the theme in `folder` beside it (itself among them), with the
-/// size each is made for, in the order the folder lists them (as Python's glob meets them).
+/// size each is made for, by their names: the order a folder lists them in is the file
+/// system's (as Python's glob met them), and of two versions that fit alike the first is
+/// taken, so that another computer took another (a comparison of CI's now and then). Windows
+/// orders them without regard to case, as NTFS lists them.
 pub fn versions_of(folder: &Path) -> Result<Vec<(String, Size)>> {
     // (a name that is no Unicode: none, see docs/RUST.md)
     let Some(name) = py_name(folder) else {
@@ -510,11 +513,21 @@ pub fn versions_of(folder: &Path) -> Result<Vec<(String, Size)>> {
     let parent = py_parent(folder);
     let mut found = Vec::new();
     // glob's scandir: listed whole first, nothing where that fails
-    let Ok(entries) =
+    let Ok(mut entries) =
         std::fs::read_dir(&parent).and_then(|e| e.collect::<std::io::Result<Vec<_>>>())
     else {
         return Ok(found);
     };
+    if cfg!(windows) {
+        entries.sort_by_cached_key(|e| {
+            (
+                e.file_name().to_string_lossy().to_uppercase(),
+                e.file_name(),
+            )
+        });
+    } else {
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+    }
     for entry in entries {
         let os_name = entry.file_name();
         // (a name that is no Unicode never starts with a stem that is and ends in a size)
