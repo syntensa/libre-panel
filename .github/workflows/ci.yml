@@ -13,11 +13,18 @@ on:
   # (release.yml: the downloads of a release are those this workflow builds and tries)
   workflow_call:
   # by hand: "quick" builds and packages the downloads and tries them, without the test suites
-  # and the Rust comparisons (an hour on Windows): to see a change of the packaging in minutes
+  # and the Rust comparisons (an hour on Windows): to see a change of the packaging in minutes;
+  # "answers" runs the comparisons without holding them to their kept answers (tests/golden),
+  # and what they answer is the run's golden-Linux and golden-Windows files: to take a runner
+  # image's answers where a new image draws a pixel otherwise (its C library's float functions)
   workflow_dispatch:
     inputs:
       quick:
         description: "Only build, package and try the downloads (no test suites)"
+        type: boolean
+        default: false
+      answers:
+        description: "Run the comparisons unchecked; their answers are the run's golden-* files"
         type: boolean
         default: false
 
@@ -425,6 +432,7 @@ jobs:
         if: ${{ !inputs.quick }}
         env:
           LP_GOLDEN_OUT: ${{ runner.temp }}/golden  # (the answers, as golden.py keeps them)
+          LP_GOLDEN: ${{ inputs.answers && 'record' || '' }}
         run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_py.py tests/test_rust_pixels.py tests/test_rust_decode.py tests/test_rust_text.py tests/test_rust_theme.py tests/test_rust_modules.py tests/test_rust_render.py tests/test_rust_toasts.py tests/test_rust_transitions.py tests/test_rust_field.py tests/test_rust_morph.py tests/test_rust_alarm.py tests/test_rust_boot.py tests/test_rust_video.py tests/test_rust_devices.py tests/test_rust_serial_drivers.py tests/test_rust_usb_drivers.py tests/test_rust_config.py tests/test_rust_sensors.py tests/test_rust_services.py tests/test_branding.py tests/test_design_tool.py tests/test_compare_reference.py
       - name: The stacks of a comparison that hung
         if: failure()
@@ -437,6 +445,7 @@ jobs:
         if: ${{ !inputs.quick && !cancelled() }}
         env:
           LP_GOLDEN_OUT: ${{ runner.temp }}/golden
+          LP_GOLDEN: ${{ inputs.answers && 'record' || '' }}
           # (what they took from the Python app is kept: tests/golden/given, given/win32)
         run: python -u -X faulthandler -m pytest -v -rfE --durations=20 tests/test_rust_app.py tests/test_rust_plugins.py tests/test_community_theme.py tests/test_check_tools.py
       - name: The stacks of a comparison that hung
@@ -450,6 +459,7 @@ jobs:
         if: runner.os == 'Linux' && !inputs.quick && !cancelled()
         env:
           LP_GOLDEN_OUT: ${{ runner.temp }}/golden
+          LP_GOLDEN: ${{ inputs.answers && 'record' || '' }}
         run: python -m pytest -q -rfE --durations=20 tests/test_rust_server.py tests/test_rust_wayland.py
       # the app's pages in a real browser on the Rust app's server: what one of them cannot do
       # here is skipped, each with its reason; and the README's pictures and clips, which the
