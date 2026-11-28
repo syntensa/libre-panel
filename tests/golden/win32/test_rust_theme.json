@@ -7433,7 +7433,7 @@
 ],
 "test_grids_of_what_files_hold_are_python_s": [
 [
-"88e2cc2390ae"
+"5210de93d7fd"
 ]
 ],
 "test_light_colours_are_worked_out_as_python_works_them_out": [
@@ -7443,7 +7443,7 @@
 ],
 "test_the_format_s_tables_and_the_panel_models_are_python_s": [
 [
-"ca2359b9e536"
+"b0f61e6dc9b6"
 ]
 ],
 "test_theme_folders_are_read_as_python_reads_them": [
@@ -7472,7 +7472,7 @@
 ],
 "test_themes_adapted_to_other_panels_as_python_adapts_them": [
 [
-"00cdfa46139d"
+"b84f613c7d52"
 ]
 ],
 "test_themes_laid_out_on_panels_they_have_no_version_for_as_python_lays_them_out": [
