@@ -25,6 +25,12 @@
   restarted, and an empty message was an empty text.
 
 **Fixed**
+- **AIGO's Xingcanchen and Valkyrie's B360-GT VK run on the hardware**, as their owner found
+  with 0.9.6: stills, video, two panels at once, sleep and waking, every check of the doctor
+  passed (issues #68 and #69). Both are listed as supported now, without "Not yet seen on the
+  hardware". The B360-GT VK is a 3.95" screen, not 2.8"; its glass hides 2 pixels at the top
+  and the bottom, which Libre Panel now keeps clear, and when Libre Panel quits it shows its
+  own screen again (it was said to keep the last picture).
 - **The Jungle Leopard 9.16" V2.** It has the MAJESTY 9.16"'s USB ids and was driven as the
   MAJESTY: it said what it is, then stayed on its own video, and Windows refused the next
   write ("The device does not recognize the command", issue #70). It runs firmware 5 (the

@@ -14,8 +14,8 @@
 //!   multiple of 4 KiB is followed by an empty one, as Myth.Cool sends them.
 //! - 0x000F with 0x12345678 once a second while no picture goes keeps the link.
 //!
-//! When Libre Panel quits, the last picture stays: the maker's closing command blanks the screen
-//! and is never sent.
+//! The maker's closing command blanks the screen and is never sent: when Libre Panel quits, the
+//! screen goes back to its own picture by itself, as its owner saw (issue #69).
 
 use lp_pixels::{Image, Mode};
 

@@ -118,7 +118,7 @@ the panel lists show it when you point at one.
 | NZXT Kraken (LCD) | yes | no | its own (0–100) | yes: brightness 0 | each picture goes through the cooler's memory: a few a second; close NZXT CAM |
 | Thermaltake 6" LCD | yes | no | none known: dimming darkens the picture | no: it shows its own screen again | whole JPEG pictures; close TT RGB Plus |
 | AIGO Xingcanchen | yes | no | none known: dimming darkens the picture | no: it shows its own screen again | whole JPEG pictures; on Windows it keeps its own driver; close AIGO's program |
-| Valkyrie B360-GT VK | yes | no | not proven: dimming darkens the picture | no: it keeps the last picture | whole pictures of raw pixels; close Myth.Cool |
+| Valkyrie B360-GT VK | yes | no | not proven: dimming darkens the picture | no: it shows its own screen again | whole pictures of raw pixels; close Myth.Cool |
 
 For all of them: close the maker's own program first. Two programs cannot drive one panel at
 once.
@@ -359,7 +359,7 @@ help.
 
 | Model id | Size | Resolution (landscape) | Connection | Driver |
 |---|---|---|---|---|
-| `aigo-xingcanchen` | 9.16" | 1920×462 | USB HID (`1d6b:0103`) | unverified |
+| `aigo-xingcanchen` | 9.16" | 1920×462 | USB HID (`1d6b:0103`) | **supported** — its owner's doctor report, every check passed (#68, 0.9.6, Windows) |
 
 The screen of AIGO's Xingcanchen case (爱国者星璨辰), found by `auto`. It speaks the protocol of
 [Thermaltake's LCD](#thermaltake) with its commands framed a little differently: Libre Panel
@@ -377,22 +377,26 @@ The protocol comes from its owner's captures of AIGO's program
 ([#68](https://github.com/syntensa/libre-panel/issues/68)) and the notes of
 [LanScreen](https://github.com/Savathun/LanScreen) (MIT, by Savathun), written for the
 Xingcanlan (`1d6b:0172`, 1480×720) of the same family; see the
-[protocol notes](protocol/aigo.md). Unverified: the owner tries it. The Xingcanlan is not in
+[protocol notes](protocol/aigo.md). Its owner ran it with 0.9.6: stills, video, two panels at
+once, sleep and waking, every check of `libre-panel doctor` passed, and nothing of the picture
+hidden at the edges. The Xingcanlan is not in
 the catalog yet.
 
 ## Valkyrie
 
 | Model id | Size | Resolution | Connection | Driver |
 |---|---|---|---|---|
-| `valkyrie-b360gt-vk` | 2.8" | 480×480 | USB (`374a:a005`, WinUSB) | unverified |
+| `valkyrie-b360gt-vk` | 3.95" | 480×480 | USB (`374a:a005`, WinUSB) | **supported** — its owner's doctor report, every check passed (#69, 0.9.6, Windows) |
 | `valkyrie-vk03-6.2` | 6.2" | 960×360 | USB (`345f:9132`, MacroSilicon MS9132) | unverified |
 
 The screen of Valkyrie's B360-GT VK cooler (瓦尔基里), found by `auto`: its USB product calls
 itself `Vk-Copl-08`. Libre Panel checks what the screen says of itself (480×480, 16-bit
 pixels) before it sends anything, sets its backlight to full and sends each picture as raw
 BGR565 pixels when it changes, and a heartbeat once a second while none goes. The backlight's
-range is not proven, so the brightness goes into the pixels. When Libre Panel quits, the last
-picture stays: the maker's closing command blanks the screen, and Libre Panel never sends it.
+range is not proven, so the brightness goes into the pixels. Its glass hides 2 pixels at the
+top and the bottom, which Libre Panel keeps clear; a square picture is never turned, so it is
+the same upright and lying. When Libre Panel quits, the screen goes back to its own picture
+(Libre Panel never sends the maker's closing command, which blanks it).
 It comes with the WinUSB driver on Windows, so nothing is to be installed; on Linux,
 `libre-panel system-setup --linux` gives your user access to it. Close Myth.Cool first.
 
@@ -400,7 +404,8 @@ The protocol comes from its owner's captures of Myth.Cool
 ([#69](https://github.com/syntensa/libre-panel/issues/69)) and the notes on the same family in
 [msdisplay](https://github.com/codehz/msdisplay) (the BoWei screens, VID `374a`) and
 [InfoPanel-linux](https://github.com/emaspa/InfoPanel-linux) (GPL-3.0, its notes on the Valkyrie
-MC360); see the [protocol notes](protocol/valkyrie.md). Unverified: the owner tries it. The
+MC360); see the [protocol notes](protocol/valkyrie.md). Its owner ran it with 0.9.6: stills,
+video, two panels at once, sleep and waking, every check of `libre-panel doctor` passed. The
 MC360 (640×480, `374a:a021`) is not in the catalog yet.
 
 The **VK03 6.2"** stands as 360×960 in its chip and is mounted the long way. It is a

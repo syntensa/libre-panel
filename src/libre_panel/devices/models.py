@@ -737,11 +737,15 @@ MODELS: tuple[PanelModel, ...] = (
         "valkyrie-b360gt-vk",
         "Valkyrie",
         "Valkyrie B360-GT VK",
-        2.8,
+        3.95,
         480,
         480,
         "usb-valkyrie",
         usb_ids=((0x374A, 0xA005),),
+        # (a square frame is never turned: the ruler's 2 px at the top and the bottom are those
+        # of either orientation, the landscape one's turned back into the framebuffer's here)
+        hidden=(0, 2, 0, 2),
+        portrait_clear=(2, 0, 2, 0),
     ),
     PanelModel(
         "waveshare-2.8-udisp",
@@ -809,6 +813,11 @@ _CONFIRMED: set[str] = {
     "jonsbo-ds916",
     # "worked perfectly right out of the box", with 0.9.5 on Windows: its owner's report (#54)
     "thermalright-trofeo-9.16",
+    # stills, video, two panels at once, sleep and waking: its owner's doctor report, every
+    # check passed (#68, 0.9.6, Windows)
+    "aigo-xingcanchen",
+    # the same, its size and its hidden edges measured (#69, 0.9.6, Windows)
+    "valkyrie-b360gt-vk",
 }
 # What the panels whose drivers were written from other projects' notes cannot do (their
 # drivers say why); each begins with what all of them share: nobody has run them yet.
@@ -886,14 +895,14 @@ _LIMITS = {
     **{m.id: _BEADA for m in MODELS if m.protocol == "usb-beada"},
     **{m.id: _KRAKEN for m in MODELS if m.protocol == "usb-nzxt"},
     "aigo-xingcanchen": (
-        "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Its "
-        "brightness goes into the picture: dimming darkens it. Close AIGO's program while Libre "
-        "Panel runs. When Libre Panel quits, the panel shows its own screen again."
+        "It takes whole JPEG pictures: no smooth motion. Its brightness goes into the picture: "
+        "dimming darkens it. Close AIGO's program while Libre Panel runs. When Libre Panel "
+        "quits, the panel shows its own screen again."
     ),
     "valkyrie-b360gt-vk": (
-        "Not yet seen on the hardware. It takes whole pictures, their pixels as they are. Its "
-        "brightness goes into the picture: dimming darkens it. Close Myth.Cool while Libre Panel "
-        "runs. When Libre Panel quits, the panel keeps the last picture."
+        "It takes whole pictures, their pixels as they are. Its brightness goes into the "
+        "picture: dimming darkens it. Close Myth.Cool while Libre Panel runs. When Libre Panel "
+        "quits, the panel shows its own screen again."
     ),
     "thermaltake-lcd-6": (
         "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Its "

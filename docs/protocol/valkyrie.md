@@ -46,8 +46,11 @@ empty, 131072, empty, 131072, empty, 67584).
 
 Myth.Cool sends heartbeats many times a second and, at times, none but them; MC360's notes send
 one a second while no picture goes, and so does Libre Panel. Its closing command (`0x32` with
-1234 in the BoWei notes) blanks the screen: Libre Panel never sends it, and the last picture
-stays.
+1234 in the BoWei notes) blanks the screen: Libre Panel never sends it. Without it the screen
+goes back to its own picture once Libre Panel has quit, as its owner saw (#69).
 
-Not proven yet: the backlight's range (Libre Panel keeps it at full and dims the pixels), how
-long the screen keeps a picture it is not sent again, and what it does on sleep and wake.
+Seen on the screen with 0.9.6 (#69): a still picture stays with the heartbeat alone; while the
+PC sleeps the screen shows its own picture and then goes dark, and after waking Libre Panel's
+pictures come back without a restart. Its glass hides 2 pixels at the top and the bottom.
+
+Not proven yet: the backlight's range (Libre Panel keeps it at full and dims the pixels).
