@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.9.7 — 2026-11-28
+
+Another panel, Valkyrie's VK03 6.2"; a ring of any reading, the CPU cores of another computer,
+and MQTT readings that go away with an empty message. Also fixed: pictures, fonts and videos of
+your own go into a theme again, the Jungle Leopard 9.16" V2 is driven as its maker's
+application drives it, and AIGO's Xingcanchen and Valkyrie's B360-GT VK are confirmed on the
+hardware.
 
 **New**
 - **Another panel: Valkyrie's VK03 6.2"** (960×360, `345f:9132`), a MacroSilicon MS9132 USB
@@ -45,6 +51,12 @@
   a theme and took it for the theme itself. The file goes into the theme's `assets` folder
   again, as it did before 0.9.0, up to 10 MB (a video up to 64 MB); a larger one is refused
   before it is sent, its size in the message.
+- **Dell's fans: a failure Windows has no words for.** Where Windows gives no text for a
+  failure of Dell Command | Monitor, the log says its code alone, not "( (0x80041003))"
+  (issue #54).
+- **A theme's versions in the same order on every computer.** Of two versions of a theme that
+  fit a panel alike, Libre Panel took the first its folder listed, which depended on the file
+  system; it takes them by their names now.
 
 ## 0.9.6 — 2026-11-26
 
