@@ -474,8 +474,8 @@ administrator rights.
 ### With Python
 
 ```bash
-pipx install "libre-panel @ https://github.com/syntensa/libre-panel/releases/download/v0.9.6/libre_panel-0.9.6-py3-none-manylinux_2_35_x86_64.whl"    # Linux
-pipx install "libre-panel @ https://github.com/syntensa/libre-panel/releases/download/v0.9.6/libre_panel-0.9.6-py3-none-win_amd64.whl"    # Windows
+pipx install "libre-panel @ https://github.com/syntensa/libre-panel/releases/download/v0.9.7/libre_panel-0.9.7-py3-none-manylinux_2_35_x86_64.whl"    # Linux
+pipx install "libre-panel @ https://github.com/syntensa/libre-panel/releases/download/v0.9.7/libre_panel-0.9.7-py3-none-win_amd64.whl"    # Windows
 libre-panel tray                    # the background app with its tray icon; opens its window
 libre-panel autostart enable        # start it whenever you log in
 ```
